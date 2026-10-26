@@ -125,5 +125,75 @@
     "title": "Page not found",
     "body": "The page you're looking for doesn't exist or has moved.",
     "home": "Go to the dashboard"
+  },
+  "history": {
+    "title": "Vehicle Tracking History",
+    "subtitle": "Track vehicle route playback, speed telemetry, and trip events over time.",
+    "filters": {
+      "title": "Tracking Parameters",
+      "vehicle": "Vehicle Plate Number",
+      "vehiclePlaceholder": "Select a vehicle",
+      "fromDate": "From Date",
+      "fromTime": "From Time",
+      "toDate": "To Date",
+      "toTime": "To Time",
+      "route": "Select Route (Optional)",
+      "routePlaceholder": "No route overlay",
+      "tripEvent": "Select Trip Event",
+      "allEvents": "All Trip Events",
+      "submit": "Track Vehicle",
+      "loading": "Loading History…",
+      "quickRanges": "Quick Ranges",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "last7Days": "Last 7 Days",
+      "demoWindow": "Demo Data (12 Oct)"
+    },
+    "stats": {
+      "totalDistance": "Total Distance",
+      "duration": "Duration",
+      "maxSpeed": "Max Speed",
+      "avgSpeed": "Avg Speed",
+      "pointsCount": "GPS Points",
+      "eventsCount": "Events",
+      "unitKm": "km",
+      "unitKmh": "km/h"
+    },
+    "playback": {
+      "play": "Play",
+      "pause": "Pause",
+      "speed": "Playback Speed",
+      "point": "Point {current} of {total}",
+      "currentTime": "Time: {time}",
+      "currentSpeed": "Speed: {speed} km/h",
+      "followVehicle": "Follow Vehicle",
+      "fitBounds": "Fit Route",
+      "snapToRoads": "Exact Road Path (Directions)",
+      "rawGps": "Raw GPS Points",
+      "showFullRoute": "View Entire Journey",
+      "routesUsed": "Exact Routes Used ({count})",
+      "leg": "Route Run #{n}",
+      "focusLeg": "Track This Route",
+      "adherence": "Planned Route Adherence",
+      "waypointsReached": "{reached} of {total} Waypoints Visited"
+    },
+    "events": {
+      "title": "Trip Events",
+      "noEvents": "No events recorded for this trip window.",
+      "type": "Event Type",
+      "occurredAt": "Time",
+      "details": "Details",
+      "jumpTo": "Jump to event"
+    },
+    "map": {
+      "missingKeyTitle": "Google Maps API Key",
+      "missingKeyMessage": "Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to your web/.env.local file to enable Google Maps. An interactive route preview is displayed below.",
+      "startPoint": "Start Point",
+      "endPoint": "End Point",
+      "currentLocation": "Current Playback Position",
+      "plannedRoute": "Planned Route",
+      "noPoints": "No tracking data found for the selected vehicle and time range.",
+      "selectVehiclePrompt": "Select a vehicle plate number and date range above, then click Track Vehicle."
+    }
   }
 }

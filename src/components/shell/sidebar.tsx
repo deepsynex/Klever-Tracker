@@ -31,7 +31,7 @@ type NavItem = {
 const MAIN: NavItem[] = [
   { key: "dashboard", icon: LayoutDashboard, href: "/dashboard" },
   { key: "liveMap", icon: Map, phase: 3 },
-  { key: "history", icon: History, phase: 3 },
+  { key: "history", icon: History, href: "/history" },
   { key: "alerts", icon: Bell, phase: 4 },
   { key: "reports", icon: BarChart3, phase: 5 },
   { key: "geofences", icon: CircleDashed, phase: 4 },

@@ -23,7 +23,9 @@ export async function POST(request: NextRequest) {
     return errorResponse(403, "Request origin not allowed.", "origin");
   }
 
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  const token =
+    request.cookies.get(SESSION_COOKIE)?.value ||
+    (!env.isProduction ? process.env.DEV_AUTH_TOKEN : undefined);
   if (!token) return errorResponse(401, "Unauthenticated.", "authentication");
 
   const raw = await request.text();

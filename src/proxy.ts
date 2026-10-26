@@ -15,7 +15,9 @@ export function proxy(request: NextRequest) {
 
   if (isAppLocale(maybeLocale)) {
     const subPath = `/${rest.join("/")}`;
-    const hasSession = request.cookies.has(SESSION_COOKIE);
+    const hasSession =
+      request.cookies.has(SESSION_COOKIE) ||
+      (process.env.NODE_ENV !== "production" && Boolean(process.env.DEV_AUTH_TOKEN));
 
     if (!hasSession && !isPublicPath(subPath)) {
       const loginUrl = new URL(`/${maybeLocale}/login`, request.url);

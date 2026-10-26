@@ -125,5 +125,75 @@
     "title": "الصفحة غير موجودة",
     "body": "الصفحة التي تبحث عنها غير موجودة أو تم نقلها.",
     "home": "الذهاب إلى لوحة التحكم"
+  },
+  "history": {
+    "title": "سجل تتبع المركبة",
+    "subtitle": "تتبع مسار المركبة وإعادة التشغيل وبيانات السرعة وأحداث الرحلة عبر الوقت.",
+    "filters": {
+      "title": "معايير التتبع",
+      "vehicle": "رقم لوحة المركبة",
+      "vehiclePlaceholder": "اختر مركبة",
+      "fromDate": "من تاريخ",
+      "fromTime": "من وقت",
+      "toDate": "إلى تاريخ",
+      "toTime": "إلى وقت",
+      "route": "اختر المسار (اختياري)",
+      "routePlaceholder": "بدون مسار محدد",
+      "tripEvent": "تصفية أحداث الرحلة",
+      "allEvents": "جميع أحداث الرحلة",
+      "submit": "تتبع المركبة",
+      "loading": "جارٍ تحميل السجل…",
+      "quickRanges": "فترات سريعة",
+      "today": "اليوم",
+      "yesterday": "أمس",
+      "last7Days": "آخر 7 أيام",
+      "demoWindow": "بيانات تجريبية (12 أكتوبر)"
+    },
+    "stats": {
+      "totalDistance": "إجمالي المسافة",
+      "duration": "المدة",
+      "maxSpeed": "أقصى سرعة",
+      "avgSpeed": "متوسط السرعة",
+      "pointsCount": "نقاط GPS",
+      "eventsCount": "الأحداث",
+      "unitKm": "كم",
+      "unitKmh": "كم/ساعة"
+    },
+    "playback": {
+      "play": "تشغيل",
+      "pause": "إيقاف مؤقت",
+      "speed": "سرعة التشغيل",
+      "point": "النقطة {current} من {total}",
+      "currentTime": "الوقت: {time}",
+      "currentSpeed": "السرعة: {speed} كم/ساعة",
+      "followVehicle": "متابعة المركبة",
+      "fitBounds": "ملاءمة المسار",
+      "snapToRoads": "مسار الطريق الدقيق (توجيهات)",
+      "rawGps": "نقاط GPS الأولية",
+      "showFullRoute": "عرض المسار بالكامل",
+      "routesUsed": "المسارات المستخدمة ({count})",
+      "leg": "مرحلة المسار #{n}",
+      "focusLeg": "تتبع هذا المسار",
+      "adherence": "الالتزام بالمسار المخطط",
+      "waypointsReached": "تم الوصول إلى {reached} من {total} نقاط التوقف"
+    },
+    "events": {
+      "title": "أحداث الرحلة",
+      "noEvents": "لا توجد أحداث مسجلة لهذه الفترة.",
+      "type": "نوع الحدث",
+      "occurredAt": "الوقت",
+      "details": "التفاصيل",
+      "jumpTo": "الانتقال إلى الحدث"
+    },
+    "map": {
+      "missingKeyTitle": "مفتاح Google Maps مطلوب",
+      "missingKeyMessage": "أضف NEXT_PUBLIC_GOOGLE_MAPS_API_KEY إلى ملف web/.env.local لتفعيل خرائط Google. يتم عرض معاينة تفاعلية أدناه.",
+      "startPoint": "نقطة البداية",
+      "endPoint": "نقطة النهاية",
+      "currentLocation": "موقع التشغيل الحالي",
+      "plannedRoute": "المسار المخطط",
+      "noPoints": "لم يتم العثور على بيانات تتبع للمركبة والفترة المحددة.",
+      "selectVehiclePrompt": "حدد رقم لوحة المركبة والفترة الزمنية أعلاه، ثم انقر على تتبع المركبة."
+    }
   }
 }
