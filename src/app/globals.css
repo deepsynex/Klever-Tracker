@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens from ui-demo.html (see design.md §4).
+ * Light values on :root, dark values for the OS setting and for an explicit data-theme="dark".
+ */
+:root {
+  --bg: #f3f6f5;
+  --surface: #ffffff;
+  --surface-2: #eaf0ee;
+  --surface-3: #dfe7e5;
+  --border: #d3ddda;
+  --border-strong: #b7c5c1;
+  --fg: #102422;
+  --fg-muted: #566b68;
+  --fg-subtle: #7d908d;
+  --primary: #0b6e69;
+  --primary-hover: #095b57;
+  --primary-fg: #ffffff;
+  --primary-soft: #d9eeeb;
+  --sand: #a8782a;
+  --sand-soft: #f4e9d3;
+
+  --status-moving: #16a34a;
+  --status-idle: #d97706;
+  --status-stopped: #dc2626;
+  --status-offline: #6b7280;
+  --status-nogps: #7c3aed;
+  --sev-critical: #b42318;
+  --sev-high: #c2410c;
+  --sev-medium: #a16207;
+  --sev-info: #1d4ed8;
+
+  --shadow-color: 16 36 34;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1514;
+    --surface: #121e1d;
+    --surface-2: #182826;
+    --surface-3: #203331;
+    --border: #253836;
+    --border-strong: #36504d;
+    --fg: #e2ecea;
+    --fg-muted: #98aca9;
+    --fg-subtle: #6e8481;
+    --primary: #3bb8ae;
+    --primary-hover: #5ccac1;
+    --primary-fg: #04201e;
+    --primary-soft: #11312f;
+    --sand: #d6ae62;
+    --sand-soft: #2e2618;
+    --status-moving: #22c55e;
+    --status-idle: #f59e0b;
+    --status-stopped: #ef4444;
+    --status-offline: #8b98a0;
+    --status-nogps: #a78bfa;
+    --sev-critical: #f97066;
+    --sev-high: #fb923c;
+    --sev-medium: #facc15;
+    --sev-info: #60a5fa;
+    --shadow-color: 0 0 0;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0c1514;
+  --surface: #121e1d;
+  --surface-2: #182826;
+  --surface-3: #203331;
+  --border: #253836;
+  --border-strong: #36504d;
+  --fg: #e2ecea;
+  --fg-muted: #98aca9;
+  --fg-subtle: #6e8481;
+  --primary: #3bb8ae;
+  --primary-hover: #5ccac1;
+  --primary-fg: #04201e;
+  --primary-soft: #11312f;
+  --sand: #d6ae62;
+  --sand-soft: #2e2618;
+  --status-moving: #22c55e;
+  --status-idle: #f59e0b;
+  --status-stopped: #ef4444;
+  --status-offline: #8b98a0;
+  --status-nogps: #a78bfa;
+  --sev-critical: #f97066;
+  --sev-high: #fb923c;
+  --sev-medium: #facc15;
+  --sev-info: #60a5fa;
+  --shadow-color: 0 0 0;
+  color-scheme: dark;
+}
+
+/* Tailwind theme: our names, plus shadcn/ui aliases so generated components pick up the tokens. */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-muted-foreground: var(--fg-muted);
+  --color-subtle: var(--fg-subtle);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-fg);
+  --color-primary-soft: var(--primary-soft);
+  --color-sand: var(--sand);
+  --color-sand-soft: var(--sand-soft);
+
+  --color-moving: var(--status-moving);
+  --color-idle: var(--status-idle);
+  --color-stopped: var(--status-stopped);
+  --color-offline: var(--status-offline);
+  --color-nogps: var(--status-nogps);
+  --color-critical: var(--sev-critical);
+  --color-high: var(--sev-high);
+  --color-medium: var(--sev-medium);
+  --color-info: var(--sev-info);
+
+  /* shadcn/ui aliases */
+  --color-card: var(--surface);
+  --color-card-foreground: var(--fg);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--fg);
+  --color-muted: var(--surface-2);
+  --color-accent: var(--surface-2);
+  --color-accent-foreground: var(--fg);
+  --color-secondary: var(--surface-2);
+  --color-secondary-foreground: var(--fg);
+  --color-destructive: var(--status-stopped);
+  --color-input: var(--border-strong);
+  --color-ring: var(--primary);
+
+  --font-sans: var(--font-plex-sans), var(--font-plex-arabic), system-ui, "Segoe UI", sans-serif;
+  --font-arabic: var(--font-plex-arabic), var(--font-plex-sans), system-ui, "Segoe UI", sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --radius-ctl: 6px;
+  --radius-card: 10px;
+  --shadow-panel: 0 1px 2px rgb(var(--shadow-color) / 0.06), 0 8px 24px rgb(var(--shadow-color) / 0.1);
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  html[dir="rtl"] body {
+    font-family: var(--font-arabic);
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}

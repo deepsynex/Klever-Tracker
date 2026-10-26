@@ -1,0 +1,129 @@
+{
+  "meta": {
+    "title": "Klever Tracker",
+    "description": "GPS fleet tracking for the UAE and GCC"
+  },
+  "theme": {
+    "switchTo": "Switch to {mode} theme",
+    "current": "Theme: {mode}",
+    "auto": "automatic",
+    "light": "light",
+    "dark": "dark"
+  },
+  "locale": {
+    "switch": "Change language",
+    "name": { "en": "English", "ar": "العربية" }
+  },
+  "validation": {
+    "required": "This field is required.",
+    "email": "Enter a valid email address, like name@company.ae.",
+    "passwordMin": "Use at least 8 characters.",
+    "passwordMatch": "The passwords don't match.",
+    "resetLinkInvalid": "This reset link is incomplete. Request a new one."
+  },
+  "errors": {
+    "invalid_credentials": "The email or password is incorrect.",
+    "unauthenticated": "Your session has ended. Sign in again.",
+    "forbidden": "You don't have permission to do this.",
+    "not_found": "We couldn't find that item.",
+    "validation": "Check the highlighted fields and try again.",
+    "api_locked": "The tracking server is password-protected and refused the connection. Set its server username and password in the app settings, or ask the backend team to remove the lock.",
+    "gateway": "The tracking server rejected the connection. Try again later, or contact support if it continues.",
+    "network": "We couldn't reach the tracking server. Check your connection and try again.",
+    "unknown": "Something went wrong. Try again.",
+    "invalid_input": "Check the highlighted fields and try again.",
+    "reset_failed": "This reset link is invalid or has expired. Reset links work once and expire after 60 minutes."
+  },
+  "auth": {
+    "tagline": "Live tracking, alerts and reports for your fleet.",
+    "login": {
+      "title": "Sign in",
+      "subtitle": "Use the email and password your administrator gave you.",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Sign in",
+      "submitting": "Signing in…",
+      "forgot": "Forgot your password?",
+      "resetDone": "Your password has been changed. Sign in with your new password.",
+      "mockHint": "Mock API is on. Sign in with {email} and {password}."
+    },
+    "forgot": {
+      "title": "Reset your password",
+      "subtitle": "Enter your email and we'll send you a link to choose a new password.",
+      "submit": "Send reset link",
+      "submitting": "Sending…",
+      "sent": "If an account exists for that email, we've sent a reset link. It expires in 60 minutes.",
+      "back": "Back to sign in"
+    },
+    "reset": {
+      "title": "Choose a new password",
+      "subtitle": "Reset links work once and expire after 60 minutes.",
+      "password": "New password",
+      "confirm": "Confirm new password",
+      "hint": "At least 8 characters.",
+      "submit": "Change password",
+      "submitting": "Changing…",
+      "invalidLink": "This reset link is incomplete. Open the link from your email again, or request a new one.",
+      "requestNew": "Request a new link"
+    }
+  },
+  "nav": {
+    "main": "Main navigation",
+    "dashboard": "Dashboard",
+    "liveMap": "Live map",
+    "history": "History & playback",
+    "alerts": "Alerts",
+    "reports": "Reports",
+    "geofences": "Geofences",
+    "fleet": "Fleet",
+    "settingsGroup": "Settings",
+    "users": "Users",
+    "roles": "Roles & permissions",
+    "departments": "Departments",
+    "audit": "Audit log",
+    "phase": "Phase {n}",
+    "comingSoon": "Available in phase {n}"
+  },
+  "shell": {
+    "skipToContent": "Skip to content",
+    "signOut": "Sign out",
+    "signedInAs": "Signed in as {email}"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome, {name}",
+    "intro": "Phase 1 is in progress. Fleet, live map and alerts screens arrive in the next phases.",
+    "api": {
+      "title": "Tracking API",
+      "ok": "Connected",
+      "mock": "Mock API",
+      "mockDetail": "Responses come from the built-in development mock, not the real server.",
+      "api_locked": "Server password required",
+      "gateway": "Blocked",
+      "network": "Unreachable",
+      "unknown": "Error",
+      "endpoint": "Endpoint",
+      "response": "Response"
+    },
+    "setup": {
+      "title": "Phase 1 progress",
+      "done": "Done",
+      "next": "Next",
+      "blocked": "Waiting on backend",
+      "items": {
+        "foundation": "Project setup, design tokens, English and Arabic",
+        "auth": "Sign in, forgot and reset password",
+        "bff": "Secure session: token kept on the server",
+        "shell": "App shell and navigation",
+        "me": "Role-based menus (needs the me query from the backend)",
+        "users": "Users, roles, departments and vehicle access",
+        "schema": "Typed API operations (needs schema.graphql)"
+      }
+    }
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "The page you're looking for doesn't exist or has moved.",
+    "home": "Go to the dashboard"
+  }
+}
