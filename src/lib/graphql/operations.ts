@@ -51,6 +51,7 @@ export const GET_VEHICLES = /* GraphQL */ `
       data {
         id
         plateNo
+        vehicleName
         vehicleType
         status
         odometerKm
@@ -64,6 +65,7 @@ export const GET_VEHICLES = /* GraphQL */ `
 export type VehicleItem = {
   id: string;
   plateNo: string;
+  vehicleName?: string | null;
   vehicleType?: string | null;
   status?: string | null;
   odometerKm?: number | null;
@@ -79,11 +81,12 @@ export type VehiclesResult = {
  * Devices query for tenant company
  */
 export const GET_DEVICES = /* GraphQL */ `
-  query Devices {
-    devices {
+  query Devices($first: Int) {
+    devices(first: $first) {
       data {
         id
         imei
+        vehicleId
         status
       }
     }
@@ -92,6 +95,7 @@ export const GET_DEVICES = /* GraphQL */ `
 export type DeviceItem = {
   id: string;
   imei: string;
+  vehicleId?: string | null;
   status?: string | null;
 };
 export type DevicesResult = {

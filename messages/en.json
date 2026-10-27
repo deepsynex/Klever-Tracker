@@ -131,8 +131,13 @@
     "subtitle": "Track vehicle route playback, speed telemetry, and trip events over time.",
     "filters": {
       "title": "Tracking Parameters",
-      "vehicle": "Vehicle Plate Number",
+      "vehicle": "Vehicle or device",
       "vehiclePlaceholder": "Select a vehicle",
+      "vehiclesGroup": "Vehicles",
+      "devicesGroup": "Devices (IMEI)",
+      "loadingTargets": "Loading vehicles…",
+      "noTargetsTitle": "No vehicles or devices yet.",
+      "noTargetsBody": "Your company has no vehicles or tracking devices, so there is no history to show. Ask an administrator to add a vehicle and assign a device to it.",
       "fromDate": "From Date",
       "fromTime": "From Time",
       "toDate": "To Date",
@@ -146,8 +151,7 @@
       "quickRanges": "Quick Ranges",
       "today": "Today",
       "yesterday": "Yesterday",
-      "last7Days": "Last 7 Days",
-      "demoWindow": "Demo Data (12 Oct)"
+      "last7Days": "Last 7 Days"
     },
     "stats": {
       "totalDistance": "Total Distance",
@@ -168,7 +172,7 @@
       "currentSpeed": "Speed: {speed} km/h",
       "followVehicle": "Follow Vehicle",
       "fitBounds": "Fit Route",
-      "snapToRoads": "Exact Road Path (Directions)",
+      "snapToRoads": "Exact Road Path",
       "rawGps": "Raw GPS Points",
       "showFullRoute": "View Entire Journey",
       "routesUsed": "Exact Routes Used ({count})",
