@@ -3,6 +3,17 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Navigation, AlertCircle } from "lucide-react";
 import type { PositionHistoryPoint, RoutePoint, AlertEventItem, EventTypeItem } from "@/lib/graphql/operations";
+import {
+  bearing,
+  buildPlaybackTrack,
+  fetchRoadPaths,
+  positionAt,
+  RoadPathDeniedError,
+  splitIntoSegments,
+  type Fix,
+  type SegmentRoad,
+  type PlaybackTrack,
+} from "@/lib/history/road-path";
 
 interface GoogleMapInstance {
   setCenter: (latLng: unknown) => void;
@@ -13,33 +24,39 @@ interface GoogleMapInstance {
 interface GoogleMarkerInstance {
   setMap: (map: unknown) => void;
   setPosition: (latLng: unknown) => void;
+  setIcon: (icon: unknown) => void;
   addListener: (event: string, handler: () => void) => void;
 }
 
 interface GooglePolylineInstance {
   setMap: (map: unknown) => void;
+  setOptions: (options: Record<string, unknown>) => void;
 }
+
+/** GPS rows → timed fixes. Klever timestamps are UTC, as "YYYY-MM-DD HH:mm:ss" or ISO. */
+function toFixes(points: PositionHistoryPoint[]): Fix[] {
+  return points.map((p) => {
+    const iso = p.recordedAt.includes("T") ? p.recordedAt : `${p.recordedAt.replace(" ", "T")}Z`;
+    const time = Date.parse(iso);
+    return { lat: p.locationLat!, lng: p.locationLng!, ...(Number.isNaN(time) ? {} : { time }) };
+  });
+}
+
+/** Playback arrow style; `path` and `rotation` are added where it's drawn. */
+const VEHICLE_ICON = { scale: 6, fillColor: "#3BB8AE", fillOpacity: 1, strokeColor: "#102422", strokeWeight: 2 };
+
+/** Base GPS track styles: faint under a snapped road path, prominent on its own. */
+const TRACK_UNDER_SNAP = { strokeColor: "#566B68", strokeOpacity: 0.4, strokeWeight: 2 };
+const TRACK_ALONE = { strokeColor: "#0B6E69", strokeOpacity: 0.9, strokeWeight: 5 };
+
+/**
+ * Set once Google refuses a Routes API request (the API isn't enabled for this key), so the
+ * page stops calling it for the rest of the session instead of failing on every redraw.
+ */
+let roadSnapBlocked = false;
 
 interface GoogleInfoWindowInstance {
   open: (map: unknown, marker: unknown) => void;
-}
-
-interface GoogleDirectionsResult {
-  routes: Array<{
-    overview_path: Array<{ lat: () => number; lng: () => number }>;
-  }>;
-}
-
-interface GoogleDirectionsService {
-  route: (
-    request: {
-      origin: unknown;
-      destination: unknown;
-      waypoints?: Array<{ location: unknown; stopover: boolean }>;
-      travelMode: unknown;
-    },
-    callback: (result: GoogleDirectionsResult | null, status: string) => void,
-  ) => void;
 }
 
 interface GoogleMapsGlobal {
@@ -50,13 +67,6 @@ interface GoogleMapsGlobal {
     Polyline: new (options: Record<string, unknown>) => GooglePolylineInstance;
     Marker: new (options: Record<string, unknown>) => GoogleMarkerInstance;
     InfoWindow: new (options: Record<string, unknown>) => GoogleInfoWindowInstance;
-    DirectionsService: new () => GoogleDirectionsService;
-    TravelMode: {
-      DRIVING: unknown;
-    };
-    DirectionsStatus: {
-      OK: string;
-    };
     SymbolPath: {
       CIRCLE: unknown;
       FORWARD_CLOSED_ARROW: unknown;
@@ -81,6 +91,10 @@ export type MapProps = {
   eventTypes?: EventTypeItem[];
   followVehicle?: boolean;
   snapToRoads?: boolean;
+  /** Called when Google refuses road snapping, so the page can hide the option. */
+  onRoadSnapUnavailable?: () => void;
+  /** Time between playback steps; the marker glides to the next fix over this long. 0 = jump. */
+  stepDurationMs?: number;
   focusedSegment?: { startIndex: number; endIndex: number } | null;
 };
 
@@ -105,13 +119,15 @@ export function GoogleMapView({
   events = [],
   eventTypes = [],
   followVehicle = true,
-  snapToRoads = true,
+  snapToRoads = false,
+  onRoadSnapUnavailable,
+  stepDurationMs = 0,
   focusedSegment = null,
 }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GoogleMapInstance | null>(null);
-  const polylineRef = useRef<GooglePolylineInstance | null>(null);
-  const snappedRoadPolylineRef = useRef<GooglePolylineInstance | null>(null);
+  const polylinesRef = useRef<GooglePolylineInstance[]>([]);
+  const snappedRoadPolylinesRef = useRef<GooglePolylineInstance[]>([]);
   const routePolylineRef = useRef<GooglePolylineInstance | null>(null);
   const vehicleMarkerRef = useRef<GoogleMarkerInstance | null>(null);
   const markersRef = useRef<GoogleMarkerInstance[]>([]);
@@ -133,13 +149,29 @@ export function GoogleMapView({
     );
   }, [points]);
 
-  // Points within the currently focused route segment, if one is active
+  // Points within the currently focused route segment, if one is active. Keyed on the indices,
+  // not the object: the parent passes a new object each render, which would otherwise redraw
+  // the map (and re-request the road path) on every render.
+  const segmentStart = focusedSegment?.startIndex ?? null;
+  const segmentEnd = focusedSegment?.endIndex ?? null;
   const displayPoints = useMemo(() => {
-    if (!focusedSegment) return validPoints;
-    return validPoints.slice(focusedSegment.startIndex, focusedSegment.endIndex + 1);
-  }, [validPoints, focusedSegment]);
+    if (segmentStart === null || segmentEnd === null) return validPoints;
+    return validPoints.slice(segmentStart, segmentEnd + 1);
+  }, [validPoints, segmentStart, segmentEnd]);
 
   const activePoint = validPoints[activeIndex] || validPoints[0] || null;
+
+  // GPS fixes placed on the road path, for the playback marker. Tied to the exact points it was
+  // computed for, so a stale result is never used after the track changes.
+  const [snappedTrack, setSnappedTrack] = useState<{ points: PositionHistoryPoint[]; roads: (SegmentRoad | null)[] } | null>(
+    null,
+  );
+  // Playback animation state: where the marker is along the track, which fix it last showed,
+  // the running animation frame and the arrow's current direction.
+  const markerAlongRef = useRef(0);
+  const markerIndexRef = useRef<number | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const lastHeadingRef = useRef(0);
 
   // Load Google Maps script when apiKey is available
   useEffect(() => {
@@ -195,14 +227,10 @@ export function GoogleMapView({
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
 
-    if (polylineRef.current) {
-      polylineRef.current.setMap(null);
-      polylineRef.current = null;
-    }
-    if (snappedRoadPolylineRef.current) {
-      snappedRoadPolylineRef.current.setMap(null);
-      snappedRoadPolylineRef.current = null;
-    }
+    polylinesRef.current.forEach((line) => line.setMap(null));
+    polylinesRef.current = [];
+    snappedRoadPolylinesRef.current.forEach((line) => line.setMap(null));
+    snappedRoadPolylinesRef.current = [];
     if (routePolylineRef.current) {
       routePolylineRef.current.setMap(null);
       routePolylineRef.current = null;
@@ -259,66 +287,62 @@ export function GoogleMapView({
       }
     }
 
-    // Draw Telemetry Polyline (Base GPS Track)
-    polylineRef.current = new window.google.maps.Polyline({
-      path: pathCoords,
-      geodesic: true,
-      strokeColor: snapToRoads ? "#566B68" : "#0B6E69",
-      strokeOpacity: snapToRoads ? 0.4 : 0.9,
-      strokeWeight: snapToRoads ? 2 : 5,
-      map: mapRef.current,
-    });
+    const snapping = snapToRoads && !roadSnapBlocked && displayPoints.length >= 2;
 
-    // Snap to exact roads using Google DirectionsService when enabled
-    if (snapToRoads && displayPoints.length >= 2 && window.google.maps.DirectionsService) {
-      const directionsService = new window.google.maps.DirectionsService();
-      const origin = { lat: displayPoints[0].locationLat!, lng: displayPoints[0].locationLng! };
-      const destination = {
-        lat: displayPoints[displayPoints.length - 1].locationLat!,
-        lng: displayPoints[displayPoints.length - 1].locationLng!,
-      };
+    // Draw the GPS track, one line per segment: no line across a GPS glitch or data gap.
+    const fixes = toFixes(displayPoints);
+    const baseTracks = splitIntoSegments(fixes).map(
+      (indices) =>
+        new window.google!.maps.Polyline({
+          path: indices.map((i) => pathCoords[i]),
+          geodesic: true,
+          ...(snapping ? TRACK_UNDER_SNAP : TRACK_ALONE),
+          map: mapRef.current,
+        }),
+    );
+    polylinesRef.current = baseTracks;
+    const showGpsTrack = () => baseTracks.forEach((line) => line.setOptions(TRACK_ALONE));
 
-      // Sample intermediate points (Google Directions allows up to 23 waypoints)
-      const maxWaypoints = Math.min(20, displayPoints.length - 2);
-      const waypoints: Array<{ location: unknown; stopover: boolean }> = [];
-
-      if (maxWaypoints > 0) {
-        const step = (displayPoints.length - 1) / (maxWaypoints + 1);
-        for (let i = 1; i <= maxWaypoints; i++) {
-          const pt = displayPoints[Math.round(i * step)];
-          if (pt?.locationLat && pt?.locationLng) {
-            waypoints.push({
-              location: new window.google.maps.LatLng(pt.locationLat, pt.locationLng),
-              stopover: false,
-            });
+    // Snap to real roads with Google's Routes API when enabled. Aborted when the effect re-runs,
+    // so a slow response can't draw over a newer track.
+    const controller = snapping && apiKey ? new AbortController() : null;
+    if (controller && apiKey) {
+      fetchRoadPaths(fixes, apiKey, controller.signal)
+        .then((roads) => {
+          if (controller.signal.aborted || !window.google?.maps) return;
+          if (roads.every((road) => !road)) {
+            // No road path: show the GPS track itself as the route.
+            showGpsTrack();
+            return;
           }
-        }
-      }
-
-      directionsService.route(
-        {
-          origin,
-          destination,
-          waypoints,
-          travelMode: window.google.maps.TravelMode.DRIVING,
-        },
-        (result, status) => {
-          if (status === window.google!.maps.DirectionsStatus.OK && result?.routes?.[0]?.overview_path) {
-            const snappedCoords = result.routes[0].overview_path.map(
-              (p) => new window.google!.maps.LatLng(p.lat(), p.lng()),
+          roads.forEach((road, s) => {
+            if (!road) return; // parked or unroutable: its GPS line stays as the route
+            snappedRoadPolylinesRef.current.push(
+              new window.google!.maps.Polyline({
+                path: road.path,
+                geodesic: true,
+                strokeColor: "#0B6E69", // Vibrant primary teal for exact road path
+                strokeOpacity: 0.95,
+                strokeWeight: 5,
+                map: mapRef.current,
+              }),
             );
-
-            snappedRoadPolylineRef.current = new window.google!.maps.Polyline({
-              path: snappedCoords,
-              geodesic: true,
-              strokeColor: "#0B6E69", // Vibrant primary teal for exact road path
-              strokeOpacity: 0.95,
-              strokeWeight: 5,
-              map: mapRef.current,
-            });
+            // The road path replaces the raw GPS line (shown faintly only while the path loads).
+            baseTracks[s].setMap(null);
+          });
+          baseTracks.forEach((line, s) => {
+            if (!roads[s]) line.setOptions(TRACK_ALONE);
+          });
+          setSnappedTrack({ points: displayPoints, roads });
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted) return;
+          showGpsTrack();
+          if (err instanceof RoadPathDeniedError) {
+            roadSnapBlocked = true;
+            onRoadSnapUnavailable?.();
           }
-        },
-      );
+        });
     }
 
     // Start Marker (Green)
@@ -401,36 +425,82 @@ export function GoogleMapView({
       });
     }
 
-    // Vehicle Playback Marker
+    // Vehicle Playback Marker (remove the previous one so redraws don't leave copies behind)
+    vehicleMarkerRef.current?.setMap(null);
     vehicleMarkerRef.current = new window.google.maps.Marker({
       position: { lat: startPoint.locationLat, lng: startPoint.locationLng },
       map: mapRef.current,
       zIndex: 999,
-      icon: {
-        path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-        scale: 6,
-        fillColor: "#3BB8AE",
-        fillOpacity: 1,
-        strokeColor: "#102422",
-        strokeWeight: 2,
-        rotation: 0,
-      },
+      icon: { ...VEHICLE_ICON, path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW, rotation: 0 },
     });
 
     mapRef.current.fitBounds(bounds);
-  }, [mapsLoaded, displayPoints, routePoints, events, eventTypes, snapToRoads]);
+    return () => controller?.abort();
+  }, [mapsLoaded, displayPoints, routePoints, events, eventTypes, snapToRoads, onRoadSnapUnavailable, apiKey]);
 
-  // Update vehicle position when activeIndex changes
+  // What the playback marker moves along: the road path when it's shown, else the GPS track.
+  const markerTrack = useMemo<PlaybackTrack>(() => {
+    const roads = snapToRoads && snappedTrack?.points === displayPoints ? snappedTrack.roads : null;
+    return buildPlaybackTrack(toFixes(displayPoints), roads);
+  }, [snapToRoads, snappedTrack, displayPoints]);
+
+  // Move the vehicle marker to the active fix. One step forward (normal playback) glides along the
+  // track over the step's duration, so the marker drives along the road; any other change (seek,
+  // reset, new track) jumps straight there.
   useEffect(() => {
-    if (!activePoint || !vehicleMarkerRef.current || !window.google?.maps) return;
+    const marker = vehicleMarkerRef.current;
+    if (!activePoint || !marker || !window.google?.maps || markerTrack.along.length === 0) return;
+    const maps = window.google.maps;
 
-    const newPos = new window.google.maps.LatLng(activePoint.locationLat!, activePoint.locationLng!);
-    vehicleMarkerRef.current.setPosition(newPos);
+    // activeIndex counts from the start of the whole track; markerTrack from the focused segment.
+    const i = Math.min(Math.max(activeIndex - (segmentStart ?? 0), 0), markerTrack.along.length - 1);
+    const target = markerTrack.along[i];
+    const from = markerAlongRef.current;
+    const total = markerTrack.cumulative[markerTrack.cumulative.length - 1];
 
-    if (followVehicle && mapRef.current) {
-      mapRef.current.panTo(newPos);
+    const place = (distance: number) => {
+      markerAlongRef.current = distance;
+      const position = positionAt(markerTrack, distance);
+      // Point the arrow along the track, a few metres ahead (or behind, at the very end).
+      const ahead = positionAt(markerTrack, Math.min(distance + 8, total));
+      const behind = positionAt(markerTrack, Math.max(distance - 8, 0));
+      if (ahead.lat !== position.lat || ahead.lng !== position.lng) lastHeadingRef.current = bearing(position, ahead);
+      else if (behind.lat !== position.lat || behind.lng !== position.lng) lastHeadingRef.current = bearing(behind, position);
+
+      const latLng = new maps.LatLng(position.lat, position.lng);
+      marker.setPosition(latLng);
+      marker.setIcon({ ...VEHICLE_ICON, path: maps.SymbolPath.FORWARD_CLOSED_ARROW, rotation: lastHeadingRef.current });
+      return latLng;
+    };
+
+    // Drive only for one step forward within a segment; across a GPS glitch or gap, jump.
+    const steppedForward =
+      markerIndexRef.current === i - 1 && target > from && markerTrack.segmentOf[i] === markerTrack.segmentOf[i - 1];
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    markerIndexRef.current = i;
+
+    if (!steppedForward || reducedMotion || stepDurationMs <= 0) {
+      const latLng = place(target);
+      if (followVehicle) mapRef.current?.panTo(latLng);
+      return;
     }
-  }, [activePoint, followVehicle]);
+
+    // Leave a little of the step for the next one to start, so playback never stutters.
+    const duration = stepDurationMs * 0.9;
+    const start = performance.now();
+    const frame = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const latLng = place(from + (target - from) * t);
+      if (followVehicle) mapRef.current?.setCenter(latLng);
+      animationFrameRef.current = t < 1 ? requestAnimationFrame(frame) : null;
+    };
+    animationFrameRef.current = requestAnimationFrame(frame);
+
+    return () => {
+      if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    };
+  }, [activePoint, activeIndex, segmentStart, markerTrack, followVehicle, stepDurationMs]);
 
   // Fallback interactive SVG canvas for route preview when no Google Maps key is configured
   if (!apiKey || loadError) {

@@ -131,8 +131,13 @@
     "subtitle": "تتبع مسار المركبة وإعادة التشغيل وبيانات السرعة وأحداث الرحلة عبر الوقت.",
     "filters": {
       "title": "معايير التتبع",
-      "vehicle": "رقم لوحة المركبة",
+      "vehicle": "المركبة أو الجهاز",
       "vehiclePlaceholder": "اختر مركبة",
+      "vehiclesGroup": "المركبات",
+      "devicesGroup": "الأجهزة (IMEI)",
+      "loadingTargets": "جارٍ تحميل المركبات…",
+      "noTargetsTitle": "لا توجد مركبات أو أجهزة بعد.",
+      "noTargetsBody": "لا تملك شركتك أي مركبات أو أجهزة تتبع، لذلك لا يوجد سجل لعرضه. اطلب من المسؤول إضافة مركبة وربط جهاز بها.",
       "fromDate": "من تاريخ",
       "fromTime": "من وقت",
       "toDate": "إلى تاريخ",
@@ -146,8 +151,7 @@
       "quickRanges": "فترات سريعة",
       "today": "اليوم",
       "yesterday": "أمس",
-      "last7Days": "آخر 7 أيام",
-      "demoWindow": "بيانات تجريبية (12 أكتوبر)"
+      "last7Days": "آخر 7 أيام"
     },
     "stats": {
       "totalDistance": "إجمالي المسافة",
@@ -168,7 +172,7 @@
       "currentSpeed": "السرعة: {speed} كم/ساعة",
       "followVehicle": "متابعة المركبة",
       "fitBounds": "ملاءمة المسار",
-      "snapToRoads": "مسار الطريق الدقيق (توجيهات)",
+      "snapToRoads": "مسار الطريق الدقيق",
       "rawGps": "نقاط GPS الأولية",
       "showFullRoute": "عرض المسار بالكامل",
       "routesUsed": "المسارات المستخدمة ({count})",

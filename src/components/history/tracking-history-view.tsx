@@ -18,7 +18,6 @@ import {
   Layers,
   MapPin,
   CheckCircle2,
-  Cpu,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +26,7 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Alert } from "@/components/ui/alert";
 import { GoogleMapView } from "@/components/history/google-map-view";
-import { gqlRequest } from "@/lib/graphql/client";
+import { ApiRequestError, gqlRequest } from "@/lib/graphql/client";
 import {
   GET_VEHICLES,
   GET_DEVICES,
@@ -36,7 +35,6 @@ import {
   GET_EVENT_TYPES,
   GET_ALERT_EVENTS,
   GET_POSITION_HISTORY,
-  type VehicleItem,
   type VehiclesResult,
   type DevicesResult,
   type RouteItem,
@@ -50,7 +48,23 @@ import {
   type PositionHistoryPoint,
   type PositionHistoryResult,
 } from "@/lib/graphql/operations";
+import {
+  buildTrackTargets,
+  companyDate,
+  companyTimeToUtcIso,
+  historyFilter,
+  type TrackTarget,
+} from "@/lib/history/selection";
 import { cn } from "@/lib/utils";
+
+/** Default window: the last 7 days in the company time zone. */
+const DEFAULT_RANGE_DAYS = 6;
+
+/**
+ * Road snapping calls Google's Routes API, which must be enabled for the Maps key separately.
+ * Off unless NEXT_PUBLIC_GOOGLE_ROUTES_ENABLED=true, so a key without it isn't called at all.
+ */
+const ROAD_SNAP_CONFIGURED = process.env.NEXT_PUBLIC_GOOGLE_ROUTES_ENABLED === "true";
 
 export type RouteLeg = {
   id: string;
@@ -204,18 +218,22 @@ function computeRouteLegs(points: PositionHistoryPoint[]): RouteLeg[] {
 
 export function TrackingHistoryView() {
   const t = useTranslations("history");
+  const te = useTranslations("errors");
 
-  // Form Fields State - Defaults to the actual date span of the device in DB (04–12 Oct 2026)
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>("1");
-  const [fromDate, setFromDate] = useState<string>("2026-10-04");
+  // Form fields. Dates and times are in the company time zone (Asia/Dubai).
+  const [selectedKey, setSelectedKey] = useState<string>("");
+  const [fromDate, setFromDate] = useState<string>(() => companyDate(DEFAULT_RANGE_DAYS));
   const [fromTime, setFromTime] = useState<string>("00:00");
-  const [toDate, setToDate] = useState<string>("2026-10-12");
+  const [toDate, setToDate] = useState<string>(() => companyDate(0));
   const [toTime, setToTime] = useState<string>("23:59");
   const [selectedRouteId, setSelectedRouteId] = useState<string>("");
   const [selectedEventTypeId, setSelectedEventTypeId] = useState<string>("all");
 
   // Lookup data from API
-  const [vehicles, setVehicles] = useState<VehicleItem[]>([]);
+  const [targets, setTargets] = useState<TrackTarget[]>([]);
+  /** null while loading; then whether the company has anything to track. */
+  const [hasTargets, setHasTargets] = useState<boolean | null>(null);
+  const selectedTarget = targets.find((x) => x.key === selectedKey) ?? null;
   const [routes, setRoutes] = useState<RouteItem[]>([]);
   const [routeDetail, setRouteDetail] = useState<RoutePoint[]>([]);
   const [eventTypes, setEventTypes] = useState<EventTypeItem[]>([]);
@@ -231,13 +249,19 @@ export function TrackingHistoryView() {
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const [followVehicle, setFollowVehicle] = useState<boolean>(true);
-  const [snapToRoads, setSnapToRoads] = useState<boolean>(true);
+  const [roadSnapAvailable, setRoadSnapAvailable] = useState<boolean>(ROAD_SNAP_CONFIGURED);
+  const [snapToRoads, setSnapToRoads] = useState<boolean>(ROAD_SNAP_CONFIGURED);
+  const handleRoadSnapUnavailable = useCallback(() => {
+    setRoadSnapAvailable(false);
+    setSnapToRoads(false);
+  }, []);
   const [focusedLeg, setFocusedLeg] = useState<RouteLeg | null>(null);
   const [activeTab, setActiveTab] = useState<"map" | "legs" | "points" | "events">("map");
 
-  // Helper to fetch position history for a given vehicle and window (fetching up to 1000 points)
+  // Fetches position history for a vehicle or device and window (up to 1000 points)
   const fetchHistory = useCallback(
-    async (vehicleId: string, fDate: string, fTime: string, tDate: string, tTime: string) => {
+    async (target: TrackTarget | null, fDate: string, fTime: string, tDate: string, tTime: string) => {
+      if (!target) return;
       setIsLoading(true);
       setErrorMsg(null);
       setIsPlaying(false);
@@ -245,14 +269,10 @@ export function TrackingHistoryView() {
       setFocusedLeg(null);
 
       try {
-        const fromIso = `${fDate}T${fTime}:00Z`;
-        const toIso = `${tDate}T${tTime}:59Z`;
-
         const res = await gqlRequest<PositionHistoryResult>(GET_POSITION_HISTORY, {
-          vehicleId,
-          deviceId: vehicleId,
-          from: fromIso,
-          to: toIso,
+          ...historyFilter(target),
+          from: companyTimeToUtcIso(fDate, fTime),
+          to: companyTimeToUtcIso(tDate, tTime, 59),
           first: 1000,
         });
 
@@ -266,13 +286,13 @@ export function TrackingHistoryView() {
           setErrorMsg(t("map.noPoints"));
         }
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Failed to load tracking history.";
-        setErrorMsg(message);
+        setPositions([]);
+        setErrorMsg(te(err instanceof ApiRequestError ? err.error.kind : "unknown"));
       } finally {
         setIsLoading(false);
       }
     },
-    [t],
+    [t, te],
   );
 
   // Fetch Initial Lookup Data on component mount
@@ -283,7 +303,7 @@ export function TrackingHistoryView() {
       try {
         const [vehiclesRes, devicesRes, routesRes, eventTypesRes, alertEventsRes] = await Promise.allSettled([
           gqlRequest<VehiclesResult>(GET_VEHICLES, { first: 100 }),
-          gqlRequest<DevicesResult>(GET_DEVICES),
+          gqlRequest<DevicesResult>(GET_DEVICES, { first: 100 }),
           gqlRequest<RoutesResult>(GET_ROUTES),
           gqlRequest<EventTypesResult>(GET_EVENT_TYPES),
           gqlRequest<AlertEventsResult>(GET_ALERT_EVENTS),
@@ -291,35 +311,21 @@ export function TrackingHistoryView() {
 
         if (cancelled) return;
 
-        let loadedOptions: VehicleItem[] = [];
-
-        // Always check devices table to ensure device with IMEI 862272088660768 is clearly displayed
-        if (devicesRes.status === "fulfilled" && devicesRes.value?.devices?.data?.length > 0) {
-          loadedOptions = devicesRes.value.devices.data.map((d) => ({
-            id: d.id,
-            plateNo: `Device #${d.id} — IMEI: ${d.imei} (${d.status || "installed"})`,
-            vehicleType: "installed",
-            status: d.status,
-          }));
-        } else if (vehiclesRes.status === "fulfilled" && vehiclesRes.value?.vehicles?.data?.length > 0) {
-          loadedOptions = vehiclesRes.value.vehicles.data;
-        } else {
-          loadedOptions = [
-            {
-              id: "1",
-              plateNo: "Device #1 — IMEI: 862272088660768 (Installed)",
-              vehicleType: "installed",
-              status: "installed",
-            },
-          ];
+        if (vehiclesRes.status === "rejected" && devicesRes.status === "rejected") {
+          const reason: unknown = vehiclesRes.reason;
+          setErrorMsg(te(reason instanceof ApiRequestError ? reason.error.kind : "unknown"));
+          return;
         }
 
-        setVehicles(loadedOptions);
-
-        // Find device with IMEI 862272088660768 or default to device #1
-        const targetDevice = loadedOptions.find((v) => v.plateNo.includes("862272088660768")) || loadedOptions[0];
-        const defaultId = targetDevice ? targetDevice.id : "1";
-        setSelectedVehicleId(defaultId);
+        // Only the company's own vehicles and devices: the API returns nothing for anyone else's.
+        const loadedTargets = buildTrackTargets(
+          vehiclesRes.status === "fulfilled" ? (vehiclesRes.value?.vehicles?.data ?? []) : [],
+          devicesRes.status === "fulfilled" ? (devicesRes.value?.devices?.data ?? []) : [],
+        );
+        setTargets(loadedTargets);
+        setHasTargets(loadedTargets.length > 0);
+        const defaultTarget = loadedTargets[0] ?? null;
+        setSelectedKey(defaultTarget?.key ?? "");
 
         if (routesRes.status === "fulfilled" && routesRes.value?.routes?.data) {
           setRoutes(routesRes.value.routes.data);
@@ -333,8 +339,7 @@ export function TrackingHistoryView() {
           setAllAlertEvents(alertEventsRes.value.alertEvents.data);
         }
 
-        // Trigger initial history query for all available database dates (04–12 Oct 2026)
-        void fetchHistory(defaultId, "2026-10-04", "00:00", "2026-10-12", "23:59");
+        void fetchHistory(defaultTarget, companyDate(DEFAULT_RANGE_DAYS), "00:00", companyDate(0), "23:59");
       } catch (err: unknown) {
         console.error("Failed to load tracking metadata:", err);
       }
@@ -344,7 +349,7 @@ export function TrackingHistoryView() {
     return () => {
       cancelled = true;
     };
-  }, [fetchHistory]);
+  }, [fetchHistory, te]);
 
   // Handle Route Dropdown Selection
   const handleRouteChange = (e: ChangeEvent<HTMLSelectElement>) => {
@@ -366,11 +371,12 @@ export function TrackingHistoryView() {
   // Filtered Alert Events for current vehicle and selected event type
   const filteredEvents = useMemo(() => {
     return allAlertEvents.filter((ev) => {
-      const matchesVehicle = !selectedVehicleId || ev.vehicleId === selectedVehicleId;
+      // Alert events carry a vehicle id; a device matches through the vehicle it's installed in.
+      const matchesVehicle = !!selectedTarget?.vehicleId && ev.vehicleId === selectedTarget.vehicleId;
       const matchesType = selectedEventTypeId === "all" || ev.eventTypeId === selectedEventTypeId;
       return matchesVehicle && matchesType;
     });
-  }, [allAlertEvents, selectedVehicleId, selectedEventTypeId]);
+  }, [allAlertEvents, selectedTarget, selectedEventTypeId]);
 
   // Filtered valid points (non-zero lat/lng)
   const validPoints = useMemo(() => {
@@ -407,6 +413,9 @@ export function TrackingHistoryView() {
     return { reached, total: routeDetail.length, percentage };
   }, [selectedRouteId, routeDetail, validPoints]);
 
+  // Time between playback steps; the map marker glides between fixes over the same time.
+  const stepDurationMs = Math.max(100, Math.floor(1000 / playbackSpeed));
+
   // Playback timer effect
   useEffect(() => {
     if (!isPlaying || validPoints.length === 0) return;
@@ -414,7 +423,6 @@ export function TrackingHistoryView() {
     const maxBoundary = focusedLeg ? focusedLeg.endIndex : validPoints.length - 1;
     const minBoundary = focusedLeg ? focusedLeg.startIndex : 0;
 
-    const intervalTime = Math.max(100, Math.floor(1000 / playbackSpeed));
     const timer = setInterval(() => {
       setActiveIndex((prev) => {
         if (prev >= maxBoundary) {
@@ -423,10 +431,10 @@ export function TrackingHistoryView() {
         }
         return prev + 1;
       });
-    }, intervalTime);
+    }, stepDurationMs);
 
     return () => clearInterval(timer);
-  }, [isPlaying, playbackSpeed, validPoints.length, focusedLeg]);
+  }, [isPlaying, stepDurationMs, validPoints.length, focusedLeg]);
 
   // Computed summary metrics
   const stats = useMemo(() => {
@@ -473,65 +481,15 @@ export function TrackingHistoryView() {
 
   const activePoint = validPoints[activeIndex] || validPoints[0] || null;
 
-  // Preset Date Range Helpers targeted to the real DB telemetry
-  const setPresetRange = (preset: "all_db" | "oct04" | "oct07" | "oct12" | "today" | "yesterday") => {
-    if (preset === "all_db") {
-      setFromDate("2026-10-04");
-      setFromTime("00:00");
-      setToDate("2026-10-12");
-      setToTime("23:59");
-      void fetchHistory(selectedVehicleId, "2026-10-04", "00:00", "2026-10-12", "23:59");
-      return;
-    }
-
-    if (preset === "oct04") {
-      setFromDate("2026-10-04");
-      setFromTime("05:00");
-      setToDate("2026-10-04");
-      setToTime("06:00");
-      void fetchHistory(selectedVehicleId, "2026-10-04", "05:00", "2026-10-04", "06:00");
-      return;
-    }
-
-    if (preset === "oct07") {
-      setFromDate("2026-10-07");
-      setFromTime("16:00");
-      setToDate("2026-10-07");
-      setToTime("17:00");
-      void fetchHistory(selectedVehicleId, "2026-10-07", "16:00", "2026-10-07", "17:00");
-      return;
-    }
-
-    if (preset === "oct12") {
-      setFromDate("2026-10-12");
-      setFromTime("16:00");
-      setToDate("2026-10-12");
-      setToTime("18:00");
-      void fetchHistory(selectedVehicleId, "2026-10-12", "16:00", "2026-10-12", "18:00");
-      return;
-    }
-
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const fmtDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-    if (preset === "today") {
-      const todayStr = fmtDate(now);
-      setFromDate(todayStr);
-      setFromTime("00:00");
-      setToDate(todayStr);
-      setToTime("23:59");
-      void fetchHistory(selectedVehicleId, todayStr, "00:00", todayStr, "23:59");
-    } else if (preset === "yesterday") {
-      const yest = new Date(now);
-      yest.setDate(yest.getDate() - 1);
-      const yestStr = fmtDate(yest);
-      setFromDate(yestStr);
-      setFromTime("00:00");
-      setToDate(yestStr);
-      setToTime("23:59");
-      void fetchHistory(selectedVehicleId, yestStr, "00:00", yestStr, "23:59");
-    }
+  // Quick ranges, in the company time zone
+  const setPresetRange = (preset: "today" | "yesterday" | "last7Days") => {
+    const from = companyDate(preset === "today" ? 0 : preset === "yesterday" ? 1 : DEFAULT_RANGE_DAYS);
+    const to = companyDate(preset === "yesterday" ? 1 : 0);
+    setFromDate(from);
+    setFromTime("00:00");
+    setToDate(to);
+    setToTime("23:59");
+    void fetchHistory(selectedTarget, from, "00:00", to, "23:59");
   };
 
   return (
@@ -543,62 +501,26 @@ export function TrackingHistoryView() {
           <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
         </div>
 
-        {/* Quick Range Presets for DB data verification */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-2 sm:pt-0">
-          <Button variant="secondary" size="sm" onClick={() => setPresetRange("all_db")}>
-            All DB Telemetry (04–12 Oct)
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setPresetRange("oct04")}>
-            04 Oct (259 pts)
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setPresetRange("oct07")}>
-            07 Oct (95 pts)
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setPresetRange("oct12")}>
-            12 Oct (12 pts)
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setPresetRange("today")}>
-            {t("filters.today")}
-          </Button>
+        <div className="flex flex-wrap items-center gap-1.5 pt-2 sm:pt-0" role="group" aria-label={t("filters.quickRanges")}>
+          {(["today", "yesterday", "last7Days"] as const).map((preset) => (
+            <Button
+              key={preset}
+              variant="ghost"
+              size="sm"
+              disabled={!selectedTarget || isLoading}
+              onClick={() => setPresetRange(preset)}
+            >
+              {t(`filters.${preset}`)}
+            </Button>
+          ))}
         </div>
       </div>
 
-      {/* Live Database Hardware Verification Banner */}
-      <div className="rounded-lg border border-primary/30 bg-primary-soft/40 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary font-mono text-sm font-bold text-primary-foreground">
-              <Cpu className="size-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-foreground text-sm">
-                  Active Tracker: IMEI <code className="font-mono text-primary font-bold">862272088660768</code>
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-moving/15 px-2 py-0.5 text-[10px] font-bold text-moving">
-                  <span className="size-1.5 rounded-full bg-moving" />
-                  Live DB Verified
-                </span>
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Database table: <code className="font-mono text-primary font-medium">positions</code> • {positions.length} telemetry records returned ({validPoints.length} valid GPS coordinates)
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-            <span className="rounded border border-border bg-surface px-2.5 py-1 text-muted-foreground shadow-xs">
-              First Fix: <strong className="text-foreground">04 Oct 2026 05:38</strong>
-            </span>
-            <span className="rounded border border-border bg-surface px-2.5 py-1 text-muted-foreground shadow-xs">
-              Latest Fix: <strong className="text-foreground">12 Oct 2026 16:44</strong>
-            </span>
-            <span className="rounded border border-border bg-surface px-2.5 py-1 text-muted-foreground shadow-xs">
-              Region: <strong className="text-foreground">Anand - Nadiad Corridor</strong>
-            </span>
-          </div>
-        </div>
-      </div>
+      {hasTargets === false && (
+        <Alert tone="warning">
+          <strong className="font-semibold">{t("filters.noTargetsTitle")}</strong> {t("filters.noTargetsBody")}
+        </Alert>
+      )}
 
       {/* Filter Parameters Form Card */}
       <Card className="border-border-strong bg-surface">
@@ -609,7 +531,7 @@ export function TrackingHistoryView() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            void fetchHistory(selectedVehicleId, fromDate, fromTime, toDate, toTime);
+            void fetchHistory(selectedTarget, fromDate, fromTime, toDate, toTime);
           }}
           className="grid gap-4 px-6 pb-6"
         >
@@ -622,17 +544,30 @@ export function TrackingHistoryView() {
               </Label>
               <Select
                 id="vehicle-select"
-                value={selectedVehicleId}
+                value={selectedKey}
+                disabled={!hasTargets}
                 onChange={(e) => {
-                  setSelectedVehicleId(e.target.value);
-                  void fetchHistory(e.target.value, fromDate, fromTime, toDate, toTime);
+                  setSelectedKey(e.target.value);
+                  const next = targets.find((x) => x.key === e.target.value) ?? null;
+                  void fetchHistory(next, fromDate, fromTime, toDate, toTime);
                 }}
               >
-                {vehicles.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.plateNo}
-                  </option>
-                ))}
+                {!hasTargets && (
+                  <option value="">{hasTargets === null ? t("filters.loadingTargets") : t("filters.noTargetsTitle")}</option>
+                )}
+                {(["vehicle", "device"] as const).map((kind) => {
+                  const group = targets.filter((x) => x.kind === kind);
+                  if (group.length === 0) return null;
+                  return (
+                    <optgroup key={kind} label={t(kind === "vehicle" ? "filters.vehiclesGroup" : "filters.devicesGroup")}>
+                      {group.map((x) => (
+                        <option key={x.key} value={x.key} dir="ltr">
+                          {x.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </Select>
             </div>
 
@@ -698,7 +633,7 @@ export function TrackingHistoryView() {
 
             {/* Submit Track Button */}
             <div className="flex items-end">
-              <Button type="submit" disabled={isLoading} className="w-full">
+              <Button type="submit" disabled={isLoading || !selectedTarget} className="w-full">
                 {isLoading ? t("filters.loading") : t("filters.submit")}
               </Button>
             </div>
@@ -861,16 +796,18 @@ export function TrackingHistoryView() {
               </div>
             )}
 
-            <Button
-              variant={snapToRoads ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setSnapToRoads(!snapToRoads)}
-              title={snapToRoads ? t("playback.snapToRoads") : t("playback.rawGps")}
-            >
-              <Layers className="size-3.5" />
-              {snapToRoads ? t("playback.snapToRoads") : t("playback.rawGps")}
-            </Button>
+            {roadSnapAvailable && (
+              <Button
+                variant={snapToRoads ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setSnapToRoads(!snapToRoads)}
+                title={snapToRoads ? t("playback.snapToRoads") : t("playback.rawGps")}
+              >
+                <Layers className="size-3.5" />
+                {snapToRoads ? t("playback.snapToRoads") : t("playback.rawGps")}
+              </Button>
+            )}
 
             {activePoint && (
               <div className="hidden items-center gap-3 font-mono text-xs text-muted-foreground xl:flex">
@@ -895,6 +832,8 @@ export function TrackingHistoryView() {
               eventTypes={eventTypes}
               followVehicle={followVehicle}
               snapToRoads={snapToRoads}
+              onRoadSnapUnavailable={handleRoadSnapUnavailable}
+              stepDurationMs={stepDurationMs}
               focusedSegment={
                 focusedLeg ? { startIndex: focusedLeg.startIndex, endIndex: focusedLeg.endIndex } : null
               }
