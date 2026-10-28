@@ -52,7 +52,7 @@ export const GET_VEHICLES = /* GraphQL */ `
         id
         plateNo
         vehicleName
-        vehicleType
+        vehicleTypeId
         status
         odometerKm
       }
@@ -66,7 +66,7 @@ export type VehicleItem = {
   id: string;
   plateNo: string;
   vehicleName?: string | null;
-  vehicleType?: string | null;
+  vehicleTypeId?: string | null;
   status?: string | null;
   odometerKm?: number | null;
 };
