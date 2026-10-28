@@ -110,9 +110,9 @@ export async function mockFetch(rawBody: string, token?: string) {
       data: {
         vehicles: {
           data: [
-            { id: "1", plateNo: "DXB-A-12345", vehicleType: "truck", status: "active", odometerKm: 45210.5 },
-            { id: "2", plateNo: "AUH-B-78901", vehicleType: "van", status: "active", odometerKm: 28400.0 },
-            { id: "3", plateNo: "SHJ-C-45678", vehicleType: "car", status: "active", odometerKm: 14120.2 },
+            { id: "1", plateNo: "DXB-A-12345", vehicleTypeId: "1", status: "active", odometerKm: 45210.5 },
+            { id: "2", plateNo: "AUH-B-78901", vehicleTypeId: "12", status: "active", odometerKm: 28400.0 },
+            { id: "3", plateNo: "SHJ-C-45678", vehicleTypeId: "3", status: "active", odometerKm: 14120.2 },
           ],
           paginatorInfo: { total: 3 },
         },

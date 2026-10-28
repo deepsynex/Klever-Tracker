@@ -12,14 +12,47 @@
   },
   "locale": {
     "switch": "Change language",
-    "name": { "en": "English", "ar": "العربية" }
+    "name": {
+      "en": "English",
+      "ar": "العربية"
+    }
   },
   "validation": {
     "required": "This field is required.",
     "email": "Enter a valid email address, like name@company.ae.",
     "passwordMin": "Use at least 8 characters.",
     "passwordMatch": "The passwords don't match.",
-    "resetLinkInvalid": "This reset link is incomplete. Request a new one."
+    "resetLinkInvalid": "This reset link is incomplete. Request a new one.",
+    "nonNegative": "Enter a number that's 0 or more.",
+    "year": "Enter a year between 1950 and next year.",
+    "dayOfMonth": "Enter a day of the month from 1 to 31.",
+    "timeRange": "The end time must be different from the start time.",
+    "afterStart": "This must be after the start.",
+    "odometerBack": "This reading is lower than the starting reading.",
+    "future": "Choose a time in the future.",
+    "greaterThanMin": "Must be higher than the minimum.",
+    "duplicatePlate": "Another vehicle already has this plate number.",
+    "speedMax": "Enter 250 km/h or less.",
+    "idleMax": "Enter 1440 minutes (24 hours) or less.",
+    "downPaymentMax": "The down payment can’t be more than the total cost.",
+    "afterInstall": "This must be on or after the installation date.",
+    "notFuture": "This can’t be in the future.",
+    "duplicateName": "This name is already used. Choose a different one.",
+    "phone": "Enter a valid phone number, like +971 50 123 4567.",
+    "expiryAfterIssue": "The expiry date must be after the issue date.",
+    "positive": "Enter a number greater than 0.",
+    "number": "Enter a number.",
+    "lowBelowHigh": "The high limit must be above the low limit.",
+    "duplicateTank": "This vehicle already has a tank with this number.",
+    "refillMax": "The minimum refill can’t be more than the tank volume.",
+    "vehicleOut": "This vehicle is already allocated. Record its return first.",
+    "percentMax": "A percentage discount can’t be more than 100.",
+    "discountMax": "The discount can’t be more than the amount.",
+    "daysRequired": "Choose at least one working day.",
+    "duplicateDay": "This vehicle already has an entry for this date. Edit that one instead.",
+    "distanceMismatch": "The distance should equal the stop reading minus the start reading.",
+    "duplicateVoltage": "Another record already has this voltage.",
+    "minPoints": "Add at least two records, e.g. an empty and a full tank reading."
   },
   "errors": {
     "invalid_credentials": "The email or password is incorrect.",
@@ -82,7 +115,9 @@
     "departments": "Departments",
     "audit": "Audit log",
     "phase": "Phase {n}",
-    "comingSoon": "Available in phase {n}"
+    "comingSoon": "Available in phase {n}",
+    "mastersGroup": "Masters",
+    "vehicleManagement": "Vehicle management"
   },
   "shell": {
     "skipToContent": "Skip to content",
@@ -199,5 +234,564 @@
       "noPoints": "No tracking data found for the selected vehicle and time range.",
       "selectVehiclePrompt": "Select a vehicle plate number and date range above, then click Track Vehicle."
     }
+  },
+  "masters": {
+    "common": {
+      "actions": "Actions",
+      "add": "Add",
+      "all": "All",
+      "cancel": "Cancel",
+      "choose": "Choose…",
+      "clearFilters": "Clear filters",
+      "close": "Close",
+      "delete": "Delete",
+      "deleting": "Deleting…",
+      "deleteTitle": "Delete {name}?",
+      "deletePermanent": "This permanently removes it. You can't undo this.",
+      "deleteSoft": "It will be removed from lists. Its history is kept.",
+      "deleteRowConfirm": "Delete this row? You can't undo this.",
+      "deleted": "Deleted.",
+      "discard": "Discard",
+      "edit": "Edit",
+      "empty": "Nothing here yet.",
+      "fixErrors": "Check the highlighted fields.",
+      "label": "Label",
+      "name": "Name",
+      "next": "Next page",
+      "previous": "Previous page",
+      "noMatches": "No rows match your search.",
+      "noVehicles": "No vehicles yet. Add vehicles under Vehicle details first.",
+      "none": "None",
+      "pageOf": "Page {page} of {total}",
+      "remove": "Remove",
+      "rowCount": "{count, plural, one {# row} other {# rows}}",
+      "save": "Save",
+      "saved": "Saved.",
+      "saving": "Saving…",
+      "search": "Search",
+      "searchVehicles": "Search vehicles",
+      "selectAll": "Select all",
+      "selectedCount": "{count} selected",
+      "status": "Status",
+      "statuses": {
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "expiry": {
+        "expired": "Expired",
+        "soon": "Expires within 30 days",
+        "ok": "Valid"
+      },
+      "days": {
+        "label": "Days",
+        "sun": "Sun",
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat"
+      },
+      "upload": {
+        "upload": "Upload",
+        "replace": "Replace",
+        "remove": "Remove",
+        "uploading": "Uploading…",
+        "none": "No file",
+        "open": "Open file",
+        "hint": "{kind}, up to {max} MB.",
+        "kinds": {
+          "vehicle_photo": "JPG, PNG or WebP image",
+          "document": "PDF"
+        },
+        "problems": {
+          "type": "This file type isn’t allowed. Upload a {kind}.",
+          "size": "This file is too big. The limit is {max} MB.",
+          "empty": "This file is empty."
+        }
+      },
+      "addDriver": "Add driver",
+      "driverFields": {
+        "name": "Driver name",
+        "mobile": "Mobile number",
+        "licenceNo": "Licence no.",
+        "employeeId": "Employee ID"
+      }
+    },
+    "vm": {
+      "title": "Vehicle management",
+      "description": "Vehicles and everything attached to them: allocations, maintenance, sensors, groups, working hours, distance logs, share links and fuel calibration.",
+      "modules": {
+        "label": "Vehicle management sections",
+        "vehicles": "Vehicle details",
+        "allocations": "Allocate & return",
+        "maintenance": "Maintenance",
+        "tempSensors": "Temp sensors",
+        "groups": "Groups",
+        "workingHours": "Working hours",
+        "distance": "Vehicle distance",
+        "liveLocation": "Live location",
+        "fuelCalibration": "Fuel calibration",
+        "types": "Types"
+      },
+      "moduleHints": {
+        "vehicles": "The fleet list and each vehicle's full record, documents, sensors and fuel tanks.",
+        "allocations": "Hand a vehicle to a driver or project, then record its return and charges.",
+        "maintenance": "Garage visits with their bill's line items.",
+        "tempSensors": "Temperature sensors per vehicle, with low and high limits.",
+        "groups": "Groups and sub groups of vehicles, with the person in charge.",
+        "workingHours": "Shifts with their days, hours and assigned vehicles.",
+        "distance": "A day-wise odometer and distance log per vehicle.",
+        "liveLocation": "Time-limited links that show one vehicle's live location.",
+        "fuelCalibration": "Voltage-to-litres tables for fuel level sensors.",
+        "types": "The dropdown lists: vehicle, maintenance and service types."
+      },
+      "vehicles": {
+        "title": "Vehicle details",
+        "description": "Every vehicle in your fleet. Open one to edit its details, documents, sensors and fuel tanks.",
+        "add": "Add vehicle",
+        "empty": "No vehicles yet. Add your first vehicle.",
+        "editTitle": "Edit {plate}",
+        "formDescription": "Fields marked * are required.",
+        "formTabs": "Vehicle sections",
+        "saveFirst": "Save the vehicle first.",
+        "createdNext": "Vehicle added. You can now add its documents, sensors and fuel tanks.",
+        "loading": "Loading…",
+        "addType": "Add vehicle type",
+        "complianceNote": "Insurance, Mulkiya and permits are on the Documents tab. You can add as many as you need, each with its own expiry date.",
+        "fuelNote": "Tanks, volumes, calibration and minimum refill are on the Fuel tanks tab.",
+        "tabs": {
+          "details": "Details",
+          "documents": "Documents",
+          "sensors": "Sensors",
+          "tanks": "Fuel tanks"
+        },
+        "sections": {
+          "basic": "Basic information",
+          "subscription": "Subscription",
+          "limits": "Limits and tracking schedule",
+          "service": "Service",
+          "finance": "Finance",
+          "fuel": "Fuel"
+        },
+        "cols": {
+          "plate": "Vehicle ID",
+          "asset": "Asset no.",
+          "type": "Type",
+          "company": "Company",
+          "driver": "Driver",
+          "device": "Device",
+          "imei": "IMEI",
+          "sim": "SIM no.",
+          "installDate": "Installed",
+          "expiryDate": "Expiry",
+          "insuranceExpiry": "Insurance expiry",
+          "mulkiyaExpiry": "Mulkiya expiry",
+          "serviceKm": "Service every (km)"
+        },
+        "f": {
+          "plateNo": "ID / plate no.",
+          "vehicleName": "Asset name / alias",
+          "vehicleType": "Vehicle type",
+          "timezone": "Time zone",
+          "driver": "Driver",
+          "barcode": "QR code",
+          "brand": "Brand",
+          "model": "Model",
+          "colour": "Colour",
+          "year": "Manufacture year",
+          "photo": "Photo",
+          "comment": "Comment",
+          "canbus": "CAN bus",
+          "installDate": "Installation date",
+          "paymentType": "Payment type",
+          "expiryDate": "Vehicle expiry date",
+          "renewedAt": "Renewed on",
+          "speedLimit": "Speed limit (km/h)",
+          "idleLimit": "Idle limit (minutes)",
+          "trackingFrom": "Tracking from",
+          "trackingTo": "Tracking to",
+          "trackingDays": "Tracking days",
+          "trackingDaysHint": "Movement outside these days and hours raises a working-hours alert.",
+          "odometer": "Odometer reading (km)",
+          "lastService": "Last service",
+          "lastOil": "Last oil change",
+          "lastTyre": "Last tyre change",
+          "tyreInterval": "Tyre change every (km)",
+          "oilInterval": "Oil change every (km)",
+          "serviceInterval": "Service every (km)",
+          "machineHours": "Machine service hours",
+          "purchaseDate": "Purchase date",
+          "totalCost": "Total vehicle cost",
+          "downPayment": "Down payment",
+          "monthlyEmi": "Monthly EMI",
+          "emiCount": "No. of EMIs",
+          "emiDueDay": "EMI due day",
+          "emiDueDayHint": "Day of the month, 1–31.",
+          "fuelType": "Fuel type",
+          "mileage": "Vehicle mileage (km/L)"
+        },
+        "payment": {
+          "yearly": "Yearly",
+          "half_yearly": "Half yearly",
+          "quarterly": "Quarterly",
+          "monthly": "Monthly"
+        },
+        "fuel": {
+          "petrol": "Petrol",
+          "diesel": "Diesel"
+        },
+        "doc": {
+          "add": "Add document",
+          "empty": "No documents yet. Add the Mulkiya, insurance and any permits.",
+          "type": "Document type",
+          "label": "Name",
+          "labelPlaceholder": "e.g. Permit name",
+          "number": "Document no.",
+          "issuedAt": "Issued on",
+          "expiresAt": "Expires on",
+          "reminder": "Remind days before",
+          "file": "File"
+        },
+        "docTypes": {
+          "registration": "Mulkiya (registration)",
+          "insurance": "Insurance",
+          "permit": "Permit",
+          "national_permit": "National permit",
+          "pollution": "Pollution certificate",
+          "licence": "Licence",
+          "visa": "Visa",
+          "custom": "Other"
+        },
+        "sensor": {
+          "add": "Add sensor",
+          "empty": "No sensors yet.",
+          "type": "Sensor type",
+          "label": "Name",
+          "ioIndex": "Input no.",
+          "maxVoltage": "Max voltage (V)",
+          "lowLimit": "Low limit (°C)",
+          "highLimit": "High limit (°C)",
+          "sortOrder": "Order"
+        },
+        "sensorTypes": {
+          "analog_input": "Analog input",
+          "digital_input": "Digital input",
+          "temperature": "Temperature",
+          "ble_temperature_humidity": "BLE temperature & humidity"
+        },
+        "tank": {
+          "add": "Add fuel tank",
+          "empty": "No fuel tanks yet.",
+          "index": "Tank no.",
+          "shape": "Shape",
+          "volume": "Tank volume (L)",
+          "calibration": "Fuel calibration",
+          "minRefill": "Minimum fuel refill (L)"
+        }
+      },
+      "allocations": {
+        "title": "Allocate & return",
+        "description": "Hand a vehicle to a driver or a project, then record its return, condition and charges.",
+        "allocate": "Allocate vehicle",
+        "allocateTitle": "Allocate a vehicle",
+        "return": "Return",
+        "returnTitle": "Return the vehicle",
+        "editReturnTitle": "Edit the return",
+        "allocated": "Vehicle allocated.",
+        "returnedToast": "Return recorded.",
+        "empty": "No allocations yet.",
+        "needVehicles": "Add vehicles first, then allocate them here.",
+        "filter": "Show",
+        "filters": {
+          "all": "All",
+          "out": "Currently out",
+          "returned": "Returned"
+        },
+        "to": {
+          "driver": "Driver",
+          "project": "Project"
+        },
+        "status": {
+          "allocated": "Out",
+          "overdue": "Overdue",
+          "returned": "Returned"
+        },
+        "sections": {
+          "who": "Allocate to",
+          "checkout": "Checkout",
+          "return": "Return",
+          "charges": "Charges"
+        },
+        "cols": {
+          "driver": "Driver",
+          "vehicle": "Vehicle",
+          "allocatedAt": "Allocated",
+          "returnedAt": "Returned",
+          "daysUsed": "Days used",
+          "totalKm": "Total km",
+          "amount": "Total amount",
+          "project": "Project",
+          "allocateTo": "Allocated to"
+        },
+        "driver": {
+          "name": "Driver name",
+          "mobile": "Mobile number",
+          "licenceNo": "Licence no.",
+          "employeeId": "Employee ID"
+        },
+        "f": {
+          "allocateDate": "Allocate date",
+          "allocateTime": "Allocate time",
+          "dueDate": "Due back date",
+          "dueTime": "Due back time",
+          "currentOdometer": "Current odometer (km)",
+          "conditionOut": "Vehicle condition at checkout",
+          "initialOdometer": "Starting odometer",
+          "returnDate": "Return date",
+          "returnTime": "Return time",
+          "returnOdometer": "Return odometer (km)",
+          "conditionIn": "Vehicle condition at return",
+          "salik": "Salik charges",
+          "trafficFine": "Traffic fines",
+          "damage": "Damage charge",
+          "paymentMode": "Payment mode",
+          "paymentModePlaceholder": "e.g. Cash, card, salary deduction",
+          "totalAmount": "Total amount chargeable",
+          "totalHint": "Filled in from the charges above. You can change it."
+        },
+        "outSuffix": "(out)"
+      },
+      "maintenance": {
+        "title": "Maintenance",
+        "description": "Garage visits, services and repairs, with the bill's line items.",
+        "add": "Add maintenance",
+        "editTitle": "Edit maintenance",
+        "empty": "No maintenance records yet.",
+        "needVehicles": "Add vehicles first, then record their maintenance here.",
+        "totalShown": "Total: {total}",
+        "vehicleFixed": "The vehicle can't be changed after saving.",
+        "addMaintenanceType": "Add maintenance type",
+        "addServiceType": "Add service type",
+        "filters": {
+          "from": "From",
+          "to": "To"
+        },
+        "cols": {
+          "vehicle": "Vehicle",
+          "driver": "Driver",
+          "odometer": "Odometer (km)",
+          "garage": "Garage",
+          "serviceDate": "Service date",
+          "serviceType": "Service type",
+          "maintenanceType": "Maintenance type",
+          "garageAddress": "Garage address",
+          "amount": "Amount"
+        },
+        "f": {
+          "billNo": "Bill no.",
+          "extraWork": "Extra works done"
+        },
+        "sections": {
+          "visit": "Visit",
+          "items": "Services and parts"
+        },
+        "items": {
+          "add": "Add service",
+          "empty": "No line items yet.",
+          "item": "Item",
+          "qty": "Qty",
+          "price": "Price",
+          "discountType": "Discount type",
+          "discount": "Discount",
+          "gross": "Gross price"
+        },
+        "discount": {
+          "flat": "Flat",
+          "percent": "%"
+        },
+        "bill": {
+          "subtotal": "Subtotal",
+          "discount": "Discount",
+          "total": "Total amount"
+        },
+        "statuses": {
+          "scheduled": "Scheduled",
+          "in_progress": "In progress",
+          "completed": "Completed"
+        }
+      },
+      "tempSensors": {
+        "title": "Temp sensors",
+        "description": "Temperature sensors for each vehicle, with the low and high limits that trigger alerts. Add as many as a vehicle has.",
+        "search": "Search vehicles",
+        "loading": "Loading…",
+        "noVehicles": "No vehicles yet. Add vehicles under Vehicle details first.",
+        "count": "{count, plural, one {# sensor} other {# sensors}}",
+        "add": "Add sensor",
+        "empty": "No temperature sensors.",
+        "name": "Sensor name",
+        "low": "Low limit (°C)",
+        "high": "High limit (°C)",
+        "ioIndex": "Input no.",
+        "sortOrder": "Order",
+        "defaultName": "Sensor {n}"
+      },
+      "groups": {
+        "title": "Groups",
+        "description": "Groups and sub groups of vehicles. A sub group is a group with a parent.",
+        "add": "Add group",
+        "addSub": "Add sub group",
+        "editTitle": "Edit {name}",
+        "empty": "No groups yet.",
+        "deleteFail": "Couldn't delete this group. Delete or move its sub groups first.",
+        "name": "Group name",
+        "subName": "Sub group name",
+        "parent": "Parent group",
+        "parentHint": "Leave empty for a top-level group.",
+        "noParent": "None (top level)",
+        "incharge": "In-charge name",
+        "email": "In-charge email",
+        "vehicles": "Vehicles",
+        "sections": {
+          "details": "Details"
+        }
+      },
+      "workingHours": {
+        "title": "Working hours",
+        "description": "Shifts with their working days and hours, and the vehicles they apply to.",
+        "add": "Add shift",
+        "editTitle": "Edit {name}",
+        "empty": "No shifts yet.",
+        "overnightHint": "If the end time is earlier than the start, the shift runs overnight.",
+        "account": "Account",
+        "days": "Working days",
+        "everyDay": "Every day",
+        "from": "From",
+        "to": "To",
+        "name": "Shift name",
+        "vehicles": "Vehicles",
+        "all": "All",
+        "assign": "Assign vehicles",
+        "sections": {
+          "shift": "Shift"
+        }
+      },
+      "distance": {
+        "title": "Vehicle distance",
+        "description": "A day-wise log of each vehicle's start and stop odometer readings and distance travelled.",
+        "add": "Add entry",
+        "editTitle": "Edit entry",
+        "empty": "No distance entries yet.",
+        "needVehicles": "Add vehicles first, then log their distance here.",
+        "account": "Account",
+        "vehicle": "Vehicle",
+        "allVehicles": "All vehicles",
+        "date": "Date",
+        "from": "From date",
+        "to": "To date",
+        "start": "Start odometer (km)",
+        "stop": "Stop odometer (km)",
+        "distance": "Distance travelled (km)",
+        "autoHint": "Worked out from the readings. You can change it.",
+        "fixedOnEdit": "The vehicle and date can't be changed after saving.",
+        "totalShown": "Total: {km} km"
+      },
+      "liveLocation": {
+        "title": "Live location",
+        "description": "Time-limited links that let someone outside your company see one vehicle's live location.",
+        "add": "Create link",
+        "create": "Create link",
+        "editTitle": "Change expiry",
+        "editHint": "Only the expiry can be changed. To share a different vehicle, create a new link.",
+        "empty": "No share links yet.",
+        "needVehicles": "Add vehicles first, then share their location here.",
+        "company": "Company",
+        "vehicle": "Vehicle",
+        "starts": "Starts",
+        "expires": "Expires",
+        "url": "Link",
+        "startDate": "Start date",
+        "startTime": "Start time",
+        "expiryDate": "Expiry date",
+        "endTime": "Expiry time",
+        "copy": "Copy link",
+        "share": "Share",
+        "copied": "Link copied.",
+        "copyFailed": "Couldn't copy the link. Copy it from the table.",
+        "created": "Link created.",
+        "createdCopied": "Link created and copied.",
+        "revoked": "Link deleted. It no longer works.",
+        "shareTitle": "Live location of {vehicle}",
+        "states": {
+          "active": "Active",
+          "scheduled": "Not started",
+          "expired": "Expired"
+        }
+      },
+      "fuelCalibration": {
+        "title": "Fuel calibration",
+        "description": "Tables that turn a fuel level sensor's voltage into litres. Link one to a vehicle's fuel tank.",
+        "add": "Add calibration",
+        "editTitle": "Edit {name}",
+        "empty": "No fuel calibrations yet.",
+        "deleteFail": "Couldn't delete this calibration. Unlink it from any fuel tanks first.",
+        "name": "Calibration name",
+        "capacity": "Tank capacity (L)",
+        "minVoltage": "Min voltage (V)",
+        "maxVoltage": "Max voltage (V)",
+        "points": "Points",
+        "litres": "Fuel (litres)",
+        "voltage": "Voltage (V)",
+        "addPoint": "Add record",
+        "noPoints": "No records yet. Add at least an empty and a full reading.",
+        "pointsHint": "Each record is a sensor voltage and the fuel in the tank at that voltage. In-between values are worked out from the nearest records.",
+        "warnVoltage": "Some voltages are outside the min–max range.",
+        "warnCapacity": "Some records have more fuel than the tank capacity.",
+        "sections": {
+          "tank": "Tank",
+          "points": "Voltage to litres"
+        }
+      },
+      "types": {
+        "title": "Types",
+        "description": "The options in the type dropdowns. A type that's already used can't be deleted. Mark it Inactive to hide it from new records.",
+        "inactiveHint": "Inactive types stay on existing records but aren't offered for new ones.",
+        "inUse": "Couldn't delete this type. It's probably used by existing records. Mark it Inactive instead.",
+        "kinds": {
+          "vehicleType": "Vehicle types",
+          "maintenanceType": "Maintenance types",
+          "serviceType": "Service types"
+        },
+        "add": {
+          "vehicleType": "Add vehicle type",
+          "maintenanceType": "Add maintenance type",
+          "serviceType": "Add service type"
+        },
+        "edit": {
+          "vehicleType": "Edit vehicle type",
+          "maintenanceType": "Edit maintenance type",
+          "serviceType": "Edit service type"
+        }
+      }
+    }
+  },
+  "track": {
+    "title": "Live vehicle location",
+    "invalidTitle": "Link not available",
+    "invalid": "This link is invalid, has expired, or isn’t active yet. Ask the person who shared it for a new link.",
+    "unavailableTitle": "Can’t load this link",
+    "unavailable": "We couldn’t reach the tracking service. Try again in a few minutes.",
+    "vehicle": "Vehicle",
+    "speed": "Speed",
+    "speedValue": "{speed} km/h",
+    "updated": "Last update",
+    "expires": "Link expires",
+    "noPositionTitle": "No location yet",
+    "noPosition": "This vehicle hasn’t sent its location yet. This page updates by itself as soon as it does.",
+    "refreshFailed": "Couldn’t refresh the location. Trying again shortly.",
+    "autoRefresh": "Updates every {seconds} seconds.",
+    "openInMaps": "Open in Google Maps",
+    "mapLabel": "Map showing {plate}"
   }
 }

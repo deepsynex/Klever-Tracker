@@ -65,7 +65,7 @@ const M_PER_DEG_LAT = 110_540;
 const M_PER_DEG_LNG_AT_EQUATOR = 111_320;
 
 /** Straight-line distance in metres (equirectangular; accurate at street scale). */
-function metres(a: LatLng, b: LatLng): number {
+export function metres(a: LatLng, b: LatLng): number {
   const x = (b.lng - a.lng) * M_PER_DEG_LNG_AT_EQUATOR * Math.cos(((a.lat + b.lat) / 2) * (Math.PI / 180));
   const y = (b.lat - a.lat) * M_PER_DEG_LAT;
   return Math.hypot(x, y);
