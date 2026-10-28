@@ -90,7 +90,9 @@ export function DataTable<T extends { id: string }>({
           <Alert tone="error">{error}</Alert>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
+          {/* `relative`: the scroll box must contain absolutely positioned content (e.g. the sr-only
+              "Actions" header), or that content escapes it and widens the whole page. */}
           <table className="w-full min-w-max border-collapse text-[13px]">
             <caption className="sr-only">{caption}</caption>
             <thead>
