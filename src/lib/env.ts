@@ -19,4 +19,9 @@ export const env = {
     .map((o) => o.trim())
     .filter(Boolean),
   isProduction: process.env.NODE_ENV === "production",
+  googleClientId:
+    process.env.GOOGLE_CLIENT_ID ||
+    "957915516836-m05a1kfbgsend4caqdfmrouu4cfik1fd.apps.googleusercontent.com",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || "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",
+  appUrl: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
 };
