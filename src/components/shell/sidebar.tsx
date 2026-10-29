@@ -3,6 +3,7 @@
 import {
   BarChart3,
   Bell,
+  CarFront,
   Building2,
   CircleDashed,
   History,
@@ -37,6 +38,8 @@ const MAIN: NavItem[] = [
   { key: "geofences", icon: CircleDashed, phase: 4 },
   { key: "fleet", icon: Truck, phase: 2 },
 ];
+
+const MASTERS: NavItem[] = [{ key: "vehicleManagement", icon: CarFront, href: "/masters/vehicle-management" }];
 
 // Phase 1, weeks 2–3. Visibility will follow the role's permissions once `me` exists (B3).
 const SETTINGS: NavItem[] = [
@@ -101,6 +104,11 @@ export function Sidebar() {
       <nav aria-label={t("main")} className="overflow-x-auto px-2 py-2 lg:overflow-visible">
         <ul className="flex gap-0.5 lg:flex-col">
           {MAIN.map(renderItem)}
+          <li aria-hidden className="mx-1.5 my-2 hidden h-px bg-border lg:block" />
+          <li className="hidden px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-subtle lg:block">
+            {t("mastersGroup")}
+          </li>
+          {MASTERS.map(renderItem)}
           <li aria-hidden className="mx-1.5 my-2 hidden h-px bg-border lg:block" />
           <li className="hidden px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-subtle lg:block">
             {t("settingsGroup")}

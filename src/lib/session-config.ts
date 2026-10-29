@@ -10,7 +10,8 @@ export const GOOGLE_OAUTH_VERIFIER_COOKIE = "kt_google_verifier";
 // long a browser keeps one until a logout mutation and token expiry exist on the backend.
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
-export const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password"] as const;
+// "/track" is the public live-location page opened from a share link (no sign-in).
+export const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/track"] as const;
 
 export function isPublicPath(pathWithoutLocale: string): boolean {
   return PUBLIC_PATHS.some((p) => pathWithoutLocale === p || pathWithoutLocale.startsWith(`${p}/`));
