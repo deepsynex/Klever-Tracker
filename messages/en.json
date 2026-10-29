@@ -417,10 +417,6 @@
           "device": "Device",
           "imei": "IMEI",
           "sim": "SIM no.",
-          "installDate": "Installed",
-          "expiryDate": "Expiry",
-          "insuranceExpiry": "Insurance expiry",
-          "mulkiyaExpiry": "Mulkiya expiry",
           "serviceKm": "Service every (km)"
         },
         "f": {

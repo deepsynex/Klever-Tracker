@@ -162,7 +162,6 @@ export function MaintenanceScreen() {
           { key: "date", header: t("cols.serviceDate"), cell: (r) => formatDate(r.serviceDate) },
           { key: "service", header: t("cols.serviceType"), cell: (r) => (r.serviceTypeId ? (sTypes.get(r.serviceTypeId) ?? "—") : "—") },
           { key: "mtype", header: t("cols.maintenanceType"), cell: (r) => (r.maintenanceTypeId ? (mTypes.get(r.maintenanceTypeId) ?? "—") : "—") },
-          { key: "address", header: t("cols.garageAddress"), cell: (r) => <span className="line-clamp-1 max-w-48">{r.garageAddress ?? "—"}</span> },
           { key: "amount", header: t("cols.amount"), numeric: true, cell: (r) => (r.total != null ? r.total.toFixed(2) : "—") },
           {
             key: "status",
