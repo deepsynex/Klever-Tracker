@@ -419,10 +419,6 @@
           "device": "الجهاز",
           "imei": "IMEI",
           "sim": "رقم الشريحة",
-          "installDate": "تاريخ التركيب",
-          "expiryDate": "تاريخ الانتهاء",
-          "insuranceExpiry": "انتهاء التأمين",
-          "mulkiyaExpiry": "انتهاء الملكية",
           "serviceKm": "الخدمة كل (كم)"
         },
         "f": {

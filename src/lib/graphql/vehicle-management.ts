@@ -445,18 +445,12 @@ export const VEHICLES_PAGE = /* GraphQL */ `
         vehicleId
       }
     }
-    documents(first: $first) {
-      data {
-        ${DOCUMENT_FIELDS}
-      }
-    }
   }
 `;
 export type VehiclesPageResult = {
   vehicles: { data: Vehicle[] };
   devices: { data: Device[] };
   sims: { data: Sim[] };
-  documents: { data: VehicleDocument[] };
 };
 
 /** A vehicle's child records, for the edit panel. Filtered to the vehicle on the client. */
