@@ -19,7 +19,7 @@ export type Paginated<T> = { data: T[]; paginatorInfo: { total: number } };
 // Types
 // ---------------------------------------------------------------------------------------------
 
-export type LookupItem = { id: string; name: string; status: string };
+export type LookupItem = { id: string; companyId: string; name: string; status: string };
 
 export type Vehicle = {
   id: string;
@@ -69,6 +69,7 @@ export type Vehicle = {
 
 export type Driver = {
   id: string;
+  companyId: string;
   name: string;
   mobile: string;
   licenceNo: string | null;
@@ -144,6 +145,7 @@ export type MaintenanceItem = {
 
 export type MaintenanceRecord = {
   id: string;
+  companyId: string;
   vehicleId: string;
   driverId: string | null;
   odometerKm: number | null;
@@ -164,6 +166,7 @@ export type MaintenanceRecord = {
 
 export type VehicleGroup = {
   id: string;
+  companyId: string;
   parentId: string | null;
   name: string;
   inchargeName: string | null;
@@ -173,6 +176,7 @@ export type VehicleGroup = {
 
 export type Shift = {
   id: string;
+  companyId: string;
   name: string;
   fromTime: string;
   toTime: string;
@@ -201,6 +205,7 @@ export type SharedLiveLocation = {
 export type FuelCalibrationPoint = { id: string; voltage: number; litres: number };
 export type FuelCalibration = {
   id: string;
+  companyId: string;
   name: string;
   tankCapacityLitres: number | null;
   minVoltage: number | null;
@@ -209,12 +214,13 @@ export type FuelCalibration = {
 };
 
 // ---------------------------------------------------------------------------------------------
-// Shared lookups: every screen needs vehicle plates, driver names and the company id
+// Shared lookups: every screen needs vehicle plates, driver names and the companies.
+// A company user gets their own company; a platform account (no company) gets all of them.
 // ---------------------------------------------------------------------------------------------
 
 export const VM_LOOKUPS = /* GraphQL */ `
   query VmLookups($first: Int!) {
-    companies(first: 1) {
+    companies(first: $first) {
       data {
         id
         name
@@ -225,6 +231,7 @@ export const VM_LOOKUPS = /* GraphQL */ `
       data {
         id
         plateNo
+        companyId
         vehicleName
         vehicleTypeId
         primaryDriverId
@@ -235,6 +242,7 @@ export const VM_LOOKUPS = /* GraphQL */ `
     drivers(first: $first) {
       data {
         id
+        companyId
         name
         mobile
         licenceNo
@@ -245,6 +253,7 @@ export const VM_LOOKUPS = /* GraphQL */ `
     vehicleTypes(first: $first) {
       data {
         id
+        companyId
         name
         status
       }
@@ -253,7 +262,7 @@ export const VM_LOOKUPS = /* GraphQL */ `
 `;
 export type VmLookupVehicle = Pick<
   Vehicle,
-  "id" | "plateNo" | "vehicleName" | "vehicleTypeId" | "primaryDriverId" | "odometerKm" | "status"
+  "id" | "companyId" | "plateNo" | "vehicleName" | "vehicleTypeId" | "primaryDriverId" | "odometerKm" | "status"
 >;
 export type VmLookupsResult = {
   companies: { data: Array<{ id: string; name: string; timezone: string }> };
@@ -285,6 +294,7 @@ const lookupOps = (kind: LookupKind) => {
         ${kind}s(first: $first) {
           data {
             id
+            companyId
             name
             status
           }
@@ -470,6 +480,7 @@ export const VEHICLE_CHILDREN = /* GraphQL */ `
     fuelCalibrations(first: $first) {
       data {
         id
+        companyId
         name
       }
     }
@@ -479,7 +490,7 @@ export type VehicleChildrenResult = {
   documents: { data: VehicleDocument[] };
   vehicleSensors: { data: VehicleSensor[] };
   vehicleFuelTanks: { data: VehicleFuelTank[] };
-  fuelCalibrations: { data: Array<{ id: string; name: string }> };
+  fuelCalibrations: { data: Array<{ id: string; companyId: string; name: string }> };
 };
 
 const VEHICLE_ARGS_DECL = `
@@ -687,6 +698,7 @@ export const MAINTENANCE_PAGE = /* GraphQL */ `
     maintenanceRecords(first: $first) {
       data {
         id
+        companyId
         vehicleId
         driverId
         odometerKm
@@ -714,6 +726,7 @@ export const MAINTENANCE_PAGE = /* GraphQL */ `
     maintenanceTypes(first: $first) {
       data {
         id
+        companyId
         name
         status
       }
@@ -721,6 +734,7 @@ export const MAINTENANCE_PAGE = /* GraphQL */ `
     serviceTypes(first: $first) {
       data {
         id
+        companyId
         name
         status
       }
@@ -811,6 +825,7 @@ export const GROUPS = /* GraphQL */ `
     vehicleGroups(first: $first) {
       data {
         id
+        companyId
         parentId
         name
         inchargeName
@@ -873,6 +888,7 @@ export const SHIFTS = /* GraphQL */ `
     shifts(first: $first) {
       data {
         id
+        companyId
         name
         fromTime
         toTime
@@ -1020,6 +1036,7 @@ export const FUEL_CALIBRATIONS = /* GraphQL */ `
     fuelCalibrations(first: $first) {
       data {
         id
+        companyId
         name
         tankCapacityLitres
         minVoltage

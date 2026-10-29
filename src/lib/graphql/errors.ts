@@ -19,11 +19,14 @@ export type ApiError = {
   message: string;
   /** Field name → server messages, for validation errors. */
   fields?: Record<string, string[]>;
+  /** Forbidden errors: the top-level query fields the role may not read (from each error's `path`). */
+  forbiddenFields?: string[];
   status?: number;
 };
 
 export type GraphQLErrorShape = {
   message?: string;
+  path?: Array<string | number>;
   extensions?: {
     category?: string;
     validation?: Record<string, string[]>;
@@ -59,7 +62,12 @@ export function classifyGraphQLErrors(errors: GraphQLErrorShape[]): ApiError {
 
   if (message === INVALID_CREDENTIALS) return { kind: "invalid_credentials", message };
   if (message === UNAUTHENTICATED || category === "authentication") return { kind: "unauthenticated", message };
-  if (message === FORBIDDEN || category === "authorization") return { kind: "forbidden", message };
+  if (message === FORBIDDEN || category === "authorization") {
+    // Only when every error is a forbidden top-level field can the rest of the query still be read.
+    const roots = errors.map((e) => (e.message === FORBIDDEN && typeof e.path?.[0] === "string" ? e.path[0] : null));
+    const forbiddenFields = roots.every((r) => r !== null) ? [...new Set(roots as string[])] : undefined;
+    return { kind: "forbidden", message, ...(forbiddenFields ? { forbiddenFields } : {}) };
+  }
   if (message === NOT_FOUND) return { kind: "not_found", message };
   return { kind: "unknown", message };
 }

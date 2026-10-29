@@ -1,7 +1,8 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useState, type ReactNode } from "react";
 import { Toaster } from "sonner";
 import { ApiRequestError } from "@/lib/graphql/client";
 
@@ -24,6 +25,13 @@ export function Providers({ children, dir }: { children: ReactNode; dir: "ltr" |
         },
       }),
   );
+
+  // Signed out: forget the previous user's data (and permissions) before anyone else signs in.
+  const pathname = usePathname();
+  const onAuthPage = /\/(login|forgot-password|reset-password)(\/|$)/.test(pathname ?? "");
+  useEffect(() => {
+    if (onAuthPage) queryClient.clear();
+  }, [onAuthPage, queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>

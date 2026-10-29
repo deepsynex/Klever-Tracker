@@ -1,7 +1,9 @@
-import { LogOut } from "lucide-react";
+import { KeyRound, LogOut } from "lucide-react";
 import { locale as rootLocale } from "next/root-params";
 import { getTranslations } from "next-intl/server";
+import { CHANGE_PASSWORD_HREF } from "@/components/masters/am-modules";
 import { Button } from "@/components/ui/button";
+import { Link } from "@/i18n/navigation";
 import { logoutAction } from "@/lib/auth/actions";
 import { getSessionUser } from "@/lib/session";
 
@@ -28,6 +30,11 @@ export async function UserMenu() {
           <span className="hidden max-w-[16ch] truncate text-sm font-medium sm:inline">{user.name}</span>
         </span>
       ) : null}
+      <Button asChild variant="ghost" size="sm" aria-label={t("changePassword")} title={t("changePassword")}>
+        <Link href={CHANGE_PASSWORD_HREF}>
+          <KeyRound />
+        </Link>
+      </Button>
       <form action={logoutAction}>
         <input type="hidden" name="locale" value={locale} />
         <Button type="submit" variant="ghost" size="sm" aria-label={t("signOut")}>

@@ -42,3 +42,28 @@ export async function gqlRequest<T>(query: string, variables: Record<string, unk
   }
   return data as T;
 }
+
+/**
+ * Like gqlRequest, for queries that read several lists at once: top-level fields the user's role
+ * may not read come back empty instead of failing the whole query (the API fails all of it).
+ * Still throws when nothing at all is readable.
+ */
+export async function gqlRequestPartial<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
+  let current = query;
+  const empty: Record<string, unknown> = {};
+  // A retry can hit another refused field, so allow a few rounds.
+  for (let round = 0; ; round++) {
+    try {
+      const data = await gqlRequest<T>(current, variables);
+      return { ...data, ...empty };
+    } catch (err) {
+      const fields = err instanceof ApiRequestError && err.error.kind === "forbidden" ? err.error.forbiddenFields : undefined;
+      if (!fields?.length || round >= 5) throw err;
+      const { withoutRootFields } = await import("./partial");
+      const next = withoutRootFields(current, fields);
+      if (!next) throw err;
+      current = next.query;
+      Object.assign(empty, next.empty);
+    }
+  }
+}
