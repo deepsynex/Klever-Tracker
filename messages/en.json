@@ -117,7 +117,9 @@
     "phase": "Phase {n}",
     "comingSoon": "Available in phase {n}",
     "mastersGroup": "Masters",
-    "vehicleManagement": "Vehicle management"
+    "vehicleManagement": "Vehicle management",
+    "heatmap": "Heatmap",
+    "trackingGroup": "Tracking"
   },
   "shell": {
     "skipToContent": "Skip to content",
@@ -793,5 +795,80 @@
     "autoRefresh": "Updates every {seconds} seconds.",
     "openInMaps": "Open in Google Maps",
     "mapLabel": "Map showing {plate}"
+  },
+  "heatmap": {
+    "title": "Heatmap",
+    "subtitle": "Where vehicles spent their time over a chosen period.",
+    "filters": {
+      "title": "Filters",
+      "vehicles": "Vehicles",
+      "searchVehicles": "Search vehicles",
+      "selectedCount": "{count} of {max} selected",
+      "selectAll": "Select all",
+      "selectNone": "Clear",
+      "noMatches": "No vehicles match.",
+      "device": "device",
+      "loadingVehicles": "Loading vehicles…",
+      "noVehicles": "Your company has no vehicles or tracking devices yet.",
+      "fromDate": "From date",
+      "fromTime": "From time",
+      "toDate": "To date",
+      "toTime": "To time",
+      "weightMode": "Weight mode",
+      "show": "Show",
+      "clear": "Clear",
+      "loading": "Loading…"
+    },
+    "modes": {
+      "density": {
+        "label": "Density (GPS points)",
+        "hint": "Counts GPS points per area. Busy roads light up as much as stops."
+      },
+      "dwell": {
+        "label": "Dwell time",
+        "hint": "Time spent at each place. Gaps over 30 minutes count as 30, so an offline device doesn't create fake hotspots."
+      },
+      "idle": {
+        "label": "Idling",
+        "hint": "Dwell time only while the engine is on and the vehicle is below 3 km/h."
+      }
+    },
+    "toolbar": {
+      "label": "Heatmap display",
+      "toggle": "Heatmap",
+      "gradient": "Colour scale",
+      "gradients": {
+        "greenRed": "Green, yellow, red",
+        "cyanRed": "Cyan, blue, red"
+      },
+      "opacity": "Opacity",
+      "radius": "Radius"
+    },
+    "summary": {
+      "points": "GPS points",
+      "cells": "Cells",
+      "range": "Time range",
+      "truncated": "Showing the {count} busiest cells only. Zoom in for more detail.",
+      "dropped": "{count, plural, one {# bad GPS fix was} other {# bad GPS fixes were}} ignored."
+    },
+    "map": {
+      "loading": "Building heatmap…",
+      "noData": "No data for the selected period",
+      "noApiKey": "Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to web/.env.local to show the map. The summary still works without it."
+    },
+    "errors": {
+      "vehiclesRequired": "Select at least one vehicle.",
+      "tooManyVehicles": "Select 50 vehicles or fewer.",
+      "invalidId": "One of the selected vehicles is invalid.",
+      "notInCompany": "One or more selected vehicles don't belong to your company.",
+      "invalidDate": "Enter a valid date and time.",
+      "toBeforeFrom": "The end must be after the start.",
+      "rangeTooLong": "Choose a period of 31 days or less.",
+      "tooManyPoints": "This selection has too many GPS points. Choose a shorter period or fewer vehicles.",
+      "invalidMode": "Choose a weight mode.",
+      "invalidZoom": "Invalid map zoom.",
+      "invalidBbox": "Invalid map area.",
+      "companyScopeUnavailable": "Choosing another company isn't available yet."
+    }
   }
 }

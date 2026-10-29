@@ -248,3 +248,64 @@ export type PositionHistoryResult = {
     paginatorInfo?: { total: number };
   };
 };
+
+/**
+ * Heatmap (src/lib/heatmap/service.ts). Ownership lists: the API only lists the token's own
+ * company, so an ID missing here belongs to another company or doesn't exist.
+ */
+export const HEATMAP_VEHICLE_IDS = /* GraphQL */ `
+  query HeatmapVehicleIds($first: Int, $page: Int) {
+    vehicles(first: $first, page: $page) {
+      data {
+        id
+      }
+      paginatorInfo {
+        lastPage
+      }
+    }
+  }
+`;
+export const HEATMAP_DEVICE_IDS = /* GraphQL */ `
+  query HeatmapDeviceIds($first: Int, $page: Int) {
+    devices(first: $first, page: $page) {
+      data {
+        id
+      }
+      paginatorInfo {
+        lastPage
+      }
+    }
+  }
+`;
+export type IdPage<K extends string> = Record<K, { data: { id: string }[]; paginatorInfo?: { lastPage?: number } }>;
+
+/** Same as GET_POSITION_HISTORY plus paging and `ignition` (documented in the guide). */
+export const HEATMAP_POSITIONS = /* GraphQL */ `
+  query HeatmapPositions($vehicleId: ID, $deviceId: ID, $from: String, $to: String, $first: Int, $page: Int) {
+    positionHistory(vehicleId: $vehicleId, deviceId: $deviceId, from: $from, to: $to, first: $first, page: $page) {
+      data {
+        recordedAt
+        locationLat
+        locationLng
+        speed
+        ignition
+      }
+      paginatorInfo {
+        total
+        lastPage
+      }
+    }
+  }
+`;
+export type HeatmapPositionsResult = {
+  positionHistory: {
+    data: {
+      recordedAt: string;
+      locationLat: number | null;
+      locationLng: number | null;
+      speed: number | null;
+      ignition?: boolean | null;
+    }[];
+    paginatorInfo?: { total?: number; lastPage?: number };
+  };
+};

@@ -6,6 +6,7 @@ import {
   CarFront,
   Building2,
   CircleDashed,
+  Flame,
   History,
   LayoutDashboard,
   Map,
@@ -31,12 +32,16 @@ type NavItem = {
 
 const MAIN: NavItem[] = [
   { key: "dashboard", icon: LayoutDashboard, href: "/dashboard" },
-  { key: "liveMap", icon: Map, phase: 3 },
-  { key: "history", icon: History, href: "/history" },
   { key: "alerts", icon: Bell, phase: 4 },
   { key: "reports", icon: BarChart3, phase: 5 },
   { key: "geofences", icon: CircleDashed, phase: 4 },
   { key: "fleet", icon: Truck, phase: 2 },
+];
+
+const TRACKING: NavItem[] = [
+  { key: "liveMap", icon: Map, phase: 3 },
+  { key: "history", icon: History, href: "/history" },
+  { key: "heatmap", icon: Flame, href: "/tracking/heatmap" },
 ];
 
 const MASTERS: NavItem[] = [{ key: "vehicleManagement", icon: CarFront, href: "/masters/vehicle-management" }];
@@ -104,6 +109,11 @@ export function Sidebar() {
       <nav aria-label={t("main")} className="overflow-x-auto px-2 py-2 lg:overflow-visible">
         <ul className="flex gap-0.5 lg:flex-col">
           {MAIN.map(renderItem)}
+          <li aria-hidden className="mx-1.5 my-2 hidden h-px bg-border lg:block" />
+          <li className="hidden px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-subtle lg:block">
+            {t("trackingGroup")}
+          </li>
+          {TRACKING.map(renderItem)}
           <li aria-hidden className="mx-1.5 my-2 hidden h-px bg-border lg:block" />
           <li className="hidden px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-subtle lg:block">
             {t("mastersGroup")}

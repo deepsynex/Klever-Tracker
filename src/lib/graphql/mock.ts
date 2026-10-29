@@ -1,4 +1,5 @@
 import "server-only";
+import { demoPositions } from "@/lib/heatmap/demo-tracks";
 
 /**
  * Minimal stand-in for the Klever API, used only when KLEVER_MOCK=true in development.
@@ -225,6 +226,27 @@ export async function mockFetch(rawBody: string, token?: string) {
               resolvedAt: null,
             },
           ],
+        },
+      },
+    });
+  }
+
+  // Heatmap positions: demo routes across Dubai and Sharjah, newest first and paged like the API.
+  if (/\bHeatmapPositions\b/.test(query)) {
+    const all = demoPositions({
+      vehicleId: vars.vehicleId != null ? String(vars.vehicleId) : undefined,
+      deviceId: vars.deviceId != null ? String(vars.deviceId) : undefined,
+      from: String(vars.from ?? ""),
+      to: String(vars.to ?? ""),
+    });
+    const first = Number(vars.first ?? 1000);
+    const page = Number(vars.page ?? 1);
+    const lastPage = Math.max(1, Math.ceil(all.length / first));
+    return json(200, {
+      data: {
+        positionHistory: {
+          data: all.slice((page - 1) * first, page * first),
+          paginatorInfo: { total: all.length, currentPage: page, lastPage },
         },
       },
     });
