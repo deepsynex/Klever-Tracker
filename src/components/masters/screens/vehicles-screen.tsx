@@ -40,7 +40,7 @@ import {
   type VehicleChildrenResult,
   type VehiclesPageResult,
 } from "@/lib/graphql/vehicle-management";
-import { DOCUMENT_TYPES, expiryState, formatDate, latestExpiry } from "@/lib/vehicle-management/helpers";
+import { DOCUMENT_TYPES } from "@/lib/vehicle-management/helpers";
 import { useErrorText, useVmLookups, useVmMutations, useVmQuery } from "@/lib/vehicle-management/use-vm";
 import { validateDocumentRow, validateLookupName, validateSensorRow, validateTankRow } from "@/lib/vehicle-management/validation";
 import {
@@ -77,23 +77,6 @@ export function VehiclesScreen() {
     () => new Map((page.data?.sims.data ?? []).filter((s) => s.vehicleId).map((s) => [s.vehicleId as string, s])),
     [page.data],
   );
-  const docs = useMemo(
-    () => (page.data?.documents.data ?? []).filter((d) => d.documentableType === VEHICLE_DOCUMENTABLE_TYPE),
-    [page.data],
-  );
-
-  const expiryCell = (value: string | null) => {
-    const state = expiryState(value);
-    if (state === "none") return <span className="text-subtle">—</span>;
-    return (
-      <span
-        className={cn("whitespace-nowrap", state === "expired" && "font-semibold text-destructive", state === "soon" && "font-semibold text-sand")}
-        title={state === "ok" ? undefined : tc(`expiry.${state}`)}
-      >
-        {formatDate(value)}
-      </span>
-    );
-  };
 
   return (
     <div className="grid gap-4">
@@ -129,10 +112,6 @@ export function VehiclesScreen() {
           { key: "device", header: t("cols.device"), cell: (v) => deviceByVehicle.get(v.id)?.model ?? "—" },
           { key: "imei", header: t("cols.imei"), numeric: true, cell: (v) => deviceByVehicle.get(v.id)?.imei ?? "—" },
           { key: "sim", header: t("cols.sim"), numeric: true, cell: (v) => simByVehicle.get(v.id)?.simNumber ?? simByVehicle.get(v.id)?.iccid ?? "—" },
-          { key: "install", header: t("cols.installDate"), cell: (v) => formatDate(v.installDate) },
-          { key: "expiry", header: t("cols.expiryDate"), cell: (v) => expiryCell(v.subscriptionExpiresAt) },
-          { key: "insurance", header: t("cols.insuranceExpiry"), cell: (v) => expiryCell(latestExpiry(docs, v.id, "insurance")) },
-          { key: "mulkiya", header: t("cols.mulkiyaExpiry"), cell: (v) => expiryCell(latestExpiry(docs, v.id, "registration")) },
           { key: "service", header: t("cols.serviceKm"), numeric: true, cell: (v) => v.serviceIntervalKm?.toLocaleString() ?? "—" },
           {
             key: "status",
