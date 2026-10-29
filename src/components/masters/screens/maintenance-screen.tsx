@@ -58,17 +58,22 @@ export function MaintenanceScreen() {
   const [deleting, setDeleting] = useState<MaintenanceRecord | null>(null);
   const [filters, setFilters] = useState({ from: "", to: "", garage: "", serviceTypeId: "", vehicleId: "" });
 
+  // The chosen company's types for the dropdowns (labels below resolve across all companies).
+  const scopedMaintenanceTypes = (page.data?.maintenanceTypes.data ?? []).filter((x) => lookups.inScope(x.companyId));
+  const scopedServiceTypes = (page.data?.serviceTypes.data ?? []).filter((x) => lookups.inScope(x.companyId));
   const mTypes = useMemo(() => new Map((page.data?.maintenanceTypes.data ?? []).map((m) => [m.id, m.name])), [page.data]);
   const sTypes = useMemo(() => new Map((page.data?.serviceTypes.data ?? []).map((s) => [s.id, s.name])), [page.data]);
   const garages = useMemo(
-    () => [...new Set((page.data?.maintenanceRecords.data ?? []).map((r) => r.garageName).filter(Boolean) as string[])].sort(),
-    [page.data],
+    () =>
+      [...new Set((page.data?.maintenanceRecords.data ?? []).filter((r) => lookups.inScope(r.companyId)).map((r) => r.garageName).filter(Boolean) as string[])].sort(),
+    [page.data, lookups],
   );
 
   const rows = useMemo(() => {
     const f = filters;
     return [...(page.data?.maintenanceRecords.data ?? [])]
       .filter((r) => {
+        if (!lookups.inScope(r.companyId)) return false;
         const day = dateInputValue(r.serviceDate);
         if (f.from && (!day || day < f.from)) return false;
         if (f.to && (!day || day > f.to)) return false;
@@ -78,7 +83,7 @@ export function MaintenanceScreen() {
         return true;
       })
       .sort((a, b) => (b.serviceDate ?? "").localeCompare(a.serviceDate ?? ""));
-  }, [page.data, filters]);
+  }, [page.data, filters, lookups]);
   const filtered = Object.values(filters).some(Boolean);
   const total = roundMoney(rows.reduce((sum, r) => sum + (r.total ?? 0), 0));
 
@@ -88,7 +93,7 @@ export function MaintenanceScreen() {
         title={t("title")}
         description={t("description")}
         actions={
-          <Button onClick={() => setEditing("new")} disabled={lookups.vehicles.length === 0}>
+          <Button onClick={() => setEditing("new")} disabled={!lookups.allow("maintenance", "add") || lookups.vehicles.length === 0}>
             <Plus />
             {t("add")}
           </Button>
@@ -115,7 +120,7 @@ export function MaintenanceScreen() {
         <Field id="mf-service" label={t("cols.serviceType")}>
           <Select id="mf-service" value={filters.serviceTypeId} onChange={(e) => setFilters({ ...filters, serviceTypeId: e.target.value })}>
             <option value="">{tc("all")}</option>
-            {page.data?.serviceTypes.data.map((s) => (
+            {scopedServiceTypes.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
@@ -147,8 +152,8 @@ export function MaintenanceScreen() {
         emptyText={lookups.vehicles.length === 0 ? t("needVehicles") : t("empty")}
         searchText={(r) => [lookups.vehicleLabel(r.vehicleId), lookups.driverName(r.driverId), r.garageName, r.billNumber].join(" ")}
         toolbar={<span className="text-xs text-muted-foreground">{t("totalShown", { total: total.toFixed(2) })}</span>}
-        onEdit={setEditing}
-        onDelete={setDeleting}
+        onEdit={lookups.allow("maintenance", "edit") ? setEditing : undefined}
+        onDelete={lookups.allow("maintenance", "delete") ? setDeleting : undefined}
         columns={[
           { key: "vehicle", header: t("cols.vehicle"), cell: (r) => <span dir="ltr">{lookups.vehicleLabel(r.vehicleId)}</span> },
           { key: "driver", header: t("cols.driver"), cell: (r) => lookups.driverName(r.driverId) },
@@ -172,8 +177,8 @@ export function MaintenanceScreen() {
       {editing !== null && page.data ? (
         <MaintenanceSheet
           record={editing === "new" ? null : editing}
-          maintenanceTypes={page.data.maintenanceTypes.data}
-          serviceTypes={page.data.serviceTypes.data}
+          maintenanceTypes={scopedMaintenanceTypes}
+          serviceTypes={scopedServiceTypes}
           garages={garages}
           onClose={() => setEditing(null)}
         />
@@ -384,6 +389,7 @@ function MaintenanceSheet({
               placeholder={tc("none")}
               options={typeOptions(maintenanceTypes, f.maintenanceTypeId)}
               addLabel={t("addMaintenanceType")}
+              canAdd={lookups.allow("maintenance", "add")}
               onCreate={addType("maintenanceType")}
               validate={({ name }) => validateLookupName(name, maintenanceTypes)}
             />
@@ -396,6 +402,7 @@ function MaintenanceSheet({
               placeholder={tc("none")}
               options={typeOptions(serviceTypes, f.serviceTypeId)}
               addLabel={t("addServiceType")}
+              canAdd={lookups.allow("maintenance", "add")}
               onCreate={addType("serviceType")}
               validate={({ name }) => validateLookupName(name, serviceTypes)}
             />

@@ -107,6 +107,7 @@ export function SelectWithAdd({
   onCreate,
   invalid,
   validate,
+  canAdd = true,
 }: {
   id: string;
   value: string;
@@ -120,6 +121,8 @@ export function SelectWithAdd({
   invalid?: boolean;
   /** Checks the add form before saving: field → translation key under `validation.*`. */
   validate?: (values: Record<string, string>) => Record<string, string>;
+  /** False hides the "+" (the role may not add this kind of item). */
+  canAdd?: boolean;
 }) {
   const t = useTranslations("masters.common");
   const errorText = useErrorText();
@@ -164,9 +167,11 @@ export function SelectWithAdd({
           </option>
         ))}
       </Select>
-      <Button variant="secondary" size="icon" className="shrink-0" onClick={() => setOpen(true)} aria-label={addLabel} title={addLabel}>
-        <Plus />
-      </Button>
+      {canAdd ? (
+        <Button variant="secondary" size="icon" className="shrink-0" onClick={() => setOpen(true)} aria-label={addLabel} title={addLabel}>
+          <Plus />
+        </Button>
+      ) : null}
       <Dialog
         open={open}
         onOpenChange={(next) => {

@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Sheet } from "@/components/ui/sheet";
 import { LOOKUP_OPS, type LookupItem, type LookupKind } from "@/lib/graphql/vehicle-management";
+import type { PermissionModule } from "@/lib/permissions";
 import { serverFieldErrors, useErrorText, useVmLookups, useVmMutations, useVmQuery } from "@/lib/vehicle-management/use-vm";
 import { validateLookupName } from "@/lib/vehicle-management/validation";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,8 @@ function LookupList({ kind }: { kind: LookupKind }) {
   const t = useTranslations("masters.vm.types");
   const tc = useTranslations("masters.common");
   const ops = LOOKUP_OPS[kind];
+  // Vehicle types belong to Vehicles; maintenance and service types to Maintenance.
+  const perm: PermissionModule = kind === "vehicleType" ? "vehicles" : "maintenance";
   const lookups = useVmLookups();
   const list = useVmQuery<Record<string, { data: LookupItem[] }>>(ops.listField, ops.list);
   const { run, refresh, fail } = useVmMutations();
@@ -65,7 +68,7 @@ function LookupList({ kind }: { kind: LookupKind }) {
   const [status, setStatus] = useState("active");
   const [pending, setPending] = useState(false);
 
-  const rows = [...(list.data?.[ops.listField]?.data ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  const rows = [...(list.data?.[ops.listField]?.data ?? [])].filter((x) => lookups.inScope(x.companyId)).sort((a, b) => a.name.localeCompare(b.name));
 
   const openForm = (row: LookupItem | "new") => {
     setEditing(row);
@@ -102,7 +105,7 @@ function LookupList({ kind }: { kind: LookupKind }) {
         error={list.error ? errorText(list.error) : null}
         searchText={(r) => r.name}
         toolbar={
-          <Button size="sm" onClick={() => openForm("new")} disabled={!lookups.companyId}>
+          <Button size="sm" onClick={() => openForm("new")} disabled={!lookups.allow(perm, "add")}>
             <Plus />
             {t(`add.${kind}`)}
           </Button>
@@ -115,8 +118,8 @@ function LookupList({ kind }: { kind: LookupKind }) {
             cell: (r) => <StatusBadge tone={r.status === "active" ? "ok" : "muted"}>{tc(`statuses.${r.status}`)}</StatusBadge>,
           },
         ]}
-        onEdit={openForm}
-        onDelete={setDeleting}
+        onEdit={lookups.allow(perm, "edit") ? openForm : undefined}
+        onDelete={lookups.allow(perm, "delete") ? setDeleting : undefined}
       />
 
       <Sheet

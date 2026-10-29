@@ -37,6 +37,7 @@ export function DriverSelect({
       placeholder={required ? t("choose") : t("none")}
       options={lookups.drivers.map((d) => ({ id: d.id, label: d.name }))}
       addLabel={t("addDriver")}
+      canAdd={lookups.allow("drivers", "add")}
       validate={validateDriverQuickAdd}
       addFields={[
         { key: "name", label: t("driverFields.name"), required: true },

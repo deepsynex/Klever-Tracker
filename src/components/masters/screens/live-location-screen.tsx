@@ -47,7 +47,13 @@ export function LiveLocationScreen() {
   const errorText = useErrorText();
   const [editing, setEditing] = useState<SharedLiveLocation | "new" | null>(null);
   const [deleting, setDeleting] = useState<SharedLiveLocation | null>(null);
-  const rows = useMemo(() => [...(list.data?.sharedLiveLocations.data ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [list.data]);
+  const rows = useMemo(
+    () =>
+      [...(list.data?.sharedLiveLocations.data ?? [])]
+        .filter((l) => lookups.inScope(lookups.vehicleCompanyId(l.vehicleId)))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    [list.data, lookups],
+  );
 
   const copy = async (link: SharedLiveLocation) => {
     try {
@@ -74,7 +80,7 @@ export function LiveLocationScreen() {
         title={t("title")}
         description={t("description")}
         actions={
-          <Button onClick={() => setEditing("new")} disabled={lookups.vehicles.length === 0}>
+          <Button onClick={() => setEditing("new")} disabled={!lookups.allow("sharing", "add") || lookups.vehicles.length === 0}>
             <Plus />
             {t("add")}
           </Button>
@@ -97,10 +103,10 @@ export function LiveLocationScreen() {
             </Button>
           </>
         )}
-        onEdit={setEditing}
-        onDelete={setDeleting}
+        onEdit={lookups.allow("sharing", "edit") ? setEditing : undefined}
+        onDelete={lookups.allow("sharing", "delete") ? setDeleting : undefined}
         columns={[
-          { key: "company", header: t("company"), cell: () => lookups.company?.name ?? "—" },
+          { key: "company", header: t("company"), cell: (l) => lookups.companyName(lookups.vehicleCompanyId(l.vehicleId)) },
           { key: "vehicle", header: t("vehicle"), cell: (l) => <span dir="ltr">{lookups.vehicleLabel(l.vehicleId)}</span> },
           { key: "starts", header: t("starts"), cell: (l) => formatDateTime(l.startsAt) },
           { key: "expires", header: t("expires"), cell: (l) => formatDateTime(l.expiresAt) },

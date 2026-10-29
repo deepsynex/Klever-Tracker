@@ -37,7 +37,10 @@ export function FuelCalibrationScreen() {
   const errorText = useErrorText();
   const [editing, setEditing] = useState<FuelCalibration | "new" | null>(null);
   const [deleting, setDeleting] = useState<FuelCalibration | null>(null);
-  const rows = useMemo(() => [...(list.data?.fuelCalibrations.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)), [list.data]);
+  const rows = useMemo(
+    () => [...(list.data?.fuelCalibrations.data ?? [])].filter((c) => lookups.inScope(c.companyId)).sort((a, b) => a.name.localeCompare(b.name)),
+    [list.data, lookups],
+  );
 
   return (
     <div className="grid gap-4">
@@ -45,7 +48,7 @@ export function FuelCalibrationScreen() {
         title={t("title")}
         description={t("description")}
         actions={
-          <Button onClick={() => setEditing("new")} disabled={!lookups.companyId}>
+          <Button onClick={() => setEditing("new")} disabled={!lookups.allow("fuel", "add")}>
             <Plus />
             {t("add")}
           </Button>
@@ -58,8 +61,8 @@ export function FuelCalibrationScreen() {
         error={list.error ? errorText(list.error) : null}
         emptyText={t("empty")}
         searchText={(c) => c.name}
-        onEdit={setEditing}
-        onDelete={setDeleting}
+        onEdit={lookups.allow("fuel", "edit") ? setEditing : undefined}
+        onDelete={lookups.allow("fuel", "delete") ? setDeleting : undefined}
         columns={[
           { key: "name", header: t("name"), cell: (c) => <span className="font-medium">{c.name}</span> },
           { key: "capacity", header: t("capacity"), numeric: true, cell: (c) => c.tankCapacityLitres ?? "—" },
