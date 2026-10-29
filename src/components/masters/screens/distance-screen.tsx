@@ -42,11 +42,12 @@ export function DistanceScreen() {
     () =>
       [...(list.data?.vehicleDistanceLogs.data ?? [])]
         .filter((l) => {
+          if (!lookups.inScope(lookups.vehicleCompanyId(l.vehicleId))) return false;
           const day = dateInputValue(l.logDate);
           return (!vehicleFilter || l.vehicleId === vehicleFilter) && (!from || day >= from) && (!to || day <= to);
         })
         .sort((a, b) => b.logDate.localeCompare(a.logDate)),
-    [list.data, vehicleFilter, from, to],
+    [list.data, vehicleFilter, from, to, lookups],
   );
   const totalKm = roundMoney(rows.reduce((sum, l) => sum + (l.distanceKm ?? 0), 0));
 
@@ -56,7 +57,7 @@ export function DistanceScreen() {
         title={t("title")}
         description={t("description")}
         actions={
-          <Button onClick={() => setEditing("new")} disabled={lookups.vehicles.length === 0}>
+          <Button onClick={() => setEditing("new")} disabled={!lookups.allow("other", "add") || lookups.vehicles.length === 0}>
             <Plus />
             {t("add")}
           </Button>
@@ -83,10 +84,10 @@ export function DistanceScreen() {
             <span className="text-xs text-muted-foreground">{t("totalShown", { km: totalKm })}</span>
           </>
         }
-        onEdit={setEditing}
-        onDelete={setDeleting}
+        onEdit={lookups.allow("other", "edit") ? setEditing : undefined}
+        onDelete={lookups.allow("other", "delete") ? setDeleting : undefined}
         columns={[
-          { key: "account", header: t("account"), cell: () => lookups.company?.name ?? "—" },
+          { key: "account", header: t("account"), cell: (l) => lookups.companyName(lookups.vehicleCompanyId(l.vehicleId)) },
           { key: "vehicle", header: t("vehicle"), cell: (l) => <span dir="ltr">{lookups.vehicleLabel(l.vehicleId)}</span> },
           { key: "start", header: t("start"), numeric: true, cell: (l) => l.startOdometerKm ?? "—" },
           { key: "stop", header: t("stop"), numeric: true, cell: (l) => l.stopOdometerKm ?? "—" },

@@ -72,7 +72,7 @@ export function GroupsScreen() {
   const [editing, setEditing] = useState<VehicleGroup | "new" | "newSub" | null>(null);
   const [deleting, setDeleting] = useState<VehicleGroup | null>(null);
 
-  const groups = useMemo(() => list.data?.vehicleGroups.data ?? [], [list.data]);
+  const groups = useMemo(() => (list.data?.vehicleGroups.data ?? []).filter((g) => lookups.inScope(g.companyId)), [list.data, lookups]);
   const rows = useMemo(() => treeOrder(groups), [groups]);
   const nameOf = (id: string | null) => (id ? (groups.find((g) => g.id === id)?.name ?? "—") : "—");
 
@@ -83,11 +83,11 @@ export function GroupsScreen() {
         description={t("description")}
         actions={
           <>
-            <Button variant="secondary" onClick={() => setEditing("newSub")} disabled={groups.length === 0}>
+            <Button variant="secondary" onClick={() => setEditing("newSub")} disabled={!lookups.allow("vehicle-groups", "add") || groups.length === 0}>
               <Plus />
               {t("addSub")}
             </Button>
-            <Button onClick={() => setEditing("new")} disabled={!lookups.companyId}>
+            <Button onClick={() => setEditing("new")} disabled={!lookups.allow("vehicle-groups", "add")}>
               <Plus />
               {t("add")}
             </Button>
@@ -101,8 +101,8 @@ export function GroupsScreen() {
         error={list.error ? errorText(list.error) : null}
         emptyText={t("empty")}
         searchText={(g) => [g.name, g.inchargeName, g.inchargeEmail, nameOf(g.parentId)].join(" ")}
-        onEdit={setEditing}
-        onDelete={setDeleting}
+        onEdit={lookups.allow("vehicle-groups", "edit") ? setEditing : undefined}
+        onDelete={lookups.allow("vehicle-groups", "delete") ? setDeleting : undefined}
         columns={[
           {
             key: "name",

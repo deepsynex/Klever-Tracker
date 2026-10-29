@@ -1,10 +1,18 @@
 /** Upload rules shared by the browser (early checks) and the /api/upload route (enforced). */
 
+const IMAGE = { types: ["image/jpeg", "image/png", "image/webp"], accept: ".jpg,.jpeg,.png,.webp", maxBytes: 5 * 1024 * 1024, image: true } as const;
+
 export const UPLOAD_PURPOSES = {
   /** Vehicle photo → Vehicle.photoPath */
-  vehicle_photo: { types: ["image/jpeg", "image/png", "image/webp"], accept: ".jpg,.jpeg,.png,.webp", maxBytes: 5 * 1024 * 1024 },
+  vehicle_photo: IMAGE,
+  /** User photo → User.photoPath */
+  user_photo: IMAGE,
+  /** Driver photo → Driver.photoPath */
+  driver_photo: IMAGE,
+  /** Company logo → Company.logoPath */
+  company_logo: IMAGE,
   /** Document scan → Document.filePath */
-  document: { types: ["application/pdf"], accept: ".pdf,application/pdf", maxBytes: 10 * 1024 * 1024 },
+  document: { types: ["application/pdf"], accept: ".pdf,application/pdf", maxBytes: 10 * 1024 * 1024, image: false },
 } as const;
 
 export type UploadPurpose = keyof typeof UPLOAD_PURPOSES;

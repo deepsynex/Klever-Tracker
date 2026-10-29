@@ -52,7 +52,24 @@
     "duplicateDay": "This vehicle already has an entry for this date. Edit that one instead.",
     "distanceMismatch": "The distance should equal the stop reading minus the start reading.",
     "duplicateVoltage": "Another record already has this voltage.",
-    "minPoints": "Add at least two records, e.g. an empty and a full tank reading."
+    "minPoints": "Add at least two records, e.g. an empty and a full tank reading.",
+    "website": "Enter a valid website, like klever.ae.",
+    "latitude": "Enter a latitude between -90 and 90.",
+    "longitude": "Enter a longitude between -180 and 180.",
+    "wholeNumber": "Enter a whole number that's 0 or more.",
+    "positiveWhole": "Enter a whole number of 1 or more.",
+    "percent": "Enter a percentage from 0 to 100.",
+    "duplicateEmail": "Another user already has this email.",
+    "duplicateUsername": "This user name is already taken. Choose a different one.",
+    "username": "Use 3–50 letters, digits, dots, dashes, underscores or @, with no spaces.",
+    "hoursPerDay": "Enter hours between 0 and 24.",
+    "duplicateEmployeeId": "Another driver already has this employee ID.",
+    "duplicateTag": "Another driver already has this tag ID.",
+    "passwordSame": "The new password must be different from the current one.",
+    "wrongPassword": "The current password is incorrect.",
+    "date": "Enter a date as YYYY-MM-DD.",
+    "yesNo": "Enter Yes or No.",
+    "employmentType": "Enter Permanent or Temporary."
   },
   "errors": {
     "invalid_credentials": "The email or password is incorrect.",
@@ -117,12 +134,14 @@
     "phase": "Phase {n}",
     "comingSoon": "Available in phase {n}",
     "mastersGroup": "Masters",
-    "vehicleManagement": "Vehicle management"
+    "vehicleManagement": "Vehicle management",
+    "accountManagement": "Account management"
   },
   "shell": {
     "skipToContent": "Skip to content",
     "signOut": "Sign out",
-    "signedInAs": "Signed in as {email}"
+    "signedInAs": "Signed in as {email}",
+    "changePassword": "Change password"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -249,7 +268,6 @@
       "deleteTitle": "Delete {name}?",
       "deletePermanent": "This permanently removes it. You can't undo this.",
       "deleteSoft": "It will be removed from lists. Its history is kept.",
-      "deleteRowConfirm": "Delete this row? You can't undo this.",
       "deleted": "Deleted.",
       "discard": "Discard",
       "edit": "Edit",
@@ -302,7 +320,10 @@
         "hint": "{kind}, up to {max} MB.",
         "kinds": {
           "vehicle_photo": "JPG, PNG or WebP image",
-          "document": "PDF"
+          "document": "PDF",
+          "user_photo": "JPG, PNG or WebP image",
+          "driver_photo": "JPG, PNG or WebP image",
+          "company_logo": "JPG, PNG or WebP image"
         },
         "problems": {
           "type": "This file type isn’t allowed. Upload a {kind}.",
@@ -316,7 +337,20 @@
         "mobile": "Mobile number",
         "licenceNo": "Licence no.",
         "employeeId": "Employee ID"
-      }
+      },
+      "exportExcel": "Export to Excel",
+      "yes": "Yes",
+      "no": "No",
+      "location": {
+        "map": "Map: click to place the pin",
+        "lat": "Latitude",
+        "lng": "Longitude",
+        "clear": "Clear location",
+        "hint": "Click the map or drag the pin to set the location. You can also type the coordinates.",
+        "noMap": "Type the coordinates. The map isn’t available."
+      },
+      "thisRow": "this row",
+      "noAccess": "You don’t have permission to view this page. Ask your administrator if you need access."
     },
     "vm": {
       "title": "Vehicle management",
@@ -772,6 +806,317 @@
           "vehicleType": "Edit vehicle type",
           "maintenanceType": "Edit maintenance type",
           "serviceType": "Edit service type"
+        }
+      },
+      "company": {
+        "label": "Company",
+        "all": "All companies (view only)",
+        "platformHint": "You’re signed in as platform staff and can see every company.",
+        "viewOnly": "You’re viewing all companies. Choose a company above to add or change records."
+      }
+    },
+    "am": {
+      "title": "Account management",
+      "description": "Accounts, users, drivers, roles and driver scoring.",
+      "modules": {
+        "label": "Account management sections",
+        "accounts": "Account",
+        "users": "User",
+        "drivers": "Driver",
+        "roles": "Menu setting",
+        "changePassword": "Change password",
+        "driverBehaviour": "Driver behaviour"
+      },
+      "moduleHints": {
+        "accounts": "Company details, contacts, billing and limits.",
+        "users": "Portal logins, their role, and the vehicles and drivers they see.",
+        "drivers": "Driver records, licences, permits and driver-app logins. Import from Excel.",
+        "roles": "Roles and what each can view, add, edit and delete.",
+        "changePassword": "Change your own password.",
+        "driverBehaviour": "How driver scores are calculated for each company."
+      },
+      "accounts": {
+        "title": "Accounts",
+        "description": "Every company on the platform. Add a company, its contacts and billing, and set its limits.",
+        "descriptionCompany": "Your company’s details, contacts and billing.",
+        "descriptionReadOnly": "Your company’s details. Only an admin can change them.",
+        "add": "Add account",
+        "empty": "No accounts yet.",
+        "editTitle": "Edit {name}",
+        "formDescription": "Fields marked * are required.",
+        "createdNext": "Account saved. You can now add its contacts below.",
+        "contactName": "Contact name",
+        "contactPhone": "Contact phone",
+        "contactEmail": "Contact email",
+        "createdBy": "Created by",
+        "trial": "Trial",
+        "locationHint": "Where the company is based. Used to centre its maps.",
+        "platformHint": "Only platform staff see and change these.",
+        "accountTypes": {
+          "customer": "Customer",
+          "distributor": "Distributor"
+        },
+        "paymentModes": {
+          "yearly": "Yearly",
+          "half_yearly": "Half yearly",
+          "quarterly": "Quarterly",
+          "monthly": "Monthly"
+        },
+        "sections": {
+          "company": "Company",
+          "location": "Mark location",
+          "billing": "Billing",
+          "settings": "Settings",
+          "platform": "Platform settings",
+          "contacts": "Contacts"
+        },
+        "f": {
+          "name": "Account name",
+          "industry": "Industry",
+          "website": "Website",
+          "address": "Account address",
+          "city": "City",
+          "state": "State / emirate",
+          "country": "Country",
+          "timezone": "Time zone",
+          "logo": "Account logo",
+          "paymentMode": "Payment mode",
+          "totalCharge": "Total",
+          "taxExpiresAt": "Tax expiry date",
+          "invoice": "Invoice",
+          "tripCloseOnBarcode": "Close trips on barcode scan",
+          "offlineAlertsEnabled": "Offline alerts",
+          "accountType": "Type",
+          "isTrial": "Trial account",
+          "maxUsers": "Limit: number of users",
+          "maxStaff": "Limit: number of staff",
+          "maxDrivers": "Limit: number of drivers"
+        },
+        "contact": {
+          "name": "Name",
+          "email": "Email",
+          "phone": "Phone no.",
+          "add": "Add contact",
+          "empty": "No contacts yet.",
+          "saveFirst": "Save the account first, then add its contacts here."
+        },
+        "statuses": {
+          "active": "Active",
+          "trial": "Trial",
+          "suspended": "Suspended"
+        }
+      },
+      "users": {
+        "title": "Users",
+        "description": "People who sign in to the portal. An admin sees every vehicle; other users see only the vehicles assigned to them.",
+        "add": "Add user",
+        "empty": "No users yet.",
+        "editTitle": "Edit {name}",
+        "admin": "Admin",
+        "cantDeleteSelf": "You can’t delete your own account.",
+        "assignVehicles": "Assign vehicles",
+        "assignDrivers": "Assign drivers",
+        "addDepartment": "Add department",
+        "noRoles": "No roles yet. Add one under Menu setting first.",
+        "passwordKeepHint": "Leave the password empty to keep the current one.",
+        "isAdminHint": "Admins see every vehicle in the company without assigning them.",
+        "sections": {
+          "details": "Details",
+          "login": "Login",
+          "access": "Access"
+        },
+        "f": {
+          "name": "Name",
+          "address": "Address",
+          "mobile": "Mobile no.",
+          "email": "Email",
+          "role": "Role",
+          "department": "Department",
+          "username": "User name",
+          "password": "Password",
+          "newPassword": "New password",
+          "confirmPassword": "Re-enter password",
+          "isAdmin": "Admin (sees all vehicles)",
+          "photo": "Photo"
+        },
+        "assignVehiclesTitle": "Vehicles for {name}",
+        "assignVehiclesHint": "Tick the vehicles this user can see.",
+        "adminSeesAll": "This user is an admin and already sees every vehicle. Assigned vehicles only matter if admin is turned off.",
+        "assignDriversTitle": "Drivers for {name}",
+        "assignDriversHint": "Add the drivers this user can see.",
+        "noDrivers": "No drivers yet. Add drivers under Driver first.",
+        "driverList": "List of drivers",
+        "searchDrivers": "Search drivers",
+        "assignedDrivers": "Assigned drivers ({count})",
+        "noneAssigned": "No drivers assigned."
+      },
+      "drivers": {
+        "title": "Drivers",
+        "description": "Driver records with licence, permit and visa expiry dates. A driver can also get a login for the driver app.",
+        "add": "Add driver",
+        "empty": "No drivers yet.",
+        "editTitle": "Edit {name}",
+        "sample": "Sample Excel",
+        "upload": "Upload Excel",
+        "loginHint": "Optional. Fill in a user name and password to let this driver sign in to the driver app.",
+        "passwordKeepHint": "Leave the password empty to keep the current one.",
+        "workingHoursHint": "Hours per day.",
+        "employmentTypes": {
+          "permanent": "Permanent",
+          "temporary": "Temporary"
+        },
+        "sections": {
+          "basic": "Basic information",
+          "login": "Driver app login",
+          "employment": "Employment",
+          "licence": "Licence and permit",
+          "tag": "Tag",
+          "emergency": "Emergency contact and other"
+        },
+        "f": {
+          "vehicleType": "Vehicle type",
+          "heavy": "Heavy",
+          "light": "Light",
+          "name": "Name",
+          "employeeId": "Driver / employee ID",
+          "mobile": "Mobile number",
+          "address": "Address",
+          "nationality": "Nationality",
+          "photo": "Photo",
+          "username": "User name",
+          "password": "Password",
+          "newPassword": "New password",
+          "confirmPassword": "Re-enter password",
+          "employmentType": "Employment status",
+          "visaExpiryDate": "Visa expiry date",
+          "workingHours": "Working hours",
+          "overtimeRate": "Overtime charges",
+          "licenceNo": "Licence number",
+          "licenceExpiryDate": "Licence expiry date",
+          "otherPermitName": "Other permit",
+          "otherPermitNo": "Permit no.",
+          "permitExpiresAt": "Permit expiry date",
+          "permitPdf": "Permit PDF",
+          "hasTag": "Has a tag ID (RFID)",
+          "rfidTagId": "Tag ID",
+          "emergencyContactName": "Emergency contact name",
+          "emergencyContactNumber": "Emergency contact number",
+          "bloodGroup": "Blood group",
+          "notes": "Notes"
+        },
+        "import": {
+          "title": "Upload drivers from Excel",
+          "description": "Use the layout of the sample file. Each row becomes a new driver; rows with problems are skipped and listed.",
+          "choose": "Choose file",
+          "another": "Upload another file",
+          "importing": "Importing…",
+          "progress": "Importing row {done} of {total}…",
+          "unreadable": "This file can’t be read. Upload an .xlsx file saved from Excel.",
+          "missingColumns": "The Name and Mobile Number columns are missing. Start from the sample file.",
+          "noRows": "The file has no driver rows.",
+          "summary": "{created, plural, one {# driver added} other {# drivers added}}, {failed, plural, one {# row failed} other {# rows failed}}.",
+          "row": "Row {row}"
+        }
+      },
+      "roles": {
+        "title": "Menu setting",
+        "description": "Roles, and what each role can view, add, edit and delete in every part of the system.",
+        "add": "Add role",
+        "empty": "No roles yet.",
+        "editTitle": "Edit {name}",
+        "view": "View",
+        "account": "Account",
+        "access": "Access",
+        "fullAccess": "Full access",
+        "partialAccess": "{count} of {total} modules visible",
+        "platformRole": "Platform-wide",
+        "deleteInUse": "This role couldn’t be deleted. It may still be assigned to users. Move them to another role first.",
+        "formDescription": "Untick what this role shouldn’t do. Adding, editing or deleting also turns on viewing.",
+        "readOnly": "You can view this role but not change it.",
+        "platformReadOnly": "This is a platform-wide role. It can’t be changed here.",
+        "sections": {
+          "role": "Role",
+          "permissions": "Permissions"
+        },
+        "f": {
+          "name": "Role name"
+        },
+        "permissionsHint": "Users with this role get these rights in every module.",
+        "module": "Module",
+        "all": "All",
+        "allIn": "Allow {action} in every module",
+        "allFor": "Allow everything in {module}",
+        "actions": {
+          "canView": "View",
+          "canAdd": "Add",
+          "canEdit": "Edit",
+          "canDelete": "Delete"
+        },
+        "moduleNames": {
+          "drivers": "Drivers",
+          "geofences": "Geofences",
+          "alerts": "Alerts",
+          "routes": "Routes",
+          "maintenance": "Maintenance",
+          "billing": "Billing",
+          "vehicles": "Vehicles",
+          "vehicle-groups": "Vehicle groups",
+          "fuel": "Fuel",
+          "sharing": "Vehicle sharing",
+          "scheduling": "Scheduling & shifts",
+          "poi": "Points of interest",
+          "admin": "Admin & security",
+          "other": "Other",
+          "core": "Company, users & roles",
+          "live-position": "Live position",
+          "department": "Departments"
+        },
+        "moduleHints": {
+          "core": "Accounts, users, roles and devices"
+        }
+      },
+      "changePassword": {
+        "title": "Change password",
+        "description": "Change the password you sign in with.",
+        "old": "Current password",
+        "new": "New password",
+        "confirm": "Confirm new password",
+        "rule": "At least {min} characters.",
+        "submit": "Change password",
+        "changed": "Your password has been changed. Use the new one next time you sign in."
+      },
+      "driverBehaviour": {
+        "title": "Driver behaviour settings",
+        "description": "How driver scores are calculated, one setup per company.",
+        "add": "Add settings",
+        "oneOnly": "This company already has settings. Edit them instead.",
+        "empty": "No settings yet.",
+        "emptyAdd": "No settings yet. Add them to set how drivers are scored.",
+        "editTitle": "Driver behaviour: {name}",
+        "account": "Account",
+        "on": "On",
+        "off": "Off",
+        "default": "Default",
+        "minMileageHint": "Drivers who drive less than this (km) aren’t scored.",
+        "topScoreHint": "The best possible score.",
+        "weightsHint": "How much each event counts towards the score. Total: {total}%.",
+        "defaultsHint": "The system’s default weights are used. Turn on “User customised score” to set your own.",
+        "sections": {
+          "scoring": "Scoring",
+          "weights": "Score weights"
+        },
+        "f": {
+          "minimumMileageKm": "Min mileage (km)",
+          "topScore": "Top score",
+          "displayAbsoluteValue": "Display absolute value",
+          "userCustomizedScore": "User customised score"
+        },
+        "weights": {
+          "weightHarshAcceleration": "Harsh acceleration",
+          "weightHarshBraking": "Harsh braking",
+          "weightExcessiveIdling": "Excess idling",
+          "weightSpeeding": "Speeding",
+          "weightSeatbelt": "Seat belt"
         }
       }
     }

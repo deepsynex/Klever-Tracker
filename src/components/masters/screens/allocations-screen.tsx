@@ -66,11 +66,13 @@ export function AllocationsScreen() {
     [list.data],
   );
   const rows = useMemo(() => {
-    const all = [...(list.data?.vehicleAllocations.data ?? [])].sort((a, b) => b.allocatedAt.localeCompare(a.allocatedAt));
+    const all = [...(list.data?.vehicleAllocations.data ?? [])]
+      .filter((a) => lookups.inScope(lookups.vehicleCompanyId(a.vehicleId)))
+      .sort((a, b) => b.allocatedAt.localeCompare(a.allocatedAt));
     if (filter === "out") return all.filter((a) => !a.returnedAt);
     if (filter === "returned") return all.filter((a) => a.returnedAt);
     return all;
-  }, [list.data, filter]);
+  }, [list.data, filter, lookups]);
 
   return (
     <div className="grid gap-4">
@@ -78,7 +80,7 @@ export function AllocationsScreen() {
         title={t("title")}
         description={t("description")}
         actions={
-          <Button onClick={() => setSheet({ mode: "allocate" })} disabled={lookups.vehicles.length === 0}>
+          <Button onClick={() => setSheet({ mode: "allocate" })} disabled={!lookups.allow("other", "add") || lookups.vehicles.length === 0}>
             <Plus />
             {t("allocate")}
           </Button>
@@ -99,15 +101,15 @@ export function AllocationsScreen() {
           </Select>
         }
         rowActions={(a) =>
-          !a.returnedAt ? (
+          lookups.allow("other", "edit") && !a.returnedAt ? (
             <Button variant="secondary" size="sm" className="h-7" onClick={() => setSheet({ mode: "return", row: a })}>
               <Undo2 className="rtl:-scale-x-100" />
               {t("return")}
             </Button>
           ) : null
         }
-        onEdit={(a) => setSheet({ mode: "return", row: a })}
-        onDelete={setDeleting}
+        onEdit={lookups.allow("other", "edit") ? (a) => setSheet({ mode: "return", row: a }) : undefined}
+        onDelete={lookups.allow("other", "delete") ? setDeleting : undefined}
         columns={[
           { key: "driver", header: t("cols.driver"), cell: (a) => lookups.driverName(a.driverId) },
           { key: "vehicle", header: t("cols.vehicle"), cell: (a) => <span dir="ltr">{lookups.vehicleLabel(a.vehicleId)}</span> },

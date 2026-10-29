@@ -66,8 +66,8 @@ export function VehiclesScreen() {
   const [deleting, setDeleting] = useState<Vehicle | null>(null);
 
   const vehicles = useMemo(
-    () => [...(page.data?.vehicles.data ?? [])].sort((a, b) => a.plateNo.localeCompare(b.plateNo)),
-    [page.data],
+    () => [...(page.data?.vehicles.data ?? [])].filter((v) => lookups.inScope(v.companyId)).sort((a, b) => a.plateNo.localeCompare(b.plateNo)),
+    [page.data, lookups],
   );
   const deviceByVehicle = useMemo(
     () => new Map((page.data?.devices.data ?? []).filter((d) => d.vehicleId).map((d) => [d.vehicleId as string, d])),
@@ -101,7 +101,7 @@ export function VehiclesScreen() {
         title={t("title")}
         description={t("description")}
         actions={
-          <Button onClick={() => setEditing("new")} disabled={!lookups.companyId}>
+          <Button onClick={() => setEditing("new")} disabled={!lookups.allow("vehicles", "add")}>
             <Plus />
             {t("add")}
           </Button>
@@ -118,13 +118,13 @@ export function VehiclesScreen() {
             .filter(Boolean)
             .join(" ")
         }
-        onEdit={setEditing}
-        onDelete={setDeleting}
+        onEdit={lookups.allow("vehicles", "edit") ? setEditing : undefined}
+        onDelete={lookups.allow("vehicles", "delete") ? setDeleting : undefined}
         columns={[
           { key: "plate", header: t("cols.plate"), cell: (v) => <span className="font-semibold" dir="ltr">{v.plateNo}</span> },
           { key: "asset", header: t("cols.asset"), cell: (v) => v.vehicleName ?? "—" },
           { key: "type", header: t("cols.type"), cell: (v) => lookups.typeName(v.vehicleTypeId) },
-          { key: "company", header: t("cols.company"), cell: () => lookups.company?.name ?? "—" },
+          { key: "company", header: t("cols.company"), cell: (v) => lookups.companyName(v.companyId) },
           { key: "driver", header: t("cols.driver"), cell: (v) => (v.primaryDriverId ? lookups.driverName(v.primaryDriverId) : "—") },
           { key: "device", header: t("cols.device"), cell: (v) => deviceByVehicle.get(v.id)?.model ?? "—" },
           { key: "imei", header: t("cols.imei"), numeric: true, cell: (v) => deviceByVehicle.get(v.id)?.imei ?? "—" },
@@ -297,6 +297,7 @@ function VehicleSheet({ vehicle, onClose }: { vehicle: Vehicle | null; onClose: 
                   .filter((ty) => ty.status === "active" || ty.id === form.vehicleTypeId)
                   .map((ty) => ({ id: ty.id, label: ty.name }))}
                 addLabel={t("addType")}
+                canAdd={lookups.allow("vehicles", "add")}
                 validate={({ name }) => validateLookupName(name, lookups.vehicleTypes)}
                 onCreate={async ({ name }) => {
                   const res = await run<{ createVehicleType: { id: string } }>(LOOKUP_OPS.vehicleType.create, {
@@ -463,6 +464,7 @@ function VehicleChildren({ vehicleId, tab }: { vehicleId: string; tab: Exclude<T
         newRow={{ type: "insurance" }}
         createVariables={{ companyId: lookups.companyId, documentableType: VEHICLE_DOCUMENTABLE_TYPE, documentableId: vehicleId }}
         ops={{ create: CREATE_DOCUMENT, update: UPDATE_DOCUMENT, remove: DELETE_DOCUMENT }}
+        readOnly={!lookups.allow("other", "edit")}
         validate={validateDocumentRow}
         addLabel={t("doc.add")}
         emptyText={t("doc.empty")}
@@ -499,6 +501,7 @@ function VehicleChildren({ vehicleId, tab }: { vehicleId: string; tab: Exclude<T
         newRow={{ sensorType: "analog_input", sortOrder: String((sensors.at(-1)?.sortOrder ?? 0) + 1) }}
         createVariables={{ vehicleId }}
         ops={{ create: CREATE_SENSOR, update: UPDATE_SENSOR, remove: DELETE_SENSOR }}
+        readOnly={!lookups.allow("other", "edit")}
         validate={validateSensorRow}
         addLabel={t("sensor.add")}
         emptyText={t("sensor.empty")}
@@ -515,7 +518,10 @@ function VehicleChildren({ vehicleId, tab }: { vehicleId: string; tab: Exclude<T
       key: "fuelCalibrationId",
       label: t("tank.calibration"),
       type: "select",
-      options: data.fuelCalibrations.data.map((c) => ({ value: c.id, label: c.name })),
+      // Only this vehicle's company's calibrations (a platform account sees every company's).
+      options: data.fuelCalibrations.data
+        .filter((c) => c.companyId === lookups.vehicleCompanyId(vehicleId))
+        .map((c) => ({ value: c.id, label: c.name })),
     },
     { key: "minimumRefillLitres", label: t("tank.minRefill"), type: "number" },
   ];
@@ -527,6 +533,7 @@ function VehicleChildren({ vehicleId, tab }: { vehicleId: string; tab: Exclude<T
       newRow={{ tankIndex: String((tanks.at(-1)?.tankIndex ?? 0) + 1) }}
       createVariables={{ vehicleId }}
       ops={{ create: CREATE_FUEL_TANK, update: UPDATE_FUEL_TANK, remove: DELETE_FUEL_TANK }}
+      readOnly={!lookups.allow("fuel", "edit")}
       validate={(values, rowId) => validateTankRow(values, tanks.filter((x) => x.id !== rowId).map((x) => x.tankIndex))}
       addLabel={t("tank.add")}
       emptyText={t("tank.empty")}

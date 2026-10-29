@@ -68,6 +68,7 @@ export function TempSensorsScreen() {
                 createVariables={{ vehicleId: v.id, sensorType: "temperature" }}
                 ops={{ create: CREATE_SENSOR, update: UPDATE_SENSOR, remove: DELETE_SENSOR }}
                 validate={validateSensorRow}
+                readOnly={!lookups.allow("other", "edit")}
                 addLabel={t("add")}
                 emptyText={t("empty")}
               />

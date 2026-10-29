@@ -10,13 +10,14 @@ import {
   LayoutDashboard,
   Map,
   ScrollText,
-  ShieldCheck,
   Truck,
-  Users,
+  UserCog,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Brand } from "@/components/brand";
+import { useVisibleModules } from "@/components/masters/vm-nav";
+import { VM_MODULES } from "@/components/masters/vm-modules";
 import { Link, usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 
@@ -39,12 +40,13 @@ const MAIN: NavItem[] = [
   { key: "fleet", icon: Truck, phase: 2 },
 ];
 
-const MASTERS: NavItem[] = [{ key: "vehicleManagement", icon: CarFront, href: "/masters/vehicle-management" }];
+const MASTERS: NavItem[] = [
+  { key: "vehicleManagement", icon: CarFront, href: "/masters/vehicle-management" },
+  { key: "accountManagement", icon: UserCog, href: "/masters/account-management" },
+];
 
-// Phase 1, weeks 2–3. Visibility will follow the role's permissions once `me` exists (B3).
+// Users and roles live in Masters → Account Management. Visibility will follow `me.permissions` (B3).
 const SETTINGS: NavItem[] = [
-  { key: "users", icon: Users, phase: 1 },
-  { key: "roles", icon: ShieldCheck, phase: 1 },
   { key: "departments", icon: Building2, phase: 1 },
   { key: "audit", icon: ScrollText, phase: 1 },
 ];
@@ -52,6 +54,10 @@ const SETTINGS: NavItem[] = [
 export function Sidebar() {
   const t = useTranslations("nav");
   const pathname = usePathname();
+  // Vehicle management only when the role may view one of its screens. Account management
+  // always shows: everyone can change their own password there.
+  const hasVehicleManagement = useVisibleModules(VM_MODULES).length > 0;
+  const masters = MASTERS.filter((item) => item.key !== "vehicleManagement" || hasVehicleManagement);
 
   const renderItem = (item: NavItem) => {
     const label = t(item.key);
@@ -108,7 +114,7 @@ export function Sidebar() {
           <li className="hidden px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-subtle lg:block">
             {t("mastersGroup")}
           </li>
-          {MASTERS.map(renderItem)}
+          {masters.map(renderItem)}
           <li aria-hidden className="mx-1.5 my-2 hidden h-px bg-border lg:block" />
           <li className="hidden px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-subtle lg:block">
             {t("settingsGroup")}

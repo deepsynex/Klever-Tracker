@@ -44,7 +44,10 @@ export function WorkingHoursScreen() {
   const errorText = useErrorText();
   const [editing, setEditing] = useState<Shift | "new" | null>(null);
   const [deleting, setDeleting] = useState<Shift | null>(null);
-  const rows = useMemo(() => [...(list.data?.shifts.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)), [list.data]);
+  const rows = useMemo(
+    () => [...(list.data?.shifts.data ?? [])].filter((s) => lookups.inScope(s.companyId)).sort((a, b) => a.name.localeCompare(b.name)),
+    [list.data, lookups],
+  );
 
   const days = (json: string | null) => {
     const d = parseWorkingDays(json);
@@ -57,7 +60,7 @@ export function WorkingHoursScreen() {
         title={t("title")}
         description={t("description")}
         actions={
-          <Button onClick={() => setEditing("new")} disabled={!lookups.companyId}>
+          <Button onClick={() => setEditing("new")} disabled={!lookups.allow("scheduling", "add")}>
             <Plus />
             {t("add")}
           </Button>
@@ -70,10 +73,10 @@ export function WorkingHoursScreen() {
         error={list.error ? errorText(list.error) : null}
         emptyText={t("empty")}
         searchText={(s) => s.name}
-        onEdit={setEditing}
-        onDelete={setDeleting}
+        onEdit={lookups.allow("scheduling", "edit") ? setEditing : undefined}
+        onDelete={lookups.allow("scheduling", "delete") ? setDeleting : undefined}
         columns={[
-          { key: "account", header: t("account"), cell: () => lookups.company?.name ?? "—" },
+          { key: "account", header: t("account"), cell: (s) => lookups.companyName(s.companyId) },
           { key: "days", header: t("days"), cell: (s) => days(s.workingDays) },
           { key: "from", header: t("from"), numeric: true, cell: (s) => timeInputValue(s.fromTime) },
           { key: "to", header: t("to"), numeric: true, cell: (s) => timeInputValue(s.toTime) },

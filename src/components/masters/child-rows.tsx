@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/select";
 import { dateInputValue, intOrNull, numberOrNull, textOrNull } from "@/lib/vehicle-management/helpers";
 import { errorLabel, serverFieldErrors, useVmMutations } from "@/lib/vehicle-management/use-vm";
 import type { UploadPurpose } from "@/lib/uploads";
+import { ConfirmDelete } from "./confirm-delete";
 import { FileUpload } from "./file-upload";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +61,7 @@ export function ChildRowsEditor({
   emptyText,
   title,
   validate,
+  readOnly = false,
 }: {
   rows: Row[];
   fields: ChildField[];
@@ -76,6 +78,8 @@ export function ChildRowsEditor({
    * the saved row's id (undefined for a new row), e.g. to skip itself in duplicate checks.
    */
   validate?: (values: Record<string, string>, rowId?: string) => Record<string, string>;
+  /** Show the rows without add, save or delete (e.g. a platform account viewing all companies). */
+  readOnly?: boolean;
 }) {
   const [drafts, setDrafts] = useState<Array<{ key: number; values: Record<string, string> }>>([]);
   const [nextKey, setNextKey] = useState(1);
@@ -93,6 +97,7 @@ export function ChildRowsEditor({
           ops={ops}
           createVariables={createVariables}
           validate={validate}
+          readOnly={readOnly}
         />
       ))}
       {drafts.map((d) => (
@@ -106,7 +111,7 @@ export function ChildRowsEditor({
           onDone={() => setDrafts((all) => all.filter((x) => x.key !== d.key))}
         />
       ))}
-      <div>
+      <div hidden={readOnly}>
         <Button
           variant="secondary"
           size="sm"
@@ -130,6 +135,7 @@ function ChildRow({
   ops,
   createVariables,
   validate,
+  readOnly = false,
   onDone,
 }: {
   fields: ChildField[];
@@ -138,6 +144,7 @@ function ChildRow({
   ops: { create: string; update: string; remove: string };
   createVariables: Record<string, unknown>;
   validate?: (values: Record<string, string>, rowId?: string) => Record<string, string>;
+  readOnly?: boolean;
   /** New rows: called after they are saved or discarded. */
   onDone?: () => void;
 }) {
@@ -181,20 +188,11 @@ function ChildRow({
     }
   };
 
-  const remove = async () => {
-    if (isNew) return onDone?.();
-    if (!window.confirm(t("deleteRowConfirm"))) return;
-    setPending(true);
-    try {
-      await run(ops.remove, { id: rowId });
-      await refresh();
-      toast.success(t("deleted"));
-    } catch (err) {
-      fail(err);
-    } finally {
-      setPending(false);
-    }
-  };
+  const [confirming, setConfirming] = useState(false);
+  // The dialog names the row by its first filled-in text field (e.g. a contact's name).
+  const rowName = fields.find((f) => f.type === "text" && (initial[f.key] ?? "").trim())?.key;
+
+  const remove = () => (isNew ? onDone?.() : setConfirming(true));
 
   return (
     <div className={cn("grid gap-2 rounded-ctl border p-3", isNew ? "border-primary/40 bg-primary-soft/30" : "border-border")}>
@@ -203,7 +201,7 @@ function ChildRow({
           .filter((f) => !f.visible || f.visible(values))
           .map((f) => {
             const id = `${baseId}-${f.key}`;
-            const disabled = pending || (!isNew && f.createOnly);
+            const disabled = readOnly || pending || (!isNew && f.createOnly);
             return (
               <div key={f.key} className={cn("grid min-w-0 gap-1", f.className)}>
                 <Label htmlFor={id}>{f.required ? `${f.label} *` : f.label}</Label>
@@ -241,7 +239,7 @@ function ChildRow({
             );
           })}
       </div>
-      <div className="flex justify-end gap-1.5">
+      <div className="flex justify-end gap-1.5" hidden={readOnly}>
         <Button variant="ghost" size="sm" onClick={remove} disabled={pending} className="hover:text-destructive">
           <Trash2 />
           {isNew ? t("discard") : t("delete")}
@@ -251,6 +249,16 @@ function ChildRow({
           {pending ? t("saving") : t("save")}
         </Button>
       </div>
+      <ConfirmDelete
+        open={confirming}
+        onOpenChange={setConfirming}
+        name={rowName ? initial[rowName] : t("thisRow")}
+        onConfirm={async () => {
+          await run(ops.remove, { id: rowId });
+          await refresh();
+          toast.success(t("deleted"));
+        }}
+      />
     </div>
   );
 }

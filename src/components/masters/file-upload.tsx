@@ -52,7 +52,7 @@ export function FileUpload({
   const inputId = id ?? fallbackId;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isPhoto = purpose === "vehicle_photo";
+  const isPhoto = UPLOAD_PURPOSES[purpose].image;
   const maxMb = UPLOAD_PURPOSES[purpose].maxBytes / (1024 * 1024);
 
   const pick = async (file: File | undefined) => {
