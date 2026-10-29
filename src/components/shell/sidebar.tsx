@@ -39,20 +39,16 @@ const MAIN: NavItem[] = [
   { key: "fleet", icon: Truck, phase: 2 },
 ];
 
-<<<<<<< HEAD
 const TRACKING: NavItem[] = [
   { key: "liveMap", icon: Map, phase: 3 },
   { key: "history", icon: History, href: "/history" },
   { key: "heatmap", icon: Flame, href: "/tracking/heatmap" },
 ];
 
-const MASTERS: NavItem[] = [{ key: "vehicleManagement", icon: CarFront, href: "/masters/vehicle-management" }];
-=======
 const MASTERS: NavItem[] = [
   { key: "vehicleManagement", icon: CarFront, href: "/masters/vehicle-management" },
   { key: "accountManagement", icon: UserCog, href: "/masters/account-management" },
 ];
->>>>>>> 05e865690de48db801ef62dfeff87b82fbb5529c
 
 // Users and roles live in Masters → Account Management. Visibility will follow `me.permissions` (B3).
 const SETTINGS: NavItem[] = [

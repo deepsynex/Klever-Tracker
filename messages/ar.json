@@ -135,12 +135,9 @@
     "comingSoon": "متاح في المرحلة {n}",
     "mastersGroup": "البيانات الرئيسية",
     "vehicleManagement": "إدارة المركبات",
-<<<<<<< HEAD
     "heatmap": "الخريطة الحرارية",
-    "trackingGroup": "التتبع"
-=======
+    "trackingGroup": "التتبع",
     "accountManagement": "إدارة الحسابات"
->>>>>>> 05e865690de48db801ef62dfeff87b82fbb5529c
   },
   "shell": {
     "skipToContent": "انتقل إلى المحتوى",
