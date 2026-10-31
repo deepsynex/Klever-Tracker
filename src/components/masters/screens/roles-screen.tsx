@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
+import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
 import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Sheet } from "@/components/ui/sheet";
-import { validateRole } from "@/lib/account-management/validation";
+import { MAX_LENGTH, validateRole } from "@/lib/account-management/validation";
 import {
   CREATE_ROLE,
   CREATE_ROLE_PERMISSION,
@@ -27,7 +28,7 @@ import {
   type RolePermission,
   type RolesResult,
 } from "@/lib/graphql/account-management";
-import { useErrorText, useVmLookups, useVmMutations, useVmQuery } from "@/lib/vehicle-management/use-vm";
+import { errorLabel, useErrorText, useVmLookups, useVmMutations, useVmQuery } from "@/lib/vehicle-management/use-vm";
 
 const ACTIONS = ["canView", "canAdd", "canEdit", "canDelete"] as const;
 type Action = (typeof ACTIONS)[number];
@@ -179,11 +180,14 @@ function RoleSheet({
 }) {
   const t = useTranslations("masters.am.roles");
   const tc = useTranslations("masters.common");
+  const tv = useTranslations("validation");
   const lookups = useVmLookups();
   const { run, refresh, failInto } = useVmMutations();
   const [name, setName] = useState(role?.name ?? "");
   const [status, setStatus] = useState(role?.status ?? "active");
   const [flags, setFlags] = useState(() => effectiveFlags(modules, saved));
+  const [initial] = useState(() => ({ name: role?.name ?? "", status: role?.status ?? "active", flags: effectiveFlags(modules, saved) }));
+  const guard = useDiscardGuard(!readOnly && isDirty({ name, status, flags }, initial), onClose);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
 
@@ -203,7 +207,8 @@ function RoleSheet({
   const columnAll = (action: Action) => modules.length > 0 && modules.every((m) => flags[m.id]?.[action]);
 
   const save = async () => {
-    const found = validateRole(name, siblings.map((r) => r.name));
+    // A role must be allowed to see at least one module.
+    const found = validateRole(name, siblings.map((r) => r.name), Object.values(flags).some((f) => f.canView));
     setErrors(found);
     if (Object.keys(found).length) return;
     setPending(true);
@@ -235,7 +240,7 @@ function RoleSheet({
   return (
     <Sheet
       open
-      onOpenChange={(open) => !open && onClose()}
+      onOpenChange={(open) => !open && guard.requestClose()}
       size="xl"
       title={role ? (readOnly ? role.name : t("editTitle", { name: role.name })) : t("add")}
       description={t("formDescription")}
@@ -246,7 +251,7 @@ function RoleSheet({
           </Button>
         ) : (
           <>
-            <Button variant="secondary" onClick={onClose}>
+            <Button variant="secondary" onClick={guard.requestClose}>
               {tc("cancel")}
             </Button>
             <Button onClick={save} disabled={pending}>
@@ -267,7 +272,7 @@ function RoleSheet({
         {readOnly ? <Alert tone="info">{role?.companyId === null ? t("platformReadOnly") : t("readOnly")}</Alert> : null}
         <FormSection title={t("sections.role")}>
           <Field id="r-name" label={`${t("f.name")} *`} error={errors.name}>
-            <Input id="r-name" value={name} disabled={readOnly} onChange={(e) => setName(e.target.value)} aria-invalid={errors.name ? true : undefined} />
+            <Input id="r-name" maxLength={MAX_LENGTH.name} value={name} disabled={readOnly} onChange={(e) => setName(e.target.value)} aria-invalid={errors.name ? true : undefined} />
           </Field>
           <Field id="r-status" label={`${tc("status")} *`}>
             <Select id="r-status" value={status} disabled={readOnly} onChange={(e) => setStatus(e.target.value)}>
@@ -280,6 +285,7 @@ function RoleSheet({
         <fieldset className="grid gap-2" disabled={readOnly}>
           <legend className="mb-1 text-sm font-semibold">{t("sections.permissions")}</legend>
           <p className="-mt-1 text-xs text-subtle">{t("permissionsHint")}</p>
+          {errors.permissions ? <Alert tone="error">{errorLabel(tv, errors.permissions)}</Alert> : null}
           <div className="relative overflow-x-auto rounded-ctl border border-border">
             <table className="w-full min-w-max border-collapse text-[13px]">
               <caption className="sr-only">{t("sections.permissions")}</caption>
@@ -346,6 +352,7 @@ function RoleSheet({
         </fieldset>
         <button type="submit" hidden />
       </form>
+      {guard.dialog}
     </Sheet>
   );
 }

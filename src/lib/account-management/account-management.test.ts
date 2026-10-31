@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AmDriver, Company } from "@/lib/graphql/account-management";
-import { driverExportSheet, driverSampleSheet, parseDriverSheet } from "./driver-sheet";
+import { driverExportSheet, driverSampleSheet, parseDriverSheet, phoneFromCell } from "./driver-sheet";
 import {
   accountFormToVariables,
   behaviourFormToVariables,
@@ -13,7 +13,12 @@ import {
   userToForm,
 } from "./forms";
 import {
+  driverDateWarnings,
+  isRealisticDate,
+  isStrongPassword,
   isValidWebsite,
+  limitReached,
+  phoneKey,
   validateAccount,
   validateBehaviour,
   validateChangePassword,
@@ -76,7 +81,7 @@ describe("user", () => {
   it("needs a password only when creating, and checks it", () => {
     expect(validateUser(user(), { isNew: true })).toEqual({ password: "required" });
     expect(validateUser({ ...user(), password: "short", confirmPassword: "short" }, { isNew: true })).toEqual({ password: "passwordMin" });
-    expect(validateUser({ ...user(), password: "longenough", confirmPassword: "different" }, { isNew: true })).toEqual({
+    expect(validateUser({ ...user(), password: "longenough1", confirmPassword: "different1" }, { isNew: true })).toEqual({
       confirmPassword: "passwordMatch",
     });
     expect(validateUser(user(), { isNew: false })).toEqual({});
@@ -99,7 +104,7 @@ describe("user", () => {
 });
 
 describe("driver", () => {
-  const driver = () => ({ ...driverToForm(null), name: "Ali", mobile: "+971501234567" });
+  const driver = () => ({ ...driverToForm(null), name: "Ali", mobile: "+971501234567", canDriveLight: true });
 
   it("requires a password when a login is first set", () => {
     expect(validateDriver({ ...driver(), username: "ali" })).toEqual({ password: "required" });
@@ -118,7 +123,7 @@ describe("driver", () => {
   });
 
   it("clears the tag when unticked and omits an empty password", () => {
-    const vars = driverFormToVariables({ ...driver(), rfidTagId: "TAG1", hasTag: false, canDriveHeavy: true });
+    const vars = driverFormToVariables({ ...driver(), rfidTagId: "TAG1", hasTag: false, canDriveHeavy: true, canDriveLight: false });
     expect(vars).toMatchObject({ rfidTagId: null, canDriveHeavy: true, canDriveLight: false, employmentType: "permanent" });
     expect(vars).not.toHaveProperty("password");
     expect(driverToForm({ rfidTagId: "T", employmentType: null } as AmDriver)).toMatchObject({ hasTag: true, employmentType: "" });
@@ -182,5 +187,65 @@ describe("driver sheet", () => {
     expect(parseDriverSheet([["Name"], ["Ali"]])).toBeNull();
     const out = driverExportSheet([{ name: "Ali", mobile: "1", canDriveHeavy: true, licenceExpiryDate: "2027-01-01 00:00:00", employmentType: "permanent" } as AmDriver]);
     expect(out[1]).toEqual(expect.arrayContaining(["Ali", "Yes", "2027-01-01", "Permanent"]));
+  });
+});
+
+describe("rules added 2026-10-31", () => {
+  const account = () => ({ ...emptyAccountForm(), name: "Acme", city: "Dubai", state: "Dubai" });
+  const driver = () => ({ ...driverToForm(null), name: "Ali", mobile: "+971501234567", canDriveLight: true });
+
+  it("keeps Trial and status in step (platform only) and rejects unrealistic years", () => {
+    expect(validateAccount({ ...account(), status: "trial", isTrial: false }, { isPlatform: true })).toEqual({ isTrial: "trialMismatch" });
+    expect(validateAccount({ ...account(), status: "active", isTrial: true }, { isPlatform: true })).toEqual({ isTrial: "trialMismatch" });
+    expect(validateAccount({ ...account(), status: "active", isTrial: true })).toEqual({});
+    expect(validateAccount({ ...account(), taxExpiresAt: "0026-03-31" })).toEqual({ taxExpiresAt: "dateRange" });
+    expect(isRealisticDate("2027-03-31")).toBe(true);
+    expect(validateAccount({ ...account(), name: "x".repeat(101) })).toEqual({ name: "tooLong" });
+  });
+
+  it("needs a letter and a number in passwords", () => {
+    expect(isStrongPassword("abcdefgh")).toBe(false);
+    expect(isStrongPassword("12345678")).toBe(false);
+    expect(isStrongPassword("abcdefg1")).toBe(true);
+    expect(validateChangePassword({ oldPassword: "old", newPassword: "abcdefgh", confirmPassword: "abcdefgh" })).toEqual({ newPassword: "passwordWeak" });
+  });
+
+  it("checks drivers: vehicle type, permit, duplicates and expiry warnings", () => {
+    expect(validateDriver({ ...driver(), canDriveLight: false })).toEqual({ vehicleType: "vehicleTypeRequired" });
+    expect(validateDriver({ ...driver(), permitExpiresAt: "2027-01-01" })).toEqual({ otherPermitName: "permitIncomplete", otherPermitNo: "permitIncomplete" });
+    expect(validateDriver({ ...driver(), otherPermitName: "ADR", otherPermitNo: "A1" })).toEqual({});
+    const others = [{ username: null, employeeId: null, rfidTagId: null, licenceNo: "DL-1", mobile: "050 123 4567" }];
+    expect(validateDriver({ ...driver(), licenceNo: "dl-1" }, { others })).toEqual({ licenceNo: "duplicateLicence", mobile: "duplicateMobile" });
+    expect(phoneKey("+971 50 123 4567")).toBe(phoneKey("0501234567"));
+    expect(driverDateWarnings({ licenceExpiryDate: "2026-01-01", visaExpiryDate: "2027-01-01", permitExpiresAt: "" }, "2026-10-31")).toEqual({ licenceExpiryDate: "expiredWarning" });
+    expect(limitReached(2, 2)).toBe(true);
+    expect(limitReached(null, 99)).toBe(false);
+  });
+
+  it("requires some permission and weights totalling 100", () => {
+    expect(validateRole("Ops", [], false)).toEqual({ permissions: "permissionsRequired" });
+    expect(validateBehaviour({ ...behaviourToForm(null), userCustomizedScore: true, weightSpeeding: "30" })).toEqual({ weightsTotal: "weightsTotal" });
+    expect(validateBehaviour({ ...behaviourToForm(null), userCustomizedScore: true })).toEqual({});
+  });
+
+  it("keeps leading zeros and catches duplicates in an upload", () => {
+    expect(phoneFromCell(501234567)).toBe("0501234567");
+    expect(phoneFromCell(971501234567)).toBe("+971501234567");
+    expect(phoneFromCell("+971 50 1")).toBe("+971 50 1");
+    const rows = parseDriverSheet(
+      [
+        ["Name", "Mobile Number", "Employee Id", "Light Vehicle"],
+        ["A", 501234567, "E1", "Yes"],
+        ["B", "0509999999", "E1", "Yes"],
+        ["C", "0508888888", "EX", "No"],
+      ],
+      [{ employeeId: null, mobile: "+971 50 123 4567" }],
+    )!;
+    expect(rows.map((r) => r.errors)).toEqual([
+      { mobile: "duplicateMobile" },
+      { employeeId: "duplicateInFile" },
+      { canDriveHeavy: "vehicleTypeRequired" },
+    ]);
+    expect(rows[0]!.variables.mobile).toBe("0501234567");
   });
 });
