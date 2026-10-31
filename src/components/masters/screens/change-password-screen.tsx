@@ -8,7 +8,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { PASSWORD_MIN, validateChangePassword } from "@/lib/account-management/validation";
+import { validateChangePassword } from "@/lib/account-management/validation";
 import { CHANGE_PASSWORD } from "@/lib/graphql/account-management";
 import { ApiRequestError } from "@/lib/graphql/client";
 import { useVmMutations } from "@/lib/vehicle-management/use-vm";
@@ -78,7 +78,7 @@ export function ChangePasswordScreen() {
         {done ? <Alert tone="success">{t("changed")}</Alert> : null}
         {formError ? <Alert tone="error">{formError}</Alert> : null}
         {input("oldPassword", t("old"), "current-password")}
-        {input("newPassword", t("new"), "new-password", t("rule", { min: PASSWORD_MIN }))}
+        {input("newPassword", t("new"), "new-password", tc("passwordRule"))}
         {input("confirmPassword", t("confirm"), "new-password")}
         <div className="flex justify-end">
           <Button type="submit" disabled={pending}>

@@ -6,6 +6,7 @@ import { useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
+import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
 import { downloadSheet, readSheetFile } from "@/components/masters/excel";
 import { FileUpload } from "@/components/masters/file-upload";
 import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
@@ -17,9 +18,16 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Dialog, Sheet } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { driverExportSheet, driverSampleSheet, driverSheetHeader, parseDriverSheet } from "@/lib/account-management/driver-sheet";
+import {
+  driverExportSheet,
+  driverSampleSheet,
+  driverSheetHeader,
+  MAX_IMPORT_BYTES,
+  MAX_IMPORT_ROWS,
+  parseDriverSheet,
+} from "@/lib/account-management/driver-sheet";
 import { BLOOD_GROUPS, driverFormToVariables, driverToForm, EMPLOYMENT_TYPES, type DriverForm } from "@/lib/account-management/forms";
-import { validateDriver } from "@/lib/account-management/validation";
+import { driverDateWarnings, limitReached, MAX_LENGTH, validateDriver } from "@/lib/account-management/validation";
 import { ApiRequestError } from "@/lib/graphql/client";
 import {
   AM_DRIVERS,
@@ -29,7 +37,7 @@ import {
   type AmDriver,
   type AmDriversResult,
 } from "@/lib/graphql/account-management";
-import { expiryState, formatDate } from "@/lib/vehicle-management/helpers";
+import { companyToday, expiryState, formatDate } from "@/lib/vehicle-management/helpers";
 import { errorLabel, useErrorText, useVmLookups, useVmMutations, useVmQuery } from "@/lib/vehicle-management/use-vm";
 import { cn } from "@/lib/utils";
 
@@ -127,7 +135,7 @@ export function DriversScreen() {
       />
 
       {editing !== null ? <DriverSheet driver={editing === "new" ? null : editing} all={list.data?.drivers.data ?? []} onClose={() => setEditing(null)} /> : null}
-      {importing ? <ImportDialog onClose={() => setImporting(false)} /> : null}
+      {importing ? <ImportDialog companyDrivers={rows} onClose={() => setImporting(false)} /> : null}
 
       <ConfirmDelete
         open={deleting !== null}
@@ -148,19 +156,27 @@ export function DriversScreen() {
 function DriverSheet({ driver, all, onClose }: { driver: AmDriver | null; all: AmDriver[]; onClose: () => void }) {
   const t = useTranslations("masters.am.drivers");
   const tc = useTranslations("masters.common");
+  const tv = useTranslations("validation");
   const lookups = useVmLookups();
   const { run, refresh, failInto } = useVmMutations();
   const savedRef = useRef<Record<string, unknown> | null>(driver ? driverFormToVariables(driverToForm(driver)) : null);
   const [form, setForm] = useState<DriverForm>(() => driverToForm(driver));
+  const [initial] = useState(form);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const set = <K extends keyof DriverForm>(key: K, value: DriverForm[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const guard = useDiscardGuard(isDirty(form, initial), onClose);
+  // Past expiry dates only warn: a licence can be mid-renewal.
+  const warnings = driverDateWarnings(form, companyToday());
+  // The company's driver limit (the API enforces it as well).
+  const maxDrivers = lookups.company?.maxDrivers ?? null;
+  const atLimit = !driver && limitReached(maxDrivers, all.filter((d) => d.companyId === lookups.companyId).length);
 
   const save = async () => {
     // Usernames are unique across every company; the other checks are within this company.
     const others = all
       .filter((d) => d.id !== driver?.id)
-      .map((d) => (d.companyId === lookups.companyId ? d : { ...d, employeeId: null, rfidTagId: null }));
+      .map((d) => (d.companyId === lookups.companyId ? d : { ...d, employeeId: null, rfidTagId: null, licenceNo: null, mobile: null }));
     const found = validateDriver(form, { savedUsername: driver?.username ?? "", others });
     setErrors(found);
     if (Object.keys(found).length) {
@@ -184,7 +200,7 @@ function DriverSheet({ driver, all, onClose }: { driver: AmDriver | null; all: A
 
   const text = (key: keyof DriverForm, label: string, opts: { required?: boolean; type?: string; dir?: "ltr"; span?: boolean; hint?: ReactNode; autoComplete?: string } = {}) => (
     <div className={opts.span ? "sm:col-span-2 lg:col-span-3" : undefined}>
-      <Field id={`d-${key}`} label={opts.required ? `${label} *` : label} error={errors[key]} hint={opts.hint}>
+      <Field id={`d-${key}`} label={opts.required ? `${label} *` : label} error={errors[key]} warning={warnings[key]} hint={opts.hint}>
         <Input
           id={`d-${key}`}
           type={opts.type ?? "text"}
@@ -192,6 +208,9 @@ function DriverSheet({ driver, all, onClose }: { driver: AmDriver | null; all: A
           inputMode={opts.type === "number" ? "decimal" : undefined}
           dir={opts.dir}
           autoComplete={opts.autoComplete}
+          maxLength={MAX_LENGTH[key]}
+          min={opts.type === "date" ? "2000-01-01" : undefined}
+          max={opts.type === "date" ? "2100-12-31" : undefined}
           value={form[key] as string}
           onChange={(e) => set(key, e.target.value as never)}
           aria-invalid={errors[key] ? true : undefined}
@@ -203,15 +222,15 @@ function DriverSheet({ driver, all, onClose }: { driver: AmDriver | null; all: A
   return (
     <Sheet
       open
-      onOpenChange={(open) => !open && onClose()}
+      onOpenChange={(open) => !open && guard.requestClose()}
       size="xl"
       title={driver ? t("editTitle", { name: driver.name }) : t("add")}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={guard.requestClose}>
             {tc("cancel")}
           </Button>
-          <Button onClick={save} disabled={pending}>
+          <Button onClick={save} disabled={pending || atLimit}>
             {pending ? tc("saving") : tc("save")}
           </Button>
         </>
@@ -226,13 +245,17 @@ function DriverSheet({ driver, all, onClose }: { driver: AmDriver | null; all: A
           void save();
         }}
       >
+        {atLimit ? <Alert tone="warning">{t("limitReached", { max: maxDrivers ?? 0 })}</Alert> : null}
         <FormSection title={t("sections.basic")} columns={3}>
-          <div className="grid gap-1.5 sm:col-span-2 lg:col-span-3">
-            <span className="text-[13px] font-medium">{t("f.vehicleType")}</span>
+          <div className="grid gap-1.5 sm:col-span-2 lg:col-span-3" role="group" aria-labelledby="d-vehicleType">
+            <span id="d-vehicleType" className="text-[13px] font-medium">
+              {t("f.vehicleType")} *
+            </span>
             <div className="flex flex-wrap gap-4">
               <Checkbox label={t("f.heavy")} checked={form.canDriveHeavy} onChange={(e) => set("canDriveHeavy", e.target.checked)} />
               <Checkbox label={t("f.light")} checked={form.canDriveLight} onChange={(e) => set("canDriveLight", e.target.checked)} />
             </div>
+            {errors.vehicleType ? <p className="text-xs text-destructive">{errorLabel(tv, errors.vehicleType)}</p> : null}
           </div>
           {text("name", t("f.name"), { required: true })}
           {text("employeeId", t("f.employeeId"), { dir: "ltr" })}
@@ -254,7 +277,7 @@ function DriverSheet({ driver, all, onClose }: { driver: AmDriver | null; all: A
 
         <FormSection title={t("sections.login")} description={driver?.username ? t("passwordKeepHint") : t("loginHint")} columns={3}>
           {text("username", t("f.username"), { dir: "ltr", autoComplete: "off" })}
-          {text("password", driver?.username ? t("f.newPassword") : t("f.password"), { type: "password", dir: "ltr", autoComplete: "new-password" })}
+          {text("password", driver?.username ? t("f.newPassword") : t("f.password"), { type: "password", dir: "ltr", autoComplete: "new-password", hint: tc("passwordRule") })}
           {text("confirmPassword", t("f.confirmPassword"), { type: "password", dir: "ltr", autoComplete: "new-password" })}
         </FormSection>
 
@@ -309,13 +332,14 @@ function DriverSheet({ driver, all, onClose }: { driver: AmDriver | null; all: A
             </Select>
           </Field>
           <div className="sm:col-span-2 lg:col-span-3">
-            <Field id="d-notes" label={t("f.notes")}>
-              <Textarea id="d-notes" rows={3} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+            <Field id="d-notes" label={t("f.notes")} error={errors.notes}>
+              <Textarea id="d-notes" rows={3} maxLength={MAX_LENGTH.notes} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
             </Field>
           </div>
         </FormSection>
         <button type="submit" hidden />
       </form>
+      {guard.dialog}
     </Sheet>
   );
 }
@@ -323,7 +347,7 @@ function DriverSheet({ driver, all, onClose }: { driver: AmDriver | null; all: A
 type ImportResult = { created: number; failures: Array<{ rowNumber: number; name: string; messages: string[] }> };
 
 /** Upload an .xlsx in the sample's layout: each row is created as a driver, with a report at the end. */
-function ImportDialog({ onClose }: { onClose: () => void }) {
+function ImportDialog({ companyDrivers, onClose }: { companyDrivers: AmDriver[]; onClose: () => void }) {
   const t = useTranslations("masters.am.drivers");
   const tc = useTranslations("masters.common");
   const tv = useTranslations("validation");
@@ -340,6 +364,11 @@ function ImportDialog({ onClose }: { onClose: () => void }) {
     if (!file) return;
     setProblem(null);
     setResult(null);
+    if (file.size > MAX_IMPORT_BYTES) {
+      setProblem(t("import.tooBig", { max: MAX_IMPORT_BYTES / (1024 * 1024) }));
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
     setPending(true);
     try {
       let sheet;
@@ -349,13 +378,17 @@ function ImportDialog({ onClose }: { onClose: () => void }) {
         setProblem(t("import.unreadable"));
         return;
       }
-      const parsed = parseDriverSheet(sheet);
+      const parsed = parseDriverSheet(sheet, companyDrivers);
       if (!parsed) {
         setProblem(t("import.missingColumns"));
         return;
       }
       if (parsed.length === 0) {
         setProblem(t("import.noRows"));
+        return;
+      }
+      if (parsed.length > MAX_IMPORT_ROWS) {
+        setProblem(t("import.tooManyRows", { max: MAX_IMPORT_ROWS, count: parsed.length }));
         return;
       }
       const out: ImportResult = { created: 0, failures: [] };

@@ -6,6 +6,7 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
+import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
 import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -97,6 +98,8 @@ function BehaviourSheet({ setting, onClose }: { setting: DriverBehaviourSetting 
   const { run, refresh, failInto } = useVmMutations();
   const savedRef = useRef<Record<string, unknown> | null>(setting ? behaviourFormToVariables(behaviourToForm(setting)) : null);
   const [form, setForm] = useState<BehaviourForm>(() => behaviourToForm(setting));
+  const [initial] = useState(form);
+  const guard = useDiscardGuard(isDirty(form, initial), onClose);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const set = <K extends keyof BehaviourForm>(key: K, value: BehaviourForm[K]) => setForm((f) => ({ ...f, [key]: value }));
@@ -124,12 +127,12 @@ function BehaviourSheet({ setting, onClose }: { setting: DriverBehaviourSetting 
   return (
     <Sheet
       open
-      onOpenChange={(open) => !open && onClose()}
+      onOpenChange={(open) => !open && guard.requestClose()}
       size="lg"
       title={setting ? t("editTitle", { name: lookups.companyName(setting.companyId) }) : t("add")}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={guard.requestClose}>
             {tc("cancel")}
           </Button>
           <Button onClick={save} disabled={pending}>
@@ -179,12 +182,18 @@ function BehaviourSheet({ setting, onClose }: { setting: DriverBehaviourSetting 
                 </div>
               </Field>
             ))}
+            {errors.weightsTotal ? (
+              <p className="text-xs text-destructive" role="alert">
+                {t("weightsTotalError", { total: Math.round(total * 100) / 100 })}
+              </p>
+            ) : null}
           </FormSection>
         ) : (
           <p className="text-[13px] text-muted-foreground">{t("defaultsHint")}</p>
         )}
         <button type="submit" hidden />
       </form>
+      {guard.dialog}
     </Sheet>
   );
 }

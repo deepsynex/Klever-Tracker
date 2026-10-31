@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ChildRowsEditor } from "@/components/masters/child-rows";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
+import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
 import { FileUpload } from "@/components/masters/file-upload";
 import { LocationPicker } from "@/components/masters/location-picker";
 import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
@@ -25,7 +26,7 @@ import {
   PAYMENT_MODES,
   type AccountForm,
 } from "@/lib/account-management/forms";
-import { validateAccount, validateContact } from "@/lib/account-management/validation";
+import { MAX_CONTACTS, MAX_LENGTH, validateAccount, validateContact } from "@/lib/account-management/validation";
 import {
   ACCOUNTS,
   CREATE_COMPANY,
@@ -38,7 +39,7 @@ import {
   type Company,
   type CompanyContact,
 } from "@/lib/graphql/account-management";
-import { useErrorText, useVmLookups, useVmMutations, useVmQuery } from "@/lib/vehicle-management/use-vm";
+import { errorLabel, useErrorText, useVmLookups, useVmMutations, useVmQuery } from "@/lib/vehicle-management/use-vm";
 
 /** The contact shown in the list: the primary one, else the first. */
 function mainContact(contacts: CompanyContact[]): CompanyContact | undefined {
@@ -177,6 +178,7 @@ function AccountSheet({
 }) {
   const t = useTranslations("masters.am.accounts");
   const tc = useTranslations("masters.common");
+  const tv = useTranslations("validation");
   const lookups = useVmLookups();
   const { run, refresh, failInto } = useVmMutations();
   const isPlatform = lookups.isPlatform;
@@ -184,13 +186,16 @@ function AccountSheet({
   const [companyId, setCompanyId] = useState<string | null>(company?.id ?? null);
   const savedRef = useRef<Record<string, unknown> | null>(company ? accountFormToVariables(companyToForm(company), { isPlatform }) : null);
   const [form, setForm] = useState<AccountForm>(() => (company ? companyToForm(company) : emptyAccountForm()));
+  // The values as last saved (or loaded), to tell whether closing would lose edits.
+  const [savedForm, setSavedForm] = useState(form);
+  const guard = useDiscardGuard(isDirty(form, savedForm), onClose);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const set = <K extends keyof AccountForm>(key: K, value: AccountForm[K]) => setForm((f) => ({ ...f, [key]: value }));
   const savedContacts = companyId && !company ? (contactsByCompany.get(companyId) ?? []) : contacts;
 
   const save = async () => {
-    const found = validateAccount(form, { otherNames: others.map((c) => c.name) });
+    const found = validateAccount(form, { otherNames: others.map((c) => c.name), isPlatform });
     setErrors(found);
     if (Object.keys(found).length) {
       toast.error(tc("fixErrors"));
@@ -208,6 +213,7 @@ function AccountSheet({
         toast.success(t("createdNext"));
       }
       savedRef.current = vars;
+      setSavedForm(form);
       await refresh();
     } catch (err) {
       failInto(err, setErrors, { location: "locationLat" });
@@ -225,6 +231,9 @@ function AccountSheet({
           step={opts.type === "number" ? "any" : undefined}
           inputMode={opts.type === "number" ? "decimal" : undefined}
           dir={opts.dir}
+          maxLength={MAX_LENGTH[key]}
+          min={opts.type === "date" ? "2000-01-01" : undefined}
+          max={opts.type === "date" ? "2100-12-31" : undefined}
           value={form[key] as string}
           onChange={(e) => set(key, e.target.value as never)}
           aria-invalid={errors[key] ? true : undefined}
@@ -234,7 +243,16 @@ function AccountSheet({
   );
   const select = (key: keyof AccountForm, label: string, options: Array<{ value: string; label: ReactNode }>, required = true) => (
     <Field id={`a-${key}`} label={required ? `${label} *` : label} error={errors[key]}>
-      <Select id={`a-${key}`} value={form[key] as string} onChange={(e) => set(key, e.target.value as never)}>
+      <Select
+        id={`a-${key}`}
+        value={form[key] as string}
+        onChange={(e) =>
+          key === "status"
+            ? // The Trial box follows the status (a trial account is one with status "trial").
+              setForm((f) => ({ ...f, status: e.target.value, isTrial: e.target.value === "trial" }))
+            : set(key, e.target.value as never)
+        }
+      >
         {!required ? <option value="">{tc("none")}</option> : null}
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -250,13 +268,13 @@ function AccountSheet({
   return (
     <Sheet
       open
-      onOpenChange={(open) => !open && onClose()}
+      onOpenChange={(open) => !open && guard.requestClose()}
       size="xl"
       title={companyId ? t("editTitle", { name: form.name || "…" }) : t("add")}
       description={t("formDescription")}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={guard.requestClose}>
             {companyId ? tc("close") : tc("cancel")}
           </Button>
           <Button onClick={save} disabled={pending}>
@@ -345,8 +363,9 @@ function AccountSheet({
                 t("f.accountType"),
                 ACCOUNT_TYPES.map((x) => ({ value: x, label: t(`accountTypes.${x}`) })),
               )}
-              <div className="flex items-end pb-2 sm:col-span-2">
+              <div className="grid content-end gap-1 pb-2 sm:col-span-2">
                 <Checkbox label={t("f.isTrial")} checked={form.isTrial} onChange={(e) => set("isTrial", e.target.checked)} />
+                {errors.isTrial ? <p className="text-xs text-destructive">{errorLabel(tv, errors.isTrial)}</p> : null}
               </div>
               {text("maxUsers", t("f.maxUsers"), { type: "number" })}
               {text("maxStaff", t("f.maxStaff"), { type: "number" })}
@@ -371,12 +390,15 @@ function AccountSheet({
               addLabel={t("contact.add")}
               emptyText={t("contact.empty")}
               validate={validateContact}
+              maxRows={MAX_CONTACTS}
+              limitText={t("contact.limit", { max: MAX_CONTACTS })}
             />
           ) : (
             <p className="text-[13px] text-muted-foreground">{t("contact.saveFirst")}</p>
           )}
         </FormSection>
       </div>
+      {guard.dialog}
     </Sheet>
   );
 }

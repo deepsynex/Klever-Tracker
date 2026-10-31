@@ -6,18 +6,23 @@
 import { isValidPhone, type Errors } from "@/lib/vehicle-management/validation";
 import type { AmDriver } from "@/lib/graphql/account-management";
 import { EMPLOYMENT_TYPES } from "./forms";
+import { isRealisticDate, MAX_LENGTH, phoneKey } from "./validation";
+
+/** Upload limits: rows per file and file size. */
+export const MAX_IMPORT_ROWS = 1000;
+export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 
 /** One sheet column: its header (English, as in the sample file) and the driver field it fills. */
 type SheetColumn = {
   key: keyof AmDriver;
   header: string;
-  kind: "text" | "date" | "number" | "yesno";
+  kind: "text" | "phone" | "date" | "number" | "yesno";
   required?: boolean;
 };
 
 export const DRIVER_SHEET_COLUMNS: SheetColumn[] = [
   { key: "name", header: "Name", kind: "text", required: true },
-  { key: "mobile", header: "Mobile Number", kind: "text", required: true },
+  { key: "mobile", header: "Mobile Number", kind: "phone", required: true },
   { key: "employeeId", header: "Employee Id", kind: "text" },
   { key: "nationality", header: "Nationality", kind: "text" },
   { key: "address", header: "Address", kind: "text" },
@@ -31,7 +36,7 @@ export const DRIVER_SHEET_COLUMNS: SheetColumn[] = [
   { key: "overtimeRate", header: "Overtime Charges", kind: "number" },
   { key: "rfidTagId", header: "Tag Id", kind: "text" },
   { key: "emergencyContactName", header: "Emergency Contact Name", kind: "text" },
-  { key: "emergencyContactNumber", header: "Emergency Contact Number", kind: "text" },
+  { key: "emergencyContactNumber", header: "Emergency Contact Number", kind: "phone" },
   { key: "bloodGroup", header: "Blood Group", kind: "text" },
   { key: "notes", header: "Notes", kind: "text" },
 ];
@@ -97,17 +102,47 @@ function dateText(cell: SheetCell): string | null {
 }
 
 /**
+ * A phone cell as text. Excel stores a typed number like 0501234567 as the number 501234567, so
+ * the UAE leading 0 (or the + of 971…) is put back.
+ */
+export function phoneFromCell(cell: SheetCell): string {
+  if (typeof cell !== "number") return String(cell).trim();
+  const digits = String(Math.trunc(cell));
+  if (/^5\d{8}$/.test(digits)) return `0${digits}`;
+  if (/^9715\d{8}$/.test(digits)) return `+${digits}`;
+  return digits;
+}
+
+/** Fields that must be unique among a company's drivers, with the error for a clash with an existing one. */
+const UNIQUE_FIELDS = [
+  ["employeeId", "duplicateEmployeeId"],
+  ["rfidTagId", "duplicateTag"],
+  ["licenceNo", "duplicateLicence"],
+  ["mobile", "duplicateMobile"],
+] as const;
+type UniqueKey = (typeof UNIQUE_FIELDS)[number][0];
+const uniqueKey = (key: UniqueKey, value: unknown) =>
+  key === "mobile" ? phoneKey(String(value ?? "")) : String(value ?? "").trim().toLowerCase();
+
+/**
  * Uploaded sheet → one entry per non-empty row, with createDriver variables and any problems.
  * Columns are matched by header (case, spaces and the "(…)" hints ignored), so their order
  * doesn't matter. Returns null when the Name or Mobile Number column is missing.
+ * `existing`: the company's drivers, so a row repeating one's employee ID, tag, licence or mobile
+ * is reported (as is a row repeating an earlier row in the file).
  */
-export function parseDriverSheet(rows: SheetCell[][]): ParsedDriverRow[] | null {
+export function parseDriverSheet(
+  rows: SheetCell[][],
+  existing: Array<Partial<Record<UniqueKey, string | null>>> = [],
+): ParsedDriverRow[] | null {
   const [header, ...body] = rows;
   if (!header) return null;
   const index = new Map(header.map((h, i) => [normalizeHeader(h), i]));
   const columns = DRIVER_SHEET_COLUMNS.map((c) => ({ ...c, at: index.get(normalizeHeader(c.header)) }));
   if (columns.some((c) => c.required && c.at === undefined)) return null;
 
+  const taken = new Map(UNIQUE_FIELDS.map(([key]) => [key, new Set(existing.map((d) => uniqueKey(key, d[key])).filter(Boolean))]));
+  const inFile = new Map(UNIQUE_FIELDS.map(([key]) => [key, new Set<string>()]));
   const parsed: ParsedDriverRow[] = [];
   body.forEach((row, i) => {
     if (!row || row.every((c) => c === null || c === undefined || String(c).trim() === "")) return;
@@ -122,8 +157,10 @@ export function parseDriverSheet(rows: SheetCell[][]): ParsedDriverRow[] | null 
       }
       if (c.kind === "date") {
         const d = dateText(cell);
-        if (d) variables[c.key] = d;
-        else errors[c.key] = "date";
+        if (d && isRealisticDate(d)) variables[c.key] = d;
+        else errors[c.key] = d ? "dateRange" : "date";
+      } else if (c.kind === "phone") {
+        variables[c.key] = phoneFromCell(cell);
       } else if (c.kind === "number") {
         const n = typeof cell === "number" ? cell : Number(String(cell).trim());
         if (Number.isFinite(n) && n >= 0) variables[c.key] = n;
@@ -150,6 +187,20 @@ export function parseDriverSheet(rows: SheetCell[][]): ParsedDriverRow[] | null 
       }
     }
     if (typeof variables.workingHoursPerDay === "number" && variables.workingHoursPerDay > 24) errors.workingHoursPerDay = "hoursPerDay";
+    if (!errors.canDriveHeavy && !errors.canDriveLight && variables.canDriveHeavy !== true && variables.canDriveLight !== true) {
+      errors.canDriveHeavy = "vehicleTypeRequired";
+    }
+    for (const [key, value] of Object.entries(variables)) {
+      const max = MAX_LENGTH[key];
+      if (max && typeof value === "string" && value.length > max && !errors[key]) errors[key] = "tooLong";
+    }
+    for (const [key, clash] of UNIQUE_FIELDS) {
+      const value = uniqueKey(key, variables[key]);
+      if (!value || errors[key]) continue;
+      if (taken.get(key)!.has(value)) errors[key] = clash;
+      else if (inFile.get(key)!.has(value)) errors[key] = "duplicateInFile";
+      inFile.get(key)!.add(value);
+    }
     parsed.push({ rowNumber: i + 2, name: String(variables.name ?? ""), variables, errors });
   });
   return parsed;
