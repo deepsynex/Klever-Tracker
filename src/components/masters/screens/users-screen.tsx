@@ -6,6 +6,7 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
+import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
 import { downloadSheet } from "@/components/masters/excel";
 import { FileUpload } from "@/components/masters/file-upload";
 import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
@@ -18,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Sheet } from "@/components/ui/sheet";
 import { userFormToVariables, userToForm, type UserForm } from "@/lib/account-management/forms";
-import { validateUser } from "@/lib/account-management/validation";
+import { limitReached, MAX_LENGTH, validateUser } from "@/lib/account-management/validation";
 import {
   CREATE_DEPARTMENT,
   CREATE_USER,
@@ -202,9 +203,16 @@ function UserSheet({ user, data, onClose }: { user: User | null; data: UsersResu
   const { run, refresh, failInto } = useVmMutations();
   const savedRef = useRef<Record<string, unknown> | null>(user ? userFormToVariables(userToForm(user)) : null);
   const [form, setForm] = useState<UserForm>(() => userToForm(user));
+  const [initial] = useState(form);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const set = <K extends keyof UserForm>(key: K, value: UserForm[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const guard = useDiscardGuard(isDirty(form, initial), onClose);
+  // Your own status, Admin flag and role can't be changed (the API refuses it too), so you can't lock yourself out.
+  const isSelf = Boolean(user && user.id === lookups.meId);
+  // The company's user limit (the API enforces it as well).
+  const maxUsers = lookups.company?.maxUsers ?? null;
+  const atLimit = !user && limitReached(maxUsers, data.users.data.filter((u) => u.companyId === lookups.companyId).length);
 
   const roles = data.roles.data.filter((r) => r.companyId === lookups.companyId && (r.status === "active" || r.id === form.roleId));
   const departments = data.departments.data.filter((d) => d.companyId === lookups.companyId).sort((a, b) => a.name.localeCompare(b.name));
@@ -220,6 +228,7 @@ function UserSheet({ user, data, onClose }: { user: User | null; data: UsersResu
     setPending(true);
     try {
       const vars = userFormToVariables(form);
+      if (isSelf) for (const key of ["status", "isAdmin", "roleId"]) delete vars[key];
       if (user) await run(UPDATE_USER, { id: user.id, ...vars }, { previous: savedRef.current });
       else await run(CREATE_USER, { companyId: lookups.companyId, ...vars });
       await refresh();
@@ -240,6 +249,7 @@ function UserSheet({ user, data, onClose }: { user: User | null; data: UsersResu
           type={opts.type ?? "text"}
           dir={opts.dir}
           autoComplete={opts.autoComplete}
+          maxLength={MAX_LENGTH[key]}
           value={form[key] as string}
           onChange={(e) => set(key, e.target.value as never)}
           aria-invalid={errors[key] ? true : undefined}
@@ -251,15 +261,15 @@ function UserSheet({ user, data, onClose }: { user: User | null; data: UsersResu
   return (
     <Sheet
       open
-      onOpenChange={(open) => !open && onClose()}
+      onOpenChange={(open) => !open && guard.requestClose()}
       size="lg"
       title={user ? t("editTitle", { name: user.name }) : t("add")}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={guard.requestClose}>
             {tc("cancel")}
           </Button>
-          <Button onClick={save} disabled={pending}>
+          <Button onClick={save} disabled={pending || atLimit}>
             {pending ? tc("saving") : tc("save")}
           </Button>
         </>
@@ -274,6 +284,7 @@ function UserSheet({ user, data, onClose }: { user: User | null; data: UsersResu
           void save();
         }}
       >
+        {atLimit ? <Alert tone="warning">{t("limitReached", { max: maxUsers ?? 0 })}</Alert> : null}
         <FormSection title={t("sections.details")}>
           {text("name", t("f.name"), { required: true })}
           {text("mobile", t("f.mobile"), { type: "tel", dir: "ltr" })}
@@ -305,19 +316,19 @@ function UserSheet({ user, data, onClose }: { user: User | null; data: UsersResu
 
         <FormSection title={t("sections.login")} description={user ? t("passwordKeepHint") : undefined}>
           {text("username", t("f.username"), { required: true, dir: "ltr", autoComplete: "off" })}
-          <Field id="u-status" label={`${tc("status")} *`} error={errors.status}>
-            <Select id="u-status" value={form.status} onChange={(e) => set("status", e.target.value)}>
+          <Field id="u-status" label={`${tc("status")} *`} error={errors.status} hint={isSelf ? t("selfLocked") : undefined}>
+            <Select id="u-status" value={form.status} disabled={isSelf} onChange={(e) => set("status", e.target.value)}>
               <option value="active">{tc("statuses.active")}</option>
               <option value="inactive">{tc("statuses.inactive")}</option>
             </Select>
           </Field>
-          {text("password", user ? t("f.newPassword") : t("f.password"), { required: !user, type: "password", dir: "ltr", autoComplete: "new-password" })}
+          {text("password", user ? t("f.newPassword") : t("f.password"), { required: !user, type: "password", dir: "ltr", autoComplete: "new-password", hint: tc("passwordRule") })}
           {text("confirmPassword", t("f.confirmPassword"), { required: !user, type: "password", dir: "ltr", autoComplete: "new-password" })}
         </FormSection>
 
         <FormSection title={t("sections.access")}>
-          <Field id="u-roleId" label={`${t("f.role")} *`} error={errors.roleId} hint={roles.length === 0 ? t("noRoles") : undefined}>
-            <Select id="u-roleId" value={form.roleId} onChange={(e) => set("roleId", e.target.value)} aria-invalid={errors.roleId ? true : undefined}>
+          <Field id="u-roleId" label={`${t("f.role")} *`} error={errors.roleId} hint={isSelf ? t("selfLocked") : roles.length === 0 ? t("noRoles") : undefined}>
+            <Select id="u-roleId" value={form.roleId} disabled={isSelf} onChange={(e) => set("roleId", e.target.value)} aria-invalid={errors.roleId ? true : undefined}>
               <option value="">{tc("choose")}</option>
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -327,12 +338,13 @@ function UserSheet({ user, data, onClose }: { user: User | null; data: UsersResu
             </Select>
           </Field>
           <div className="grid content-end gap-1 pb-1">
-            <Checkbox label={t("f.isAdmin")} checked={form.isAdmin} onChange={(e) => set("isAdmin", e.target.checked)} />
+            <Checkbox label={t("f.isAdmin")} checked={form.isAdmin} disabled={isSelf} onChange={(e) => set("isAdmin", e.target.checked)} />
             <p className="text-xs text-subtle">{t("isAdminHint")}</p>
           </div>
         </FormSection>
         <button type="submit" hidden />
       </form>
+      {guard.dialog}
     </Sheet>
   );
 }
@@ -343,6 +355,7 @@ function AssignVehiclesSheet({ user, saved, onClose }: { user: User; saved: Gran
   const lookups = useVmLookups();
   const { run, refresh, fail } = useVmMutations();
   const [chosen, setChosen] = useState(() => new Set(saved.keys()));
+  const guard = useDiscardGuard(isDirty([...chosen].sort(), [...saved.keys()].sort()), onClose);
   const [pending, setPending] = useState(false);
 
   const save = async () => {
@@ -368,13 +381,13 @@ function AssignVehiclesSheet({ user, saved, onClose }: { user: User; saved: Gran
   return (
     <Sheet
       open
-      onOpenChange={(open) => !open && onClose()}
+      onOpenChange={(open) => !open && guard.requestClose()}
       size="lg"
       title={t("assignVehiclesTitle", { name: user.name })}
       description={t("assignVehiclesHint")}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={guard.requestClose}>
             {tc("cancel")}
           </Button>
           <Button onClick={save} disabled={pending}>
@@ -387,6 +400,7 @@ function AssignVehiclesSheet({ user, saved, onClose }: { user: User; saved: Gran
         {user.isAdmin ? <Alert tone="info">{t("adminSeesAll")}</Alert> : null}
         <VehicleChecklist vehicles={lookups.vehicles} value={chosen} onChange={setChosen} />
       </div>
+      {guard.dialog}
     </Sheet>
   );
 }
@@ -397,6 +411,7 @@ function AssignDriversSheet({ user, saved, onClose }: { user: User; saved: Grant
   const lookups = useVmLookups();
   const { run, refresh, fail } = useVmMutations();
   const [chosen, setChosen] = useState(() => new Set(saved.keys()));
+  const guard = useDiscardGuard(isDirty([...chosen].sort(), [...saved.keys()].sort()), onClose);
   const [query, setQuery] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -436,13 +451,13 @@ function AssignDriversSheet({ user, saved, onClose }: { user: User; saved: Grant
   return (
     <Sheet
       open
-      onOpenChange={(open) => !open && onClose()}
+      onOpenChange={(open) => !open && guard.requestClose()}
       size="lg"
       title={t("assignDriversTitle", { name: user.name })}
       description={t("assignDriversHint")}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={guard.requestClose}>
             {tc("cancel")}
           </Button>
           <Button onClick={save} disabled={pending}>
@@ -497,6 +512,7 @@ function AssignDriversSheet({ user, saved, onClose }: { user: User; saved: Grant
           </section>
         </div>
       )}
+      {guard.dialog}
     </Sheet>
   );
 }

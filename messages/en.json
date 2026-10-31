@@ -69,7 +69,19 @@
     "wrongPassword": "The current password is incorrect.",
     "date": "Enter a date as YYYY-MM-DD.",
     "yesNo": "Enter Yes or No.",
-    "employmentType": "Enter Permanent or Temporary."
+    "employmentType": "Enter Permanent or Temporary.",
+    "tooLong": "This is too long. Shorten it.",
+    "dateRange": "Enter a date between the years 2000 and 2100.",
+    "passwordWeak": "Use at least one letter and one number.",
+    "trialMismatch": "Tick Trial account only when the status is Trial.",
+    "vehicleTypeRequired": "Choose Heavy, Light or both.",
+    "permitIncomplete": "Enter both the permit name and the permit number.",
+    "duplicateLicence": "Another driver already has this licence number.",
+    "duplicateMobile": "Another driver already has this mobile number.",
+    "duplicateInFile": "An earlier row in this file has the same value.",
+    "expiredWarning": "This date has passed. You can still save.",
+    "permissionsRequired": "Allow at least one module (tick View somewhere).",
+    "weightsTotal": "The weights must add up to 100%."
   },
   "errors": {
     "invalid_credentials": "The email or password is incorrect.",
@@ -423,7 +435,14 @@
         "noMap": "Type the coordinates. The map isn’t available."
       },
       "thisRow": "this row",
-      "noAccess": "You don’t have permission to view this page. Ask your administrator if you need access."
+      "noAccess": "You don’t have permission to view this page. Ask your administrator if you need access.",
+      "passwordRule": "At least 8 characters, with a letter and a number.",
+      "unsaved": {
+        "title": "Discard unsaved changes?",
+        "description": "You changed this form but didn’t save it. If you close it now, your changes are lost.",
+        "keep": "Keep editing",
+        "discard": "Discard changes"
+      }
     },
     "vm": {
       "title": "Vehicle management",
@@ -967,7 +986,8 @@
           "phone": "Phone no.",
           "add": "Add contact",
           "empty": "No contacts yet.",
-          "saveFirst": "Save the account first, then add its contacts here."
+          "saveFirst": "Save the account first, then add its contacts here.",
+          "limit": "Up to {max} contacts per account."
         },
         "statuses": {
           "active": "Active",
@@ -1017,7 +1037,9 @@
         "driverList": "List of drivers",
         "searchDrivers": "Search drivers",
         "assignedDrivers": "Assigned drivers ({count})",
-        "noneAssigned": "No drivers assigned."
+        "noneAssigned": "No drivers assigned.",
+        "limitReached": "This company has reached its limit of {max} users. Raise the limit on the Account, or remove a user first.",
+        "selfLocked": "You can’t change your own status, role or admin access."
       },
       "drivers": {
         "title": "Drivers",
@@ -1084,8 +1106,11 @@
           "missingColumns": "The Name and Mobile Number columns are missing. Start from the sample file.",
           "noRows": "The file has no driver rows.",
           "summary": "{created, plural, one {# driver added} other {# drivers added}}, {failed, plural, one {# row failed} other {# rows failed}}.",
-          "row": "Row {row}"
-        }
+          "row": "Row {row}",
+          "tooBig": "This file is too big. The limit is {max} MB.",
+          "tooManyRows": "This file has {count} driver rows. Upload at most {max} at a time."
+        },
+        "limitReached": "This company has reached its limit of {max} drivers. Raise the limit on the Account, or remove a driver first."
       },
       "roles": {
         "title": "Menu setting",
@@ -1150,7 +1175,6 @@
         "old": "Current password",
         "new": "New password",
         "confirm": "Confirm new password",
-        "rule": "At least {min} characters.",
         "submit": "Change password",
         "changed": "Your password has been changed. Use the new one next time you sign in."
       },
@@ -1186,7 +1210,8 @@
           "weightExcessiveIdling": "Excess idling",
           "weightSpeeding": "Speeding",
           "weightSeatbelt": "Seat belt"
-        }
+        },
+        "weightsTotalError": "The weights add up to {total}%. They must total 100%."
       }
     }
   },

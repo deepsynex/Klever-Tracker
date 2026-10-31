@@ -62,6 +62,8 @@ export function ChildRowsEditor({
   title,
   validate,
   readOnly = false,
+  maxRows,
+  limitText,
 }: {
   rows: Row[];
   fields: ChildField[];
@@ -80,6 +82,9 @@ export function ChildRowsEditor({
   validate?: (values: Record<string, string>, rowId?: string) => Record<string, string>;
   /** Show the rows without add, save or delete (e.g. a platform account viewing all companies). */
   readOnly?: boolean;
+  /** At most this many rows (saved + new); the Add button is replaced by `limitText` when reached. */
+  maxRows?: number;
+  limitText?: ReactNode;
 }) {
   const [drafts, setDrafts] = useState<Array<{ key: number; values: Record<string, string> }>>([]);
   const [nextKey, setNextKey] = useState(1);
@@ -112,17 +117,21 @@ export function ChildRowsEditor({
         />
       ))}
       <div hidden={readOnly}>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            setDrafts((all) => [...all, { key: nextKey, values: { ...newRow } }]);
-            setNextKey((k) => k + 1);
-          }}
-        >
-          <Plus />
-          {addLabel}
-        </Button>
+        {maxRows !== undefined && rows.length + drafts.length >= maxRows ? (
+          <p className="text-xs text-subtle">{limitText}</p>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setDrafts((all) => [...all, { key: nextKey, values: { ...newRow } }]);
+              setNextKey((k) => k + 1);
+            }}
+          >
+            <Plus />
+            {addLabel}
+          </Button>
+        )}
       </div>
     </div>
   );

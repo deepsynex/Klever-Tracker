@@ -18,6 +18,8 @@ export const ME = /* GraphQL */ `
         id
         name
         timezone
+        maxUsers
+        maxDrivers
       }
       permissions
     }
@@ -27,7 +29,7 @@ export type Me = {
   id: string;
   name: string;
   companyId: string | null;
-  company: { id: string; name: string; timezone: string } | null;
+  company: { id: string; name: string; timezone: string; maxUsers: number | null; maxDrivers: number | null } | null;
   permissions: string[];
 };
 

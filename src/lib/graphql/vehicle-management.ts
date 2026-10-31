@@ -225,6 +225,8 @@ export const VM_LOOKUPS = /* GraphQL */ `
         id
         name
         timezone
+        maxUsers
+        maxDrivers
       }
     }
     vehicles(first: $first) {
@@ -264,8 +266,11 @@ export type VmLookupVehicle = Pick<
   Vehicle,
   "id" | "companyId" | "plateNo" | "vehicleName" | "vehicleTypeId" | "primaryDriverId" | "odometerKm" | "status"
 >;
+/** A company as the lookups know it; the limits are null when unlimited. */
+export type LookupCompany = { id: string; name: string; timezone: string; maxUsers: number | null; maxDrivers: number | null };
+
 export type VmLookupsResult = {
-  companies: { data: Array<{ id: string; name: string; timezone: string }> };
+  companies: { data: LookupCompany[] };
   vehicles: { data: VmLookupVehicle[] };
   drivers: { data: Driver[] };
   vehicleTypes: { data: LookupItem[] };
