@@ -3,15 +3,18 @@ import { isAllowedOrigin } from "@/lib/bff";
 import { env } from "@/lib/env";
 import { isUnauthenticatedBody } from "@/lib/graphql/errors";
 import { kleverFetch } from "@/lib/graphql/klever";
-import { SESSION_COOKIE, USER_COOKIE } from "@/lib/session-config";
+import { SESSION_COOKIE, SIGNED_OUT_COOKIE, devAuthToken, USER_COOKIE } from "@/lib/session-config";
 
 const MAX_BODY_BYTES = 200_000;
 
 function errorResponse(status: number, message: string, category: string) {
-  return NextResponse.json({ errors: [{ message, extensions: { category } }] }, {
-    status,
-    headers: { "Cache-Control": "no-store" },
-  });
+  return NextResponse.json(
+    { errors: [{ message, extensions: { category } }] },
+    {
+      status,
+      headers: { "Cache-Control": "no-store" },
+    },
+  );
 }
 
 /**
@@ -23,9 +26,7 @@ export async function POST(request: NextRequest) {
     return errorResponse(403, "Request origin not allowed.", "origin");
   }
 
-  const token =
-    request.cookies.get(SESSION_COOKIE)?.value ||
-    (!env.isProduction ? process.env.DEV_AUTH_TOKEN : undefined);
+  const token = request.cookies.get(SESSION_COOKIE)?.value || devAuthToken(request.cookies.has(SIGNED_OUT_COOKIE));
   if (!token) return errorResponse(401, "Unauthenticated.", "authentication");
 
   const raw = await request.text();

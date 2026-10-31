@@ -5,7 +5,7 @@ import { env } from "@/lib/env";
 import { kleverRequest } from "@/lib/graphql/klever";
 import { parseHeatmapQuery } from "@/lib/heatmap/request";
 import { buildHeatmap } from "@/lib/heatmap/service";
-import { SESSION_COOKIE, USER_COOKIE } from "@/lib/session-config";
+import { SESSION_COOKIE, SIGNED_OUT_COOKIE, devAuthToken, USER_COOKIE } from "@/lib/session-config";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
@@ -19,8 +19,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Request origin not allowed." }, { status: 403, headers: NO_STORE });
   }
 
-  const token =
-    request.cookies.get(SESSION_COOKIE)?.value || (!env.isProduction ? process.env.DEV_AUTH_TOKEN : undefined);
+  const token = request.cookies.get(SESSION_COOKIE)?.value || devAuthToken(request.cookies.has(SIGNED_OUT_COOKIE));
   if (!token) return NextResponse.json({ message: "Unauthenticated." }, { status: 401, headers: NO_STORE });
 
   const parsed = parseHeatmapQuery(request.nextUrl.searchParams);

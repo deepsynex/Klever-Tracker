@@ -24,7 +24,8 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
   const [state, formAction, pending] = useActionState(loginAction, initialState);
   const [, startTransition] = useTransition();
 
-  const defaultEmail = mockHint?.email || "verify@klever-tracker.test";
+  // After Google matched a registered user, their email comes back in the URL (see the Google callback).
+  const defaultEmail = searchParams.get("email") || mockHint?.email || "verify@klever-tracker.test";
   const defaultPassword = mockHint?.password || "";
 
   const {
@@ -48,19 +49,22 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
   const fieldError = (name: keyof LoginInput) => errors[name]?.message ?? state.fields?.[name];
   const bannerError = state.status === "error" && state.error && state.error !== "invalid_input" ? state.error : null;
 
+  const tg = useTranslations("auth.login.google");
   const oauthError = searchParams.get("error");
-  let oauthErrorMessage: string | null = null;
-  if (oauthError === "google_cancelled") {
-    oauthErrorMessage = "Google sign-in was cancelled.";
-  } else if (oauthError === "invalid_state") {
-    oauthErrorMessage = "Authentication session expired or invalid state. Please try again.";
-  } else if (oauthError === "missing_code") {
-    oauthErrorMessage = "Google authorization code missing. Please try again.";
-  } else if (oauthError === "oauth_failed") {
-    oauthErrorMessage = "Google authentication failed. Please try again or sign in with your email.";
-  } else if (oauthError) {
-    oauthErrorMessage = "An authentication error occurred. Please try again.";
-  }
+  const GOOGLE_ERRORS = [
+    "google_cancelled",
+    "invalid_state",
+    "missing_code",
+    "oauth_failed",
+    "google_unverified",
+    "google_not_registered",
+    "google_unavailable",
+    "google_use_password",
+  ] as const;
+  const googleError = oauthError ? (GOOGLE_ERRORS.find((k) => k === oauthError) ?? "unknown") : null;
+  const oauthErrorMessage = googleError ? tg(googleError) : null;
+  // A matched user isn't an error: Google worked, they just need their password for now.
+  const oauthTone = googleError === "google_use_password" ? "info" : "error";
 
   return (
     <div className="w-full rounded-[24px] border border-slate-100 bg-white p-7 sm:p-9 shadow-[0_12px_40px_-10px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)]">
@@ -85,12 +89,8 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
 
       {/* Welcome Heading */}
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-extrabold text-[#111827] tracking-tight">
-          Welcome Back
-        </h2>
-        <p className="mt-1 text-[13.5px] text-slate-500">
-          Sign in to access your fleet tracking dashboard
-        </p>
+        <h2 className="text-2xl font-extrabold text-[#111827] tracking-tight">Welcome Back</h2>
+        <p className="mt-1 text-[13.5px] text-slate-500">Sign in to access your fleet tracking dashboard</p>
       </div>
 
       {/* Feedback Banners */}
@@ -102,15 +102,13 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
 
       {mockHint && !bannerError ? (
         <div className="mb-4">
-          <Alert tone="warning">
-            {t("mockHint", { email: mockHint.email, password: mockHint.password })}
-          </Alert>
+          <Alert tone="warning">{t("mockHint", { email: mockHint.email, password: mockHint.password })}</Alert>
         </div>
       ) : null}
 
       {oauthErrorMessage ? (
         <div className="mb-4">
-          <Alert tone="error">{oauthErrorMessage}</Alert>
+          <Alert tone={oauthTone}>{oauthErrorMessage}</Alert>
         </div>
       ) : null}
 
@@ -224,13 +222,17 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
             />
             <span
               className={`flex size-4.5 items-center justify-center rounded-[5px] border transition-all ${
-                rememberMe
-                  ? "border-[#059669] bg-[#059669] text-white"
-                  : "border-slate-300 bg-white"
+                rememberMe ? "border-[#059669] bg-[#059669] text-white" : "border-slate-300 bg-white"
               }`}
             >
               {rememberMe ? (
-                <svg viewBox="0 0 12 10" className="size-3 stroke-current fill-none" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  viewBox="0 0 12 10"
+                  className="size-3 stroke-current fill-none"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="1.5 5 4.5 8 10.5 1.5" />
                 </svg>
               ) : null}
@@ -257,7 +259,13 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
           ) : (
             <>
               <span>{t("submit")}</span>
-              <svg viewBox="0 0 24 24" className="size-4.5 stroke-current fill-none transition-transform group-hover:translate-x-1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                viewBox="0 0 24 24"
+                className="size-4.5 stroke-current fill-none transition-transform group-hover:translate-x-1"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <line x1="5" y1="12" x2="19" y2="12" />
                 <polyline points="12 5 19 12 12 19" />
               </svg>
@@ -281,10 +289,22 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
           className="flex h-10.5 items-center justify-center gap-2.5 rounded-[9px] border border-slate-200 bg-white font-semibold text-slate-800 text-[13px] hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer"
         >
           <svg className="size-4.5 shrink-0" viewBox="0 0 24 24">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
+            <path
+              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              fill="#4285F4"
+            />
+            <path
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              fill="#34A853"
+            />
+            <path
+              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+              fill="#FBBC05"
+            />
+            <path
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+              fill="#EA4335"
+            />
           </svg>
           <span>Google</span>
         </a>
@@ -308,15 +328,19 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
       {/* Security Callout Banner */}
       <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[#059669]">
-          <svg viewBox="0 0 24 24" className="size-4 fill-none stroke-current" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            viewBox="0 0 24 24"
+            className="size-4 fill-none stroke-current"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             <polyline points="9 12 11 14 15 10" />
           </svg>
         </div>
         <div className="flex flex-col">
-          <span className="text-[12.5px] font-bold text-emerald-900 leading-tight">
-            Secure &amp; Reliable
-          </span>
+          <span className="text-[12.5px] font-bold text-emerald-900 leading-tight">Secure &amp; Reliable</span>
           <span className="text-[11.5px] text-emerald-700 leading-tight mt-0.5">
             Your data is encrypted and always protected
           </span>

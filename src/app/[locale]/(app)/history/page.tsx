@@ -8,9 +8,10 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t("title") };
 }
 
+/** Full-screen map: cancels the shell's padding and fills the viewport below the 4rem header. */
 export default function HistoryPage() {
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="-mx-4 -my-6 h-[calc(100dvh-4rem)] min-h-[560px] sm:-mx-6">
       <Suspense fallback={<HistoryLoadingSkeleton />}>
         <TrackingHistoryView />
       </Suspense>
@@ -20,15 +21,9 @@ export default function HistoryPage() {
 
 function HistoryLoadingSkeleton() {
   return (
-    <div className="grid gap-5 animate-pulse" aria-hidden>
-      <div className="h-8 w-64 rounded bg-surface-3" />
-      <div className="h-44 w-full rounded-lg bg-surface-2" />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="h-20 rounded-lg bg-surface-2" />
-        ))}
-      </div>
-      <div className="h-[500px] w-full rounded-lg bg-surface-2" />
+    <div className="relative h-full animate-pulse bg-surface-2" aria-hidden>
+      <div className="glass-panel absolute start-4 top-4 h-[420px] w-[min(380px,calc(100%-2rem))] rounded-2xl" />
+      <div className="glass-panel absolute inset-x-4 bottom-4 h-24 rounded-2xl lg:start-[calc(380px+2rem)]" />
     </div>
   );
 }

@@ -33,12 +33,13 @@ test("signs in, keeps the token out of JavaScript, and signs out", async ({ page
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page).toHaveURL(/\/en\/dashboard$/);
-  await expect(page.getByRole("heading", { name: "Welcome, Mariam Al Hashimi" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Mariam Al Hashimi" })).toBeVisible();
 
   const session = (await context.cookies()).find((c) => c.name === "kt_session");
   expect(session?.httpOnly).toBe(true);
   expect(await page.evaluate(() => document.cookie)).not.toContain("kt_session");
 
+  await page.getByRole("button", { name: "Mariam Al Hashimi" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/en\/login$/);
   expect((await context.cookies()).find((c) => c.name === "kt_session")).toBeUndefined();

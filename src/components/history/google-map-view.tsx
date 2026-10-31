@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Navigation, AlertCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { PositionHistoryPoint, RoutePoint, AlertEventItem, EventTypeItem } from "@/lib/graphql/operations";
 import {
   bearing,
@@ -96,6 +97,11 @@ export type MapProps = {
   /** Time between playback steps; the marker glides to the next fix over this long. 0 = jump. */
   stepDurationMs?: number;
   focusedSegment?: { startIndex: number; endIndex: number } | null;
+  /**
+   * Fill the parent edge to edge with no card frame, for a full-screen page with floating panels.
+   * Google's own fullscreen button is dropped and the remaining controls move out of the panels' way.
+   */
+  fullscreen?: boolean;
 };
 
 // Dark mode map styles matching the Klever Tracker dark palette
@@ -123,6 +129,7 @@ export function GoogleMapView({
   onRoadSnapUnavailable,
   stepDurationMs = 0,
   focusedSegment = null,
+  fullscreen = false,
 }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GoogleMapInstance | null>(null);
@@ -163,9 +170,10 @@ export function GoogleMapView({
 
   // GPS fixes placed on the road path, for the playback marker. Tied to the exact points it was
   // computed for, so a stale result is never used after the track changes.
-  const [snappedTrack, setSnappedTrack] = useState<{ points: PositionHistoryPoint[]; roads: (SegmentRoad | null)[] } | null>(
-    null,
-  );
+  const [snappedTrack, setSnappedTrack] = useState<{
+    points: PositionHistoryPoint[];
+    roads: (SegmentRoad | null)[];
+  } | null>(null);
   // Playback animation state: where the marker is along the track, which fix it last showed,
   // the running animation frame and the arrow's current direction.
   const markerAlongRef = useRef(0);
@@ -213,11 +221,12 @@ export function GoogleMapView({
         styles: isDark ? DARK_MAP_STYLE : [],
         mapTypeControl: true,
         streetViewControl: false,
-        fullscreenControl: true,
+        fullscreenControl: !fullscreen,
         zoomControl: true,
+        ...(fullscreen ? floatingControlOptions() : {}),
       });
     }
-  }, [mapsLoaded, displayPoints]);
+  }, [mapsLoaded, displayPoints, fullscreen]);
 
   // Update Polylines, Markers, Bounds, and Snap to Exact Road Route
   useEffect(() => {
@@ -465,7 +474,8 @@ export function GoogleMapView({
       const ahead = positionAt(markerTrack, Math.min(distance + 8, total));
       const behind = positionAt(markerTrack, Math.max(distance - 8, 0));
       if (ahead.lat !== position.lat || ahead.lng !== position.lng) lastHeadingRef.current = bearing(position, ahead);
-      else if (behind.lat !== position.lat || behind.lng !== position.lng) lastHeadingRef.current = bearing(behind, position);
+      else if (behind.lat !== position.lat || behind.lng !== position.lng)
+        lastHeadingRef.current = bearing(behind, position);
 
       const latLng = new maps.LatLng(position.lat, position.lng);
       marker.setPosition(latLng);
@@ -505,7 +515,7 @@ export function GoogleMapView({
   // Fallback interactive SVG canvas for route preview when no Google Maps key is configured
   if (!apiKey || loadError) {
     return (
-      <div className="relative flex h-[500px] w-full flex-col overflow-hidden rounded-lg border border-border bg-surface-2 lg:h-[600px]">
+      <div className={cn("relative flex w-full flex-col overflow-hidden bg-surface-2", fullscreen ? FULL : CARD)}>
         {/* Warning Banner */}
         <div className="flex items-center gap-2.5 border-b border-border bg-surface px-4 py-2.5 text-xs text-muted-foreground">
           <AlertCircle className="size-4 shrink-0 text-sand" />
@@ -513,7 +523,12 @@ export function GoogleMapView({
             <span className="font-semibold text-foreground">Google Maps API Key: </span>
             {loadError || (
               <>
-                Add <code className="rounded bg-surface-3 px-1 py-0.5 font-mono text-primary">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> to your <code className="font-mono">web/.env.local</code> file to enable Google Maps. An interactive route canvas preview is active below.
+                Add{" "}
+                <code className="rounded bg-surface-3 px-1 py-0.5 font-mono text-primary">
+                  NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+                </code>{" "}
+                to your <code className="font-mono">web/.env.local</code> file to enable Google Maps. An interactive
+                route canvas preview is active below.
               </>
             )}
           </div>
@@ -533,10 +548,27 @@ export function GoogleMapView({
   }
 
   return (
-    <div className="relative h-[500px] w-full overflow-hidden rounded-lg border border-border bg-surface-2 lg:h-[600px]">
+    <div className={cn("relative w-full overflow-hidden bg-surface-2", fullscreen ? FULL : CARD)}>
       <div ref={containerRef} className="h-full w-full" />
     </div>
   );
+}
+
+const CARD = "h-[500px] rounded-lg border border-border lg:h-[600px]";
+const FULL = "h-full";
+
+/**
+ * Map type in the bottom corner under the parameters panel, zoom halfway down the opposite edge (clear of
+ * the playback bar). Google positions are physical, so they swap for right-to-left pages.
+ */
+function floatingControlOptions(): Record<string, unknown> {
+  const position = window.google?.maps.ControlPosition;
+  if (!position) return {};
+  const rtl = document.documentElement.dir === "rtl";
+  return {
+    mapTypeControlOptions: { position: rtl ? position.RIGHT_BOTTOM : position.LEFT_BOTTOM },
+    zoomControlOptions: { position: rtl ? position.LEFT_CENTER : position.RIGHT_CENTER },
+  };
 }
 
 /**
@@ -629,7 +661,13 @@ function SvgRouteCanvas({
       >
         <defs>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" className="text-border/40" strokeWidth="0.5" />
+            <path
+              d="M 40 0 L 0 0 0 40"
+              fill="none"
+              stroke="currentColor"
+              className="text-border/40"
+              strokeWidth="0.5"
+            />
           </pattern>
         </defs>
 

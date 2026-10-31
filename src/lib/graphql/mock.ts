@@ -83,6 +83,22 @@ export async function mockFetch(rawBody: string, token?: string) {
     return json(200, { data: { ping: "Klever Tracker GraphQL API is up. (mock)" } });
   }
 
+  // Mock only: reads the email from the Google ID token without verifying it. The real backend must
+  // verify the signature and audience (backend-requests/login-with-google.md).
+  if (/\bloginWithGoogle\s*\(/.test(query)) {
+    let email = "";
+    try {
+      const payload = String(vars.idToken ?? "").split(".")[1] ?? "";
+      email = String(JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).email ?? "").toLowerCase();
+    } catch {
+      return error("Invalid Google token.");
+    }
+    if (email === MOCK_USER.email) {
+      return json(200, { data: { loginWithGoogle: { token: MOCK_TOKEN, user: MOCK_USER } } });
+    }
+    return error("This Google account is not registered.", { reason: "not_registered" });
+  }
+
   if (/\blogin\s*\(/.test(query)) {
     if (vars.email === MOCK_USER.email && vars.password === MOCK_PASSWORD) {
       return json(200, { data: { login: { token: MOCK_TOKEN, user: MOCK_USER } } });

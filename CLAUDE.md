@@ -50,6 +50,6 @@ The Klever bearer token never expires and must never reach browser JavaScript.
 - **Cache Components is on** (`cacheComponents: true`). Anything that reads cookies, headers or search params must render inside `<Suspense>`. Check `node_modules/next/dist/docs/` before using an API you haven't used in this version.
 - **i18n**: the locales are `en` and `ar` (RTL), always prefixed. `[locale]` is the root segment, so read the locale with `next/root-params` (`locale()`), not from params. Use `Link`, `useRouter` and `redirect` from `@/i18n/navigation`. All UI text belongs in `messages/en.json` and `messages/ar.json`, so add every key to both. The time zone is `Asia/Dubai`.
 - **Styling**: Tailwind v4 with design tokens in `src/app/globals.css`, and shadcn-style primitives in `src/components/ui/`. Use logical utilities (`ms-`, `pe-`, `start-`, `end-`) so layouts flip for Arabic.
-- **Route groups**: `(auth)` holds the public auth pages. `(app)` holds the signed-in shell (sidebar and top bar).
+- **Route groups**: `(auth)` holds the public auth pages. `(app)` holds the signed-in shell (top navigation bar).
 - **Klever API rules**: lists return `{ data, paginatorInfo }`; relations are plain IDs; JSON fields are strings; timestamps are UTC; another company's row comes back as `null`; a permission block returns `"Forbidden."`.
 - Keep pure logic (origin checks, redirect sanitising, error mapping, schemas) in plain modules so Vitest can test it without Next.js.
