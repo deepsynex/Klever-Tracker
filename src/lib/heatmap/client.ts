@@ -58,6 +58,14 @@ export type Rgb = [number, number, number];
 
 /** deck.gl colour ranges, low → high. */
 export const GRADIENTS = {
+  rainbow: [
+    [0, 0, 255],
+    [0, 229, 255],
+    [0, 230, 118],
+    [255, 235, 59],
+    [255, 145, 0],
+    [255, 23, 68],
+  ],
   greenRed: [
     [26, 152, 80],
     [145, 207, 96],

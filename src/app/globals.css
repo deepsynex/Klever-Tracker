@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /*
  * Design tokens from ui-demo.html (see design.md §4).
  * Light values on :root, dark values for the OS setting and for an explicit data-theme="dark".

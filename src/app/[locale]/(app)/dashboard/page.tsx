@@ -144,7 +144,7 @@ function Hero() {
               {t("cta.history")}
             </Link>
             <Link
-              href="/tracking/heatmap"
+              href="/heatmap"
               className="glass-panel inline-flex h-12 items-center gap-2 rounded-xl px-6 text-[15px] font-semibold transition-transform hover:-translate-y-0.5"
             >
               <BarChart3 className="size-[18px]" aria-hidden />

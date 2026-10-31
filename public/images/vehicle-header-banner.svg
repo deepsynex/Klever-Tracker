@@ -1,0 +1,447 @@
+<svg
+  viewBox="0 0 710 118"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+  className="w-full h-full object-contain"
+  preserveAspectRatio="xMidYMid meet"
+>
+  <defs>
+    <style>{`
+      .banner-light { display: block; }
+      .banner-dark { display: none; }
+
+      :root[data-theme="dark"] .banner-light { display: none; }
+      :root[data-theme="dark"] .banner-dark { display: block; }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) .banner-light { display: none; }
+        :root:not([data-theme="light"]) .banner-dark { display: block; }
+      }
+    `}</style>
+
+    {/* ================= LIGHT MODE GRADIENTS ================= */}
+    <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#ecfdf5" stopOpacity="0.8" />
+      <stop offset="50%" stopColor="#f0fdfa" stopOpacity="0.4" />
+      <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+    </linearGradient>
+
+    <linearGradient id="distantMtnGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#99f6e4" stopOpacity="0.6" />
+      <stop offset="60%" stopColor="#ccfbf1" stopOpacity="0.4" />
+      <stop offset="100%" stopColor="#f0fdfa" stopOpacity="0" />
+    </linearGradient>
+
+    <linearGradient id="midMtnGrad1" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stopColor="#5eead4" stopOpacity="0.85" />
+      <stop offset="100%" stopColor="#2dd4bf" stopOpacity="0.4" />
+    </linearGradient>
+    <linearGradient id="midMtnGrad2" x1="80%" y1="0%" x2="20%" y2="100%">
+      <stop offset="0%" stopColor="#2dd4bf" stopOpacity="0.9" />
+      <stop offset="100%" stopColor="#14b8a6" stopOpacity="0.5" />
+    </linearGradient>
+
+    <linearGradient id="frontHillGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#a7f3d0" stopOpacity="0.95" />
+      <stop offset="100%" stopColor="#6ee7b7" stopOpacity="0.4" />
+    </linearGradient>
+    <linearGradient id="frontHillGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0.95" />
+      <stop offset="100%" stopColor="#34d399" stopOpacity="0.3" />
+    </linearGradient>
+
+    <linearGradient id="roadGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stopColor="#475569" />
+      <stop offset="50%" stopColor="#334155" />
+      <stop offset="100%" stopColor="#1e293b" />
+    </linearGradient>
+    <linearGradient id="roadShoulderGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#cbd5e1" stopOpacity="0.6" />
+      <stop offset="100%" stopColor="#94a3b8" stopOpacity="0.2" />
+    </linearGradient>
+
+    <linearGradient id="truckBodyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stopColor="#ffffff" />
+      <stop offset="35%" stopColor="#f8fafc" />
+      <stop offset="70%" stopColor="#e2e8f0" />
+      <stop offset="100%" stopColor="#cbd5e1" />
+    </linearGradient>
+    <linearGradient id="truckWindshieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#0284c7" />
+      <stop offset="40%" stopColor="#0369a1" />
+      <stop offset="100%" stopColor="#075985" />
+    </linearGradient>
+    <linearGradient id="truckGrilleGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#1e293b" />
+      <stop offset="100%" stopColor="#0f172a" />
+    </linearGradient>
+
+    <linearGradient id="pinGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stopColor="#26a69a" />
+      <stop offset="30%" stopColor="#00897b" />
+      <stop offset="85%" stopColor="#00695c" />
+      <stop offset="100%" stopColor="#004d40" />
+    </linearGradient>
+    <linearGradient id="pinHighlight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.6" />
+      <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+    </linearGradient>
+
+    {/* ================= DARK MODE GRADIENTS ================= */}
+    <linearGradient id="darkSkyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#071816" stopOpacity="0.9" />
+      <stop offset="60%" stopColor="#0a221f" stopOpacity="0.4" />
+      <stop offset="100%" stopColor="#121e1d" stopOpacity="0" />
+    </linearGradient>
+
+    <linearGradient id="darkDistantMtn" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#0f3934" stopOpacity="0.7" />
+      <stop offset="70%" stopColor="#09221f" stopOpacity="0.4" />
+      <stop offset="100%" stopColor="#121e1d" stopOpacity="0" />
+    </linearGradient>
+
+    <linearGradient id="darkMidMtn1" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stopColor="#134e48" stopOpacity="0.85" />
+      <stop offset="100%" stopColor="#082b27" stopOpacity="0.5" />
+    </linearGradient>
+    <linearGradient id="darkMidMtn2" x1="80%" y1="0%" x2="20%" y2="100%">
+      <stop offset="0%" stopColor="#0e3d38" stopOpacity="0.9" />
+      <stop offset="100%" stopColor="#051c19" stopOpacity="0.6" />
+    </linearGradient>
+
+    <linearGradient id="darkFrontHill1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#115e59" stopOpacity="0.9" />
+      <stop offset="100%" stopColor="#092c29" stopOpacity="0.5" />
+    </linearGradient>
+    <linearGradient id="darkFrontHill2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#0f766e" stopOpacity="0.9" />
+      <stop offset="100%" stopColor="#072b27" stopOpacity="0.4" />
+    </linearGradient>
+
+    <linearGradient id="darkRoadGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stopColor="#1e293b" />
+      <stop offset="50%" stopColor="#0f172a" />
+      <stop offset="100%" stopColor="#020617" />
+    </linearGradient>
+
+    <linearGradient id="headlightBeam" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.5" />
+      <stop offset="25%" stopColor="#7dd3fc" stopOpacity="0.35" />
+      <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
+    </linearGradient>
+
+    <linearGradient id="darkPinGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stopColor="#5eead4" />
+      <stop offset="35%" stopColor="#14b8a6" />
+      <stop offset="85%" stopColor="#0f766e" />
+      <stop offset="100%" stopColor="#115e59" />
+    </linearGradient>
+
+    {/* ================= COMMON FILTERS ================= */}
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.5" result="blur" />
+      <feColorMatrix type="matrix" values="0 0 0 0 0.05   0 0 0 0 0.1   0 0 0 0 0.15  0 0 0 0.35 0" />
+      <feOffset dx="0" dy="2" />
+      <feBlend in="SourceGraphic" in2="blurOut" mode="normal" />
+    </filter>
+    <filter id="pinShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" />
+    </filter>
+    <filter id="truckGroundShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3" />
+    </filter>
+    <filter id="neonGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3.5" result="coloredBlur" />
+      <feMerge>
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    {/* Edge Fade Mask */}
+    <linearGradient id="edgeFadeMask" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stopColor="#ffffff" stopOpacity="0" />
+      <stop offset="8%" stopColor="#ffffff" stopOpacity="1" />
+      <stop offset="92%" stopColor="#ffffff" stopOpacity="1" />
+      <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+    </linearGradient>
+    <mask id="edgeMask">
+      <rect x="0" y="0" width="710" height="118" fill="url(#edgeFadeMask)" />
+    </mask>
+  </defs>
+
+  {/* ========================================================================= */}
+  {/* ======================== 1. LIGHT MODE ARTWORK ======================== */}
+  {/* ========================================================================= */}
+  <g className="banner-light" mask="url(#edgeMask)">
+    {/* Background Sky Glow */}
+    <rect x="0" y="0" width="710" height="118" fill="url(#skyGrad)" />
+
+    {/* Distant Mountain Ridge */}
+    <path
+      d="M 60 118 L 60 85 Q 110 58 160 68 T 260 48 T 350 38 T 450 52 T 540 36 T 630 58 T 710 75 L 710 118 Z"
+      fill="url(#distantMtnGrad)"
+    />
+
+    {/* Midground Mountains */}
+    <polygon points="120,118 195,50 270,118" fill="url(#midMtnGrad1)" />
+    <polygon points="195,50 270,118 290,118 230,68" fill="url(#midMtnGrad2)" opacity="0.8" />
+
+    <polygon points="250,118 335,42 410,118" fill="url(#midMtnGrad1)" opacity="0.9" />
+    <polygon points="335,42 410,118 430,118 365,58" fill="url(#midMtnGrad2)" opacity="0.85" />
+
+    <polygon points="390,118 470,36 550,118" fill="url(#midMtnGrad1)" opacity="0.75" />
+    <polygon points="470,36 550,118 570,118 505,52" fill="url(#midMtnGrad2)" opacity="0.7" />
+
+    <polygon points="520,118 595,46 680,118" fill="url(#midMtnGrad1)" opacity="0.85" />
+    <polygon points="595,46 680,118 695,118 630,60" fill="url(#midMtnGrad2)" opacity="0.75" />
+
+    {/* Foreground Hills */}
+    <path d="M 50 118 Q 130 68 230 78 T 340 102 L 340 118 Z" fill="url(#frontHillGrad1)" />
+    <path d="M 430 118 Q 520 72 610 82 T 700 95 L 700 118 Z" fill="url(#frontHillGrad2)" />
+
+    {/* Curving Highway */}
+    <path d="M 370 56 Q 355 72 342 86 T 315 118 L 475 118 Q 430 92 415 76 T 392 56 Z" fill="url(#roadShoulderGrad)" />
+    <path d="M 373 57 Q 358 73 345 87 T 320 118 L 470 118 Q 427 92 412 76 T 389 57 Z" fill="url(#roadGrad)" />
+    <path d="M 374 57 Q 359 73 346 87 T 322 118" stroke="#ffffff" strokeWidth="1.5" strokeOpacity="0.8" fill="none" />
+    <path d="M 388 57 Q 411 76 426 92 T 468 118" stroke="#ffffff" strokeWidth="1.5" strokeOpacity="0.8" fill="none" />
+
+    <path d="M 381 58 Q 380 62 379 66" stroke="#ffffff" strokeWidth="1.2" strokeOpacity="0.75" fill="none" />
+    <path d="M 377 69 Q 375 74 374 79" stroke="#ffffff" strokeWidth="1.5" strokeOpacity="0.85" fill="none" />
+    <path d="M 371 83 Q 368 90 366 97" stroke="#ffffff" strokeWidth="2" strokeOpacity="0.9" fill="none" />
+    <path d="M 362 102 Q 358 110 355 118" stroke="#ffffff" strokeWidth="2.8" strokeOpacity="0.95" fill="none" />
+
+    {/* Light Mode Commercial White Truck */}
+    <g transform="translate(372, 36)">
+      <ellipse cx="25" cy="58" rx="28" ry="7" fill="#020617" fillOpacity="0.45" filter="url(#truckGroundShadow)" />
+      <rect x="3" y="47" width="7" height="12" rx="3" fill="#0f172a" />
+      <rect x="4" y="49" width="5" height="8" rx="2" fill="#334155" />
+      <circle cx="6.5" cy="53" r="1.5" fill="#94a3b8" />
+      <rect x="40" y="47" width="7" height="12" rx="3" fill="#0f172a" />
+      <rect x="41" y="49" width="5" height="8" rx="2" fill="#334155" />
+      <circle cx="43.5" cy="53" r="1.5" fill="#94a3b8" />
+
+      <path d="M 12 12 Q 25 8 38 12 L 41 18 L 9 18 Z" fill="url(#truckBodyGrad)" stroke="#cbd5e1" strokeWidth="0.5" />
+      <rect x="18" y="10" width="14" height="2" rx="1" fill="#00897b" />
+      <rect x="7" y="18" width="36" height="32" rx="4" fill="url(#truckBodyGrad)" stroke="#94a3b8" strokeWidth="0.75" filter="url(#softShadow)" />
+
+      <path d="M 7 24 L 2 25 L 2 32 L 6 30" fill="#1e293b" />
+      <rect x="1" y="24" width="2.5" height="8" rx="1" fill="#0f172a" />
+      <rect x="1.5" y="25" width="1" height="6" fill="#38bdf8" opacity="0.8" />
+      <path d="M 43 24 L 48 25 L 48 32 L 44 30" fill="#1e293b" />
+      <rect x="46.5" y="24" width="2.5" height="8" rx="1" fill="#0f172a" />
+      <rect x="47.5" y="25" width="1" height="6" fill="#38bdf8" opacity="0.8" />
+
+      <path d="M 11 20 L 39 20 L 37 32 L 13 32 Z" fill="url(#truckWindshieldGrad)" stroke="#0f172a" strokeWidth="0.75" />
+      <polygon points="14,20 19,20 25,32 20,32" fill="#ffffff" opacity="0.25" />
+      <line x1="18" y1="31" x2="24" y2="25" stroke="#0f172a" strokeWidth="0.8" strokeLinecap="round" />
+      <line x1="28" y1="31" x2="34" y2="25" stroke="#0f172a" strokeWidth="0.8" strokeLinecap="round" />
+
+      <rect x="13" y="35" width="24" height="12" rx="2" fill="url(#truckGrilleGrad)" stroke="#475569" strokeWidth="0.5" />
+      <line x1="15" y1="37" x2="35" y2="37" stroke="#64748b" strokeWidth="0.75" />
+      <line x1="15" y1="39" x2="35" y2="39" stroke="#64748b" strokeWidth="0.75" />
+      <line x1="15" y1="41" x2="35" y2="41" stroke="#64748b" strokeWidth="0.75" />
+      <line x1="15" y1="43" x2="35" y2="43" stroke="#64748b" strokeWidth="0.75" />
+      <line x1="15" y1="45" x2="35" y2="45" stroke="#64748b" strokeWidth="0.75" />
+      <circle cx="25" cy="38" r="2" fill="#e2e8f0" stroke="#00897b" strokeWidth="0.75" />
+
+      <polygon points="8,40 12,39 12,44 8,45" fill="#f0f9ff" stroke="#94a3b8" strokeWidth="0.5" />
+      <circle cx="10" cy="42" r="1.5" fill="#38bdf8" />
+      <circle cx="10" cy="42" r="0.75" fill="#ffffff" />
+      <polygon points="38,39 42,40 42,45 38,44" fill="#f0f9ff" stroke="#94a3b8" strokeWidth="0.5" />
+      <circle cx="40" cy="42" r="1.5" fill="#38bdf8" />
+      <circle cx="40" cy="42" r="0.75" fill="#ffffff" />
+
+      <path d="M 6 48 L 44 48 L 43 54 L 7 54 Z" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.5" />
+      <rect x="20" y="49" width="10" height="4" rx="0.5" fill="#ffffff" stroke="#475569" strokeWidth="0.5" />
+      <rect x="21" y="50" width="8" height="2" fill="#00897b" opacity="0.8" />
+      <circle cx="10" cy="51" r="1.2" fill="#fef08a" stroke="#ca8a04" strokeWidth="0.4" />
+      <circle cx="40" cy="51" r="1.2" fill="#fef08a" stroke="#ca8a04" strokeWidth="0.4" />
+    </g>
+
+    {/* Light Mode 3D Map Pins */}
+    <g transform="translate(168, 42)">
+      <ellipse cx="0" cy="26" rx="7" ry="2.5" fill="#042f2e" fillOpacity="0.28" filter="url(#pinShadow)" />
+      <g filter="url(#softShadow)">
+        <path d="M 0 -16 C -8 -16 -13 -10 -13 -2 C -13 5 -6 12 0 19 C 6 12 13 5 13 -2 C 13 -10 8 -16 0 -16 Z" fill="url(#pinGrad)" />
+        <path d="M 0 -15 C -6 -15 -11 -10 -11 -3 C -11 3 -6 8 0 15 C 1 13 2 11 3 9 C -3 5 -8 0 -8 -3 C -8 -8 -4 -13 0 -15 Z" fill="url(#pinHighlight)" />
+        <circle cx="0" cy="-3" r="4.2" fill="#ffffff" />
+      </g>
+    </g>
+    <g transform="translate(272, 60)">
+      <ellipse cx="0" cy="24" rx="8" ry="3" fill="#042f2e" fillOpacity="0.32" filter="url(#pinShadow)" />
+      <g filter="url(#softShadow)">
+        <path d="M 0 -18 C -9 -18 -15 -11 -15 -2 C -15 6 -7 14 0 22 C 7 14 15 6 15 -2 C 15 -11 9 -18 0 -18 Z" fill="url(#pinGrad)" />
+        <path d="M 0 -17 C -7 -17 -13 -11 -13 -3 C -13 4 -7 10 0 17 C 2 15 3 13 4 10 C -3 6 -9 1 -9 -3 C -9 -9 -5 -15 0 -17 Z" fill="url(#pinHighlight)" />
+        <circle cx="0" cy="-3.5" r="4.8" fill="#ffffff" />
+      </g>
+    </g>
+    <g transform="translate(468, 36)">
+      <ellipse cx="0" cy="24" rx="6.5" ry="2.5" fill="#042f2e" fillOpacity="0.25" filter="url(#pinShadow)" />
+      <g filter="url(#softShadow)">
+        <path d="M 0 -15 C -7.5 -15 -12 -9 -12 -2 C -12 4.5 -5.5 11 0 17 C 5.5 11 12 4.5 12 -2 C 12 -9 7.5 -15 0 -15 Z" fill="url(#pinGrad)" />
+        <path d="M 0 -14 C -6 -14 -10 -9 -10 -3 C -10 3 -5 8 0 14 C 1 12 2 10 3 8 C -2 5 -7 1 -7 -3 C -7 -8 -4 -12 0 -14 Z" fill="url(#pinHighlight)" />
+        <circle cx="0" cy="-3" r="3.8" fill="#ffffff" />
+      </g>
+    </g>
+    <g transform="translate(596, 48)">
+      <ellipse cx="0" cy="25" rx="7" ry="2.5" fill="#042f2e" fillOpacity="0.28" filter="url(#pinShadow)" />
+      <g filter="url(#softShadow)">
+        <path d="M 0 -16 C -8 -16 -13 -10 -13 -2 C -13 5 -6 12 0 19 C 6 12 13 5 13 -2 C 13 -10 8 -16 0 -16 Z" fill="url(#pinGrad)" />
+        <path d="M 0 -15 C -6 -15 -11 -10 -11 -3 C -11 3 -6 8 0 15 C 1 13 2 11 3 9 C -3 5 -8 0 -8 -3 C -8 -8 -4 -13 0 -15 Z" fill="url(#pinHighlight)" />
+        <circle cx="0" cy="-3" r="4.2" fill="#ffffff" />
+      </g>
+    </g>
+
+    {/* Bottom Edge Blend */}
+    <rect x="0" y="102" width="710" height="16" fill="url(#skyGrad)" opacity="0.6" />
+  </g>
+
+  {/* ========================================================================= */}
+  {/* ======================== 2. DARK MODE ARTWORK ========================= */}
+  {/* ========================================================================= */}
+  <g className="banner-dark" mask="url(#edgeMask)">
+    {/* Midnight Sky Glow */}
+    <rect x="0" y="0" width="710" height="118" fill="url(#darkSkyGrad)" />
+
+    {/* Micro GPS Satellites / Constellation points */}
+    <circle cx="135" cy="18" r="0.9" fill="#2dd4bf" opacity="0.8" />
+    <circle cx="215" cy="14" r="0.75" fill="#38bdf8" opacity="0.7" />
+    <circle cx="295" cy="22" r="1.1" fill="#e2ecea" opacity="0.85" />
+    <circle cx="430" cy="12" r="0.9" fill="#2dd4bf" opacity="0.75" />
+    <circle cx="510" cy="19" r="0.8" fill="#5eead4" opacity="0.65" />
+    <circle cx="635" cy="15" r="1" fill="#e2ecea" opacity="0.8" />
+
+    {/* Distant Midnight Mountain Ridge */}
+    <path
+      d="M 60 118 L 60 85 Q 110 58 160 68 T 260 48 T 350 38 T 450 52 T 540 36 T 630 58 T 710 75 L 710 118 Z"
+      fill="url(#darkDistantMtn)"
+    />
+
+    {/* Midground Nocturnal Mountains */}
+    <polygon points="120,118 195,50 270,118" fill="url(#darkMidMtn1)" />
+    <polygon points="195,50 270,118 290,118 230,68" fill="url(#darkMidMtn2)" opacity="0.8" />
+    <line x1="120" y1="118" x2="195" y2="50" stroke="#14b8a6" strokeWidth="0.75" strokeOpacity="0.4" />
+    <line x1="195" y1="50" x2="270" y2="118" stroke="#14b8a6" strokeWidth="0.75" strokeOpacity="0.25" />
+
+    <polygon points="250,118 335,42 410,118" fill="url(#darkMidMtn1)" opacity="0.95" />
+    <polygon points="335,42 410,118 430,118 365,58" fill="url(#darkMidMtn2)" opacity="0.85" />
+    <line x1="250" y1="118" x2="335" y2="42" stroke="#2dd4bf" strokeWidth="0.75" strokeOpacity="0.45" />
+
+    <polygon points="390,118 470,36 550,118" fill="url(#darkMidMtn1)" opacity="0.8" />
+    <polygon points="470,36 550,118 570,118 505,52" fill="url(#darkMidMtn2)" opacity="0.75" />
+    <line x1="390" y1="118" x2="470" y2="36" stroke="#2dd4bf" strokeWidth="0.75" strokeOpacity="0.4" />
+
+    <polygon points="520,118 595,46 680,118" fill="url(#darkMidMtn1)" opacity="0.9" />
+    <polygon points="595,46 680,118 695,118 630,60" fill="url(#darkMidMtn2)" opacity="0.8" />
+    <line x1="520" y1="118" x2="595" y2="46" stroke="#14b8a6" strokeWidth="0.75" strokeOpacity="0.4" />
+
+    {/* Foreground Dark Hills */}
+    <path d="M 50 118 Q 130 68 230 78 T 340 102 L 340 118 Z" fill="url(#darkFrontHill1)" />
+    <path d="M 430 118 Q 520 72 610 82 T 700 95 L 700 118 Z" fill="url(#darkFrontHill2)" />
+
+    {/* Night Highway (Deep Wet Asphalt) */}
+    <path d="M 370 56 Q 355 72 342 86 T 315 118 L 475 118 Q 430 92 415 76 T 392 56 Z" fill="#0b1716" />
+    <path d="M 373 57 Q 358 73 345 87 T 320 118 L 470 118 Q 427 92 412 76 T 389 57 Z" fill="url(#darkRoadGrad)" />
+
+    {/* Glowing Curbs */}
+    <path d="M 374 57 Q 359 73 346 87 T 322 118" stroke="#0d9488" strokeWidth="1.5" strokeOpacity="0.7" fill="none" />
+    <path d="M 388 57 Q 411 76 426 92 T 468 118" stroke="#0d9488" strokeWidth="1.5" strokeOpacity="0.7" fill="none" />
+
+    {/* Glowing Center Line Dividers */}
+    <path d="M 381 58 Q 380 62 379 66" stroke="#2dd4bf" strokeWidth="1.2" strokeOpacity="0.8" fill="none" />
+    <path d="M 377 69 Q 375 74 374 79" stroke="#2dd4bf" strokeWidth="1.5" strokeOpacity="0.85" fill="none" />
+    <path d="M 371 83 Q 368 90 366 97" stroke="#2dd4bf" strokeWidth="2" strokeOpacity="0.9" fill="none" />
+    <path d="M 362 102 Q 358 110 355 118" stroke="#2dd4bf" strokeWidth="2.8" strokeOpacity="0.95" fill="none" />
+
+    {/* Headlight Cones / Beams illuminating the road forward */}
+    <polygon points="380,82 315,118 360,118 384,84" fill="url(#headlightBeam)" opacity="0.45" />
+    <polygon points="412,82 400,118 450,118 416,84" fill="url(#headlightBeam)" opacity="0.45" />
+
+    {/* Night Commercial White Truck with Glowing Headlights */}
+    <g transform="translate(372, 36)">
+      <ellipse cx="25" cy="58" rx="28" ry="7" fill="#000000" fillOpacity="0.8" filter="url(#truckGroundShadow)" />
+      <rect x="3" y="47" width="7" height="12" rx="3" fill="#020617" />
+      <rect x="4" y="49" width="5" height="8" rx="2" fill="#0f172a" />
+      <rect x="40" y="47" width="7" height="12" rx="3" fill="#020617" />
+      <rect x="41" y="49" width="5" height="8" rx="2" fill="#0f172a" />
+
+      <path d="M 12 12 Q 25 8 38 12 L 41 18 L 9 18 Z" fill="#e2ecea" stroke="#475569" strokeWidth="0.5" />
+      <rect x="18" y="10" width="14" height="2" rx="1" fill="#2dd4bf" filter="url(#neonGlow)" />
+      <rect x="7" y="18" width="36" height="32" rx="4" fill="#f1f5f9" stroke="#334155" strokeWidth="0.75" />
+
+      <path d="M 7 24 L 2 25 L 2 32 L 6 30" fill="#090d16" />
+      <rect x="1" y="24" width="2.5" height="8" rx="1" fill="#020617" />
+      <path d="M 43 24 L 48 25 L 48 32 L 44 30" fill="#090d16" />
+      <rect x="46.5" y="24" width="2.5" height="8" rx="1" fill="#020617" />
+
+      <path d="M 11 20 L 39 20 L 37 32 L 13 32 Z" fill="#082f49" stroke="#020617" strokeWidth="0.75" />
+      <polygon points="14,20 19,20 25,32 20,32" fill="#38bdf8" opacity="0.3" />
+
+      <rect x="13" y="35" width="24" height="12" rx="2" fill="#090d16" stroke="#1e293b" strokeWidth="0.5" />
+      <line x1="15" y1="37" x2="35" y2="37" stroke="#334155" strokeWidth="0.75" />
+      <line x1="15" y1="39" x2="35" y2="39" stroke="#334155" strokeWidth="0.75" />
+      <line x1="15" y1="41" x2="35" y2="41" stroke="#334155" strokeWidth="0.75" />
+      <circle cx="25" cy="38" r="2" fill="#2dd4bf" opacity="0.9" />
+
+      <polygon points="8,40 12,39 12,44 8,45" fill="#e0f2fe" />
+      <circle cx="10" cy="42" r="2.2" fill="#38bdf8" opacity="0.6" filter="url(#neonGlow)" />
+      <circle cx="10" cy="42" r="1.2" fill="#ffffff" />
+
+      <polygon points="38,39 42,40 42,45 38,44" fill="#e0f2fe" />
+      <circle cx="40" cy="42" r="2.2" fill="#38bdf8" opacity="0.6" filter="url(#neonGlow)" />
+      <circle cx="40" cy="42" r="1.2" fill="#ffffff" />
+
+      <path d="M 6 48 L 44 48 L 43 54 L 7 54 Z" fill="#94a3b8" stroke="#334155" strokeWidth="0.5" />
+      <rect x="20" y="49" width="10" height="4" rx="0.5" fill="#0f172a" />
+      <rect x="21" y="50" width="8" height="2" fill="#2dd4bf" opacity="0.9" />
+      <circle cx="10" cy="51" r="1.2" fill="#facc15" />
+      <circle cx="40" cy="51" r="1.2" fill="#facc15" />
+    </g>
+
+    {/* Dark Mode Luminous Neon GPS Map Pins */}
+    <g transform="translate(168, 42)">
+      <ellipse cx="0" cy="26" rx="8" ry="3" stroke="#2dd4bf" strokeWidth="0.75" strokeOpacity="0.6" fill="none" />
+      <ellipse cx="0" cy="26" rx="4" ry="1.5" fill="#2dd4bf" fillOpacity="0.4" filter="url(#pinShadow)" />
+      <g filter="url(#neonGlow)">
+        <path d="M 0 -16 C -8 -16 -13 -10 -13 -2 C -13 5 -6 12 0 19 C 6 12 13 5 13 -2 C 13 -10 8 -16 0 -16 Z" fill="url(#darkPinGrad)" />
+        <path d="M 0 -15 C -6 -15 -11 -10 -11 -3 C -11 3 -6 8 0 15 C 1 13 2 11 3 9 C -3 5 -8 0 -8 -3 C -8 -8 -4 -13 0 -15 Z" fill="#ffffff" opacity="0.4" />
+        <circle cx="0" cy="-3" r="4.2" fill="#ffffff" />
+        <circle cx="0" cy="-3" r="2" fill="#0f766e" />
+      </g>
+    </g>
+
+    <g transform="translate(272, 60)">
+      <ellipse cx="0" cy="24" rx="9" ry="3.5" stroke="#2dd4bf" strokeWidth="0.75" strokeOpacity="0.7" fill="none" />
+      <ellipse cx="0" cy="24" rx="5" ry="2" fill="#2dd4bf" fillOpacity="0.45" filter="url(#pinShadow)" />
+      <g filter="url(#neonGlow)">
+        <path d="M 0 -18 C -9 -18 -15 -11 -15 -2 C -15 6 -7 14 0 22 C 7 14 15 6 15 -2 C 15 -11 9 -18 0 -18 Z" fill="url(#darkPinGrad)" />
+        <path d="M 0 -17 C -7 -17 -13 -11 -13 -3 C -13 4 -7 10 0 17 C 2 15 3 13 4 10 C -3 6 -9 1 -9 -3 C -9 -9 -5 -15 0 -17 Z" fill="#ffffff" opacity="0.4" />
+        <circle cx="0" cy="-3.5" r="4.8" fill="#ffffff" />
+        <circle cx="0" cy="-3.5" r="2.3" fill="#0f766e" />
+      </g>
+    </g>
+
+    <g transform="translate(468, 36)">
+      <ellipse cx="0" cy="24" rx="7" ry="2.5" stroke="#2dd4bf" strokeWidth="0.75" strokeOpacity="0.55" fill="none" />
+      <ellipse cx="0" cy="24" rx="3.5" ry="1.5" fill="#2dd4bf" fillOpacity="0.35" filter="url(#pinShadow)" />
+      <g filter="url(#neonGlow)">
+        <path d="M 0 -15 C -7.5 -15 -12 -9 -12 -2 C -12 4.5 -5.5 11 0 17 C 5.5 11 12 4.5 12 -2 C 12 -9 7.5 -15 0 -15 Z" fill="url(#darkPinGrad)" />
+        <path d="M 0 -14 C -6 -14 -10 -9 -10 -3 C -10 3 -5 8 0 14 C 1 12 2 10 3 8 C -2 5 -7 1 -7 -3 C -7 -8 -4 -12 0 -14 Z" fill="#ffffff" opacity="0.4" />
+        <circle cx="0" cy="-3" r="3.8" fill="#ffffff" />
+        <circle cx="0" cy="-3" r="1.8" fill="#0f766e" />
+      </g>
+    </g>
+
+    <g transform="translate(596, 48)">
+      <ellipse cx="0" cy="25" rx="8" ry="3" stroke="#2dd4bf" strokeWidth="0.75" strokeOpacity="0.6" fill="none" />
+      <ellipse cx="0" cy="25" rx="4" ry="1.5" fill="#2dd4bf" fillOpacity="0.4" filter="url(#pinShadow)" />
+      <g filter="url(#neonGlow)">
+        <path d="M 0 -16 C -8 -16 -13 -10 -13 -2 C -13 5 -6 12 0 19 C 6 12 13 5 13 -2 C 13 -10 8 -16 0 -16 Z" fill="url(#darkPinGrad)" />
+        <path d="M 0 -15 C -6 -15 -11 -10 -11 -3 C -11 3 -6 8 0 15 C 1 13 2 11 3 9 C -3 5 -8 0 -8 -3 C -8 -8 -4 -13 0 -15 Z" fill="#ffffff" opacity="0.4" />
+        <circle cx="0" cy="-3" r="4.2" fill="#ffffff" />
+        <circle cx="0" cy="-3" r="2" fill="#0f766e" />
+      </g>
+    </g>
+  </g>
+</svg>

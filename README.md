@@ -42,7 +42,7 @@ The Klever API issues a bearer token that never expires. The browser never sees 
 
 Logout clears the cookie. It can't revoke the token on the server until the backend adds a `logout` mutation (B4).
 
-## Heatmap (`/tracking/heatmap`)
+## Heatmap (`/heatmap`)
 
 Shows where one or more vehicles spent their time over a period of up to 31 days (at most 50 vehicles).
 

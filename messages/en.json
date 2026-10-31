@@ -153,7 +153,15 @@
     "historyShort": "History",
     "vehicles": "Vehicles",
     "accounts": "Accounts",
-    "settings": "Settings"
+    "settings": "Settings",
+    "track": "Track",
+    "liveTracking": "Live Tracking",
+    "detailedTracking": "Detailed Tracking",
+    "salesTracking": "Sales Tracking",
+    "historyTracking": "History Tracking",
+    "liveRoute": "Live Route",
+    "multiTracking": "Multi Tracking",
+    "tracking": "Tracking"
   },
   "shell": {
     "skipToContent": "Skip to content",
@@ -458,6 +466,28 @@
         "description": "Every vehicle in your fleet. Open one to edit its details, documents, sensors and fuel tanks.",
         "add": "Add vehicle",
         "empty": "No vehicles yet. Add your first vehicle.",
+        "kpi": {
+          "totalVehicles": "Total Vehicles",
+          "activeVehicles": "Active Vehicles",
+          "inactiveVehicles": "Inactive Vehicles",
+          "maintenanceDue": "Maintenance Due"
+        },
+        "filters": {
+          "searchPlaceholder": "Search by vehicle ID, asset no., driver, device, IMEI...",
+          "type": "Type",
+          "status": "Status",
+          "company": "Company",
+          "all": "All",
+          "reset": "Reset",
+          "export": "Export",
+          "rows": "{count} rows"
+        },
+        "pagination": {
+          "show": "Show",
+          "entries": "entries"
+        },
+        "actions": "Actions",
+        "copied": "Copied {plate} to clipboard",
         "editTitle": "Edit {plate}",
         "formDescription": "Fields marked * are required.",
         "formTabs": "Vehicle sections",
@@ -1281,6 +1311,28 @@
       "invalidZoom": "Invalid map zoom.",
       "invalidBbox": "Invalid map area.",
       "companyScopeUnavailable": "Choosing another company isn't available yet."
+    }
+  },
+  "tracking": {
+    "live": {
+      "title": "Live Tracking",
+      "description": "Real-time GPS fleet positions, live movement alerts, and active vehicle telemetry."
+    },
+    "detailed": {
+      "title": "Detailed Tracking",
+      "description": "In-depth vehicle metrics, onboard sensor telemetry, and diagnostic logs."
+    },
+    "sales": {
+      "title": "Sales Tracking",
+      "description": "Field agent movements, commercial client site visits, and sales territory routes."
+    },
+    "liveRoute": {
+      "title": "Live Route",
+      "description": "Active journey monitoring, transit corridors, and route progress tracking."
+    },
+    "multi": {
+      "title": "Multi Tracking",
+      "description": "Simultaneous fleet multi-view, split monitoring, and multi-vehicle map surveillance."
     }
   }
 }

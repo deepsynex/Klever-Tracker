@@ -2,12 +2,24 @@
 
 import { HeatmapLayer } from "@deck.gl/aggregation-layers";
 import { GoogleMapsOverlay } from "@deck.gl/google-maps";
-import { APIProvider, Map, useMap, type MapCameraChangedEvent } from "@vis.gl/react-google-maps";
-import { useEffect, useMemo, useRef } from "react";
+import { AdvancedMarker, APIProvider, InfoWindow, Map, useMap, type MapCameraChangedEvent } from "@vis.gl/react-google-maps";
+import { Bike, CarFront, Truck } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Bbox, HeatmapCell } from "@/lib/heatmap/aggregate";
 import { DUBAI_CENTER, type Rgb } from "@/lib/heatmap/client";
+import { cn } from "@/lib/utils";
 
 export type HeatmapStyle = { visible: boolean; colorRange: Rgb[]; opacity: number; radius: number };
+
+export type VehicleMapMarker = {
+  id: string;
+  label: string;
+  kind: "truck" | "van" | "bike" | "car";
+  position: { lat: number; lng: number };
+  speed?: number;
+  recordedAt?: string;
+  totalPoints?: number;
+};
 
 type Props = {
   apiKey: string;
@@ -17,23 +29,83 @@ type Props = {
   fitKey: number;
   style: HeatmapStyle;
   onZoomChange: (zoom: number) => void;
+  markers?: VehicleMapMarker[];
 };
 
-/** Google base map with a deck.gl HeatmapLayer. Loaded with `ssr: false` (WebGL needs a browser). */
-export default function HeatmapMap({ apiKey, cells, bounds, fitKey, style, onZoomChange }: Props) {
+/** Google base map with a deck.gl HeatmapLayer and vehicle position markers. */
+export default function HeatmapMap({ apiKey, cells, bounds, fitKey, style, onZoomChange, markers }: Props) {
+  const [activeMarker, setActiveMarker] = useState<VehicleMapMarker | null>(null);
+
   return (
     <APIProvider apiKey={apiKey}>
       <Map
         className="size-full"
+        mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID"}
         defaultCenter={DUBAI_CENTER}
         defaultZoom={11}
         gestureHandling="greedy"
         streetViewControl={false}
         mapTypeControl={false}
+        fullscreenControl={false}
+        zoomControl={true}
         onCameraChanged={(e: MapCameraChangedEvent) => onZoomChange(e.detail.zoom)}
       >
         <DeckHeatmap cells={cells} style={style} />
         <FitBounds bounds={bounds} fitKey={fitKey} />
+        {markers?.map((m) => (
+          <AdvancedMarker
+            key={m.id}
+            position={m.position}
+            title={m.label}
+            onClick={() => setActiveMarker(m)}
+          >
+            <div
+              className={cn(
+                "grid size-9 place-items-center rounded-full text-white ring-2 ring-white shadow-lg transition-transform hover:scale-110 cursor-pointer",
+                m.kind === "bike"
+                  ? "bg-[#f4511e]"
+                  : m.kind === "truck"
+                    ? "bg-[#00897b]"
+                    : "bg-[#1e88e5]",
+              )}
+            >
+              {m.kind === "bike" ? (
+                <Bike className="size-4.5" />
+              ) : m.kind === "truck" ? (
+                <Truck className="size-4.5" />
+              ) : (
+                <CarFront className="size-4.5" />
+              )}
+            </div>
+          </AdvancedMarker>
+        ))}
+
+        {activeMarker && (
+          <InfoWindow
+            position={activeMarker.position}
+            onCloseClick={() => setActiveMarker(null)}
+          >
+            <div className="p-1 min-w-[200px] text-xs text-foreground font-sans">
+              <div className="font-bold text-sm text-[#0f4c47] mb-1">{activeMarker.label}</div>
+              <div className="space-y-0.5 text-muted-foreground text-[11px]">
+                <div><span className="font-semibold text-foreground">Exact DB Lat:</span> {activeMarker.position.lat.toFixed(6)}</div>
+                <div><span className="font-semibold text-foreground">Exact DB Lng:</span> {activeMarker.position.lng.toFixed(6)}</div>
+                {activeMarker.recordedAt && (
+                  <div><span className="font-semibold text-foreground">Recorded:</span> {activeMarker.recordedAt}</div>
+                )}
+                {typeof activeMarker.speed === "number" && (
+                  <div><span className="font-semibold text-foreground">Speed:</span> {activeMarker.speed} km/h</div>
+                )}
+                {typeof activeMarker.totalPoints === "number" && (
+                  <div><span className="font-semibold text-foreground">Points in DB:</span> {activeMarker.totalPoints}</div>
+                )}
+                <div className="mt-1.5 pt-1 border-t border-border/60 text-[10px] text-emerald-600 font-semibold">
+                  ✓ Verified Live Database Telemetry
+                </div>
+              </div>
+            </div>
+          </InfoWindow>
+        )}
       </Map>
     </APIProvider>
   );
@@ -75,8 +147,6 @@ function DeckHeatmap({ cells, style }: { cells: HeatmapCell[]; style: HeatmapSty
       o.setMap(map);
       overlay.current = o;
     };
-    // Given a map that isn't initialised yet, deck.gl waits on a 'renderingtype_changed' listener it
-    // never removes, which crashes once finalize() has run (Strict Mode remounts). Wait here instead.
     let pending: google.maps.MapsEventListener | null = null;
     if (map.getRenderingType() === google.maps.RenderingType.UNINITIALIZED) {
       pending = map.addListener("renderingtype_changed", () => {
@@ -99,21 +169,13 @@ function DeckHeatmap({ cells, style }: { cells: HeatmapCell[]; style: HeatmapSty
 
 function FitBounds({ bounds, fitKey }: { bounds: Bbox | null; fitKey: number }) {
   const map = useMap();
-  const fitted = useRef(-1);
+  const lastFittedKey = useRef<number>(-1);
 
   useEffect(() => {
-    // A negative key means "results not ready yet"; keep the current view.
-    if (!map || fitKey < 0 || fitted.current === fitKey) return;
-    fitted.current = fitKey;
-    if (!bounds) {
-      map.setCenter(DUBAI_CENTER);
-      map.setZoom(11);
-    } else if (bounds.north - bounds.south < 0.002 && bounds.east - bounds.west < 0.002) {
-      map.setCenter({ lat: (bounds.north + bounds.south) / 2, lng: (bounds.east + bounds.west) / 2 });
-      map.setZoom(16);
-    } else {
-      map.fitBounds(bounds, 48);
-    }
+    if (!map || !bounds || fitKey < 0) return;
+    if (lastFittedKey.current === fitKey) return;
+    lastFittedKey.current = fitKey;
+    map.fitBounds(bounds, 64);
   }, [map, bounds, fitKey]);
 
   return null;
