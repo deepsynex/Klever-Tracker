@@ -1,7 +1,7 @@
 import createIntlMiddleware from "next-intl/middleware";
 import { NextResponse, type NextRequest } from "next/server";
 import { isAppLocale, routing } from "./i18n/routing";
-import { SESSION_COOKIE, isPublicPath } from "./lib/session-config";
+import { SESSION_COOKIE, SIGNED_OUT_COOKIE, devAuthToken, isPublicPath } from "./lib/session-config";
 
 const handleI18nRouting = createIntlMiddleware(routing);
 
@@ -16,8 +16,7 @@ export function proxy(request: NextRequest) {
   if (isAppLocale(maybeLocale)) {
     const subPath = `/${rest.join("/")}`;
     const hasSession =
-      request.cookies.has(SESSION_COOKIE) ||
-      (process.env.NODE_ENV !== "production" && Boolean(process.env.DEV_AUTH_TOKEN));
+      request.cookies.has(SESSION_COOKIE) || Boolean(devAuthToken(request.cookies.has(SIGNED_OUT_COOKIE)));
 
     if (!hasSession && !isPublicPath(subPath)) {
       const loginUrl = new URL(`/${maybeLocale}/login`, request.url);

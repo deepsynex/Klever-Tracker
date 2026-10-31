@@ -42,6 +42,26 @@ The Klever API issues a bearer token that never expires. The browser never sees 
 
 Logout clears the cookie. It can't revoke the token on the server until the backend adds a `logout` mutation (B4).
 
+## Heatmap (`/tracking/heatmap`)
+
+Shows where one or more vehicles spent their time over a period of up to 31 days (at most 50 vehicles).
+
+The Klever API has no aggregate query, so the Next.js server builds the heatmap. **`GET /api/heatmap`** (`src/app/api/heatmap/route.ts`) validates the query (`src/lib/heatmap/request.ts`). It checks every vehicle against the company's own `vehicles` / `devices` lists, because Klever scopes by token. Then it pages through `positionHistory` 1,000 fixes at a time and aggregates on the server (`src/lib/heatmap/service.ts`, `aggregate.ts`). The browser only receives `{ total_points, cell_count, bounds, cells: [{ lat, lng, weight }] }`, capped at 5,000 cells. Fixes are cached per session for 5 minutes, so zooming re-aggregates without calling Klever again. Selections over 300,000 points get a 422 asking for a shorter period.
+
+Before weighting, the server drops bad fixes: missing coordinates, `(0,0)`, and single-fix jumps that would need more than 300 km/h. Points are snapped to a grid of about 8 screen pixels at the current zoom. Each cell returns the centroid of its points and the sum of their weights.
+
+| Weight mode | Weight of each GPS fix | Good for |
+|---|---|---|
+| `density` | 1 | Where the vehicle reported most. Busy roads show up as much as stops, because trackers report more often while moving. |
+| `dwell` | Seconds until that vehicle's next fix (SQL: `LEAD(recorded_at) OVER (PARTITION BY vehicle ORDER BY recorded_at)`), **capped at 30 minutes** | Where the vehicle actually spent its time. The cap stops a tracker that was offline or asleep for hours from creating a fake hotspot at its last position. |
+| `idle` | Same as `dwell`, but only for fixes with ignition on and speed below 3 km/h | Engine-on waiting: queues, drop-offs with the engine running, idling at sites. |
+
+The map is Google Maps (`@vis.gl/react-google-maps`) with a deck.gl `HeatmapLayer` through `GoogleMapsOverlay`, not the deprecated `google.maps.visualization.HeatmapLayer`. The map refetches when the zoom settles on a level with a different grid size (debounced by 500 ms).
+
+In mock mode (`KLEVER_MOCK=true`), `src/lib/heatmap/demo-tracks.ts` generates repeatable routes for vehicles 1–3 across Dubai and Sharjah from 1 September 2026 onward. They include parking and idling stops, traffic crawls, a three-hour device-offline gap (vehicle 2) and a few bad fixes (vehicle 3).
+
+Not available yet: a company picker for platform staff (the API has no cross-company scope, A1). Passing `company_id` returns a 422.
+
 ## Project layout
 
 ```

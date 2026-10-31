@@ -107,7 +107,18 @@
       "submitting": "Signing in…",
       "forgot": "Forgot your password?",
       "resetDone": "Your password has been changed. Sign in with your new password.",
-      "mockHint": "Mock API is on. Sign in with {email} and {password}."
+      "mockHint": "Mock API is on. Sign in with {email} and {password}.",
+      "google": {
+        "google_cancelled": "Google sign-in was cancelled.",
+        "invalid_state": "Your Google sign-in session expired. Please try again.",
+        "missing_code": "Google didn't return a sign-in code. Please try again.",
+        "oauth_failed": "Google sign-in failed. Please try again or sign in with your email.",
+        "google_unverified": "This Google account's email isn't verified. Verify it with Google or sign in with your email.",
+        "google_not_registered": "This Google account isn't registered in Klever Tracker. Please contact your administrator to get access.",
+        "google_unavailable": "We couldn't check your Google account right now. Please try again later or sign in with your email.",
+        "google_use_password": "Your account was found. Google sign-in isn't enabled yet, so please enter your password to continue.",
+        "unknown": "A sign-in error occurred. Please try again."
+      }
     },
     "forgot": {
       "title": "Reset your password",
@@ -147,13 +158,21 @@
     "comingSoon": "Available in phase {n}",
     "mastersGroup": "Masters",
     "vehicleManagement": "Vehicle management",
-    "accountManagement": "Account management"
+    "heatmap": "Heatmap",
+    "trackingGroup": "Tracking",
+    "accountManagement": "Account management",
+    "open": "Open menu",
+    "historyShort": "History",
+    "vehicles": "Vehicles",
+    "accounts": "Accounts",
+    "settings": "Settings"
   },
   "shell": {
     "skipToContent": "Skip to content",
     "signOut": "Sign out",
     "signedInAs": "Signed in as {email}",
-    "changePassword": "Change password"
+    "changePassword": "Change password",
+    "tagline": "Vehicle tracking system"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -169,7 +188,10 @@
       "network": "Unreachable",
       "unknown": "Error",
       "endpoint": "Endpoint",
-      "response": "Response"
+      "response": "Response",
+      "copy": "Copy endpoint",
+      "copied": "Endpoint copied",
+      "upMessage": "Klever Tracker GraphQL API is up."
     },
     "setup": {
       "title": "Phase 1 progress",
@@ -185,6 +207,50 @@
         "users": "Users, roles, departments and vehicle access",
         "schema": "Typed API operations (needs schema.graphql)"
       }
+    },
+    "welcomeBack": "Welcome back,",
+    "cta": {
+      "history": "Open History",
+      "heatmap": "View Heatmap"
+    },
+    "status": {
+      "title": "System Status",
+      "allOk": "All Systems Operational",
+      "degraded": "Needs attention",
+      "api": "API",
+      "database": "Database",
+      "tracking": "Tracking",
+      "online": "Online",
+      "offline": "Offline",
+      "unknown": "Not checked"
+    },
+    "kpi": {
+      "total": "Total Vehicles",
+      "totalSub": "Registered in the system",
+      "devices": "{n} GPS",
+      "active": "Active Vehicles",
+      "activeSub": "Marked active in the fleet",
+      "latency": "API Response",
+      "latencySub": "Live check, just now",
+      "stable": "Stable",
+      "slow": "Slow",
+      "down": "Down",
+      "alerts": "Active Alerts",
+      "alertsSub": "Requires attention"
+    },
+    "map": {
+      "title": "Live Fleet Map",
+      "preview": "(Preview)",
+      "open": "View History",
+      "speed": "{n} km/h",
+      "moving": "Moving",
+      "stopped": "Stopped",
+      "offline": "Offline",
+      "empty": "No positions in the last 7 days"
+    },
+    "alerts": {
+      "title": "Recent Alerts",
+      "empty": "No alerts yet"
     }
   },
   "notFound": {
@@ -264,6 +330,13 @@
       "plannedRoute": "Planned Route",
       "noPoints": "No tracking data found for the selected vehicle and time range.",
       "selectVehiclePrompt": "Select a vehicle plate number and date range above, then click Track Vehicle."
+    },
+    "panel": {
+      "hide": "Hide tracking parameters",
+      "show": "Show tracking parameters",
+      "close": "Close panel",
+      "move": "Move tracking parameters",
+      "moveHint": "Drag to move. Arrow keys move it too; Home or double-click puts it back."
     }
   },
   "masters": {
@@ -1159,5 +1232,80 @@
     "autoRefresh": "Updates every {seconds} seconds.",
     "openInMaps": "Open in Google Maps",
     "mapLabel": "Map showing {plate}"
+  },
+  "heatmap": {
+    "title": "Heatmap",
+    "subtitle": "Where vehicles spent their time over a chosen period.",
+    "filters": {
+      "title": "Filters",
+      "vehicles": "Vehicles",
+      "searchVehicles": "Search vehicles",
+      "selectedCount": "{count} of {max} selected",
+      "selectAll": "Select all",
+      "selectNone": "Clear",
+      "noMatches": "No vehicles match.",
+      "device": "device",
+      "loadingVehicles": "Loading vehicles…",
+      "noVehicles": "Your company has no vehicles or tracking devices yet.",
+      "fromDate": "From date",
+      "fromTime": "From time",
+      "toDate": "To date",
+      "toTime": "To time",
+      "weightMode": "Weight mode",
+      "show": "Show",
+      "clear": "Clear",
+      "loading": "Loading…"
+    },
+    "modes": {
+      "density": {
+        "label": "Density (GPS points)",
+        "hint": "Counts GPS points per area. Busy roads light up as much as stops."
+      },
+      "dwell": {
+        "label": "Dwell time",
+        "hint": "Time spent at each place. Gaps over 30 minutes count as 30, so an offline device doesn't create fake hotspots."
+      },
+      "idle": {
+        "label": "Idling",
+        "hint": "Dwell time only while the engine is on and the vehicle is below 3 km/h."
+      }
+    },
+    "toolbar": {
+      "label": "Heatmap display",
+      "toggle": "Heatmap",
+      "gradient": "Colour scale",
+      "gradients": {
+        "greenRed": "Green, yellow, red",
+        "cyanRed": "Cyan, blue, red"
+      },
+      "opacity": "Opacity",
+      "radius": "Radius"
+    },
+    "summary": {
+      "points": "GPS points",
+      "cells": "Cells",
+      "range": "Time range",
+      "truncated": "Showing the {count} busiest cells only. Zoom in for more detail.",
+      "dropped": "{count, plural, one {# bad GPS fix was} other {# bad GPS fixes were}} ignored."
+    },
+    "map": {
+      "loading": "Building heatmap…",
+      "noData": "No data for the selected period",
+      "noApiKey": "Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to web/.env.local to show the map. The summary still works without it."
+    },
+    "errors": {
+      "vehiclesRequired": "Select at least one vehicle.",
+      "tooManyVehicles": "Select 50 vehicles or fewer.",
+      "invalidId": "One of the selected vehicles is invalid.",
+      "notInCompany": "One or more selected vehicles don't belong to your company.",
+      "invalidDate": "Enter a valid date and time.",
+      "toBeforeFrom": "The end must be after the start.",
+      "rangeTooLong": "Choose a period of 31 days or less.",
+      "tooManyPoints": "This selection has too many GPS points. Choose a shorter period or fewer vehicles.",
+      "invalidMode": "Choose a weight mode.",
+      "invalidZoom": "Invalid map zoom.",
+      "invalidBbox": "Invalid map area.",
+      "companyScopeUnavailable": "Choosing another company isn't available yet."
+    }
   }
 }
