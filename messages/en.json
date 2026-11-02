@@ -1364,6 +1364,10 @@
     "videoMonitoring": {
       "title": "Video Monitoring",
       "description": "Live onboard dashcam feeds, multi-camera streaming, and safety video surveillance."
+    },
+    "sales": {
+      "title": "Sales Tracking",
+      "description": "Field sales visits, customer check-ins, and route coverage for sales teams."
     }
   }
 }

@@ -1,5 +1,3 @@
-"use client";
-
 import { Activity, ArrowRight, Flame, History, Layers, Radio, type LucideIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { PageHeader, StatusBadge } from "@/components/masters/page-header";
