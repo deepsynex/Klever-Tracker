@@ -1,0 +1,6 @@
+$kind: collection
+name: Mutations (manual)
+description: |-
+  Change data or send email. Not part of the default run: execute one request at a time with
+  -i, against a test company, after setting the ids it needs in the environment.
+order: 2000

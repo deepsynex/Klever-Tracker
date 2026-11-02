@@ -1,0 +1,24 @@
+$kind: http-request
+method: POST
+url: '{{graphqlUrl}}'
+order: 12000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "mutation RevokeUserVehicleGroupAccess($id: ID!) { revokeUserVehicleGroupAccess(id: $id) { id } }",
+      "variables": {
+        "id": "{{groupGrantId}}"
+      }
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const body = pm.response.json();
+      pm.test("No GraphQL errors", () => pm.expect(body.errors, JSON.stringify(body.errors)).to.be.undefined);

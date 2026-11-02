@@ -1,0 +1,27 @@
+$kind: http-request
+method: POST
+url: '{{graphqlUrl}}'
+order: 6000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "mutation CreateDepartment($companyId: ID!, $name: String!) { createDepartment(companyId: $companyId, name: $name) { id } }",
+      "variables": {
+        "companyId": "{{companyId}}",
+        "name": "Postman test {{$timestamp}}"
+      }
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const body = pm.response.json();
+      pm.test("No GraphQL errors", () => pm.expect(body.errors, JSON.stringify(body.errors)).to.be.undefined);
+
+      pm.environment.set("departmentId", body.data.createDepartment.id);

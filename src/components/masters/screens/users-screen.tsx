@@ -1,6 +1,7 @@
 "use client";
 
-import { Car, Download, IdCard, Plus, Search, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Car, Download, History, IdCard, Layers, Plus, Search, ShieldCheck, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -26,14 +27,23 @@ import {
   DELETE_USER,
   GRANT_USER_DRIVER,
   GRANT_USER_VEHICLE,
+  GRANT_USER_VEHICLE_GROUP,
   REVOKE_USER_DRIVER,
   REVOKE_USER_VEHICLE,
+  REVOKE_USER_VEHICLE_GROUP,
   UPDATE_USER,
+  USER_LOGIN_LOGS,
   USERS,
   type AccessGrant,
+  type AmVehicleGroup,
   type User,
+  type UserLoginLog,
   type UsersResult,
 } from "@/lib/graphql/account-management";
+import { gqlRequest } from "@/lib/graphql/client";
+import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
+import { groupTree } from "@/lib/account-management/group-tree";
+import { RolePermissionsSheet } from "./roles-screen";
 import { validateLookupName } from "@/lib/vehicle-management/validation";
 import { useErrorText, useVmLookups, useVmMutations, useVmQuery } from "@/lib/vehicle-management/use-vm";
 
@@ -72,13 +82,18 @@ export function UsersScreen() {
   const errorText = useErrorText();
   const [editing, setEditing] = useState<User | "new" | null>(null);
   const [deleting, setDeleting] = useState<User | null>(null);
-  const [assigning, setAssigning] = useState<{ user: User; kind: "vehicles" | "drivers" } | null>(null);
+  const [assigning, setAssigning] = useState<{ user: User; kind: "vehicles" | "drivers" | "groups" } | null>(null);
+  const [history, setHistory] = useState<User | null>(null);
+  const [permissionsOf, setPermissionsOf] = useState<User | null>(null);
 
   const data = list.data;
   const roleName = useMemo(() => new Map((data?.roles.data ?? []).map((r) => [r.id, r.name])), [data]);
   const deptName = useMemo(() => new Map((data?.departments.data ?? []).map((d) => [d.id, d.name])), [data]);
   const rows = useMemo(
-    () => [...(data?.users.data ?? [])].filter((u) => lookups.inScope(u.companyId)).sort((a, b) => a.name.localeCompare(b.name)),
+    () =>
+      [...(data?.users.data ?? [])]
+        .filter((u) => lookups.inScope(u.companyId))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [data, lookups],
   );
 
@@ -86,7 +101,17 @@ export function UsersScreen() {
     try {
       await downloadSheet(
         [
-          [t("f.name"), t("f.address"), t("f.mobile"), t("f.email"), t("f.role"), t("f.department"), t("f.username"), tc("status"), t("f.isAdmin")],
+          [
+            t("f.name"),
+            t("f.address"),
+            t("f.mobile"),
+            t("f.email"),
+            t("f.role"),
+            t("f.department"),
+            t("f.username"),
+            tc("status"),
+            t("f.isAdmin"),
+          ],
           ...rows.map((u) => [
             u.name,
             u.address ?? "",
@@ -132,19 +157,75 @@ export function UsersScreen() {
           </Button>
         }
         onEdit={lookups.allow("core", "edit") ? setEditing : undefined}
-        onDelete={lookups.allow("core", "delete") ? (u) => (u.id === lookups.meId ? toast.error(t("cantDeleteSelf")) : setDeleting(u)) : undefined}
-        rowActions={(u) =>
-          lookups.allow("core", "edit") ? (
-            <>
-              <Button variant="ghost" size="icon" className="size-8" onClick={() => setAssigning({ user: u, kind: "vehicles" })} aria-label={t("assignVehicles")} title={t("assignVehicles")}>
-                <Car />
-              </Button>
-              <Button variant="ghost" size="icon" className="size-8" onClick={() => setAssigning({ user: u, kind: "drivers" })} aria-label={t("assignDrivers")} title={t("assignDrivers")}>
-                <IdCard />
-              </Button>
-            </>
-          ) : null
+        onDelete={
+          lookups.allow("core", "delete")
+            ? (u) => (u.id === lookups.meId ? toast.error(t("cantDeleteSelf")) : setDeleting(u))
+            : undefined
         }
+        rowActions={(u) => (
+          <>
+            {lookups.can("core") && roleName.has(u.roleId) ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={() => setPermissionsOf(u)}
+                aria-label={t("rolePermissions")}
+                title={t("rolePermissionsOf", { role: roleName.get(u.roleId) ?? "" })}
+              >
+                <ShieldCheck />
+              </Button>
+            ) : null}
+            {lookups.can("admin") ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={() => setHistory(u)}
+                aria-label={t("loginHistory")}
+                title={t("loginHistory")}
+              >
+                <History />
+              </Button>
+            ) : null}
+            {lookups.allow("core", "edit") ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => setAssigning({ user: u, kind: "vehicles" })}
+                  aria-label={t("assignVehicles")}
+                  title={t("assignVehicles")}
+                >
+                  <Car />
+                </Button>
+                {lookups.can("vehicle-groups") ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={() => setAssigning({ user: u, kind: "groups" })}
+                    aria-label={t("assignGroups")}
+                    title={t("assignGroups")}
+                  >
+                    <Layers />
+                  </Button>
+                ) : null}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => setAssigning({ user: u, kind: "drivers" })}
+                  aria-label={t("assignDrivers")}
+                  title={t("assignDrivers")}
+                >
+                  <IdCard />
+                </Button>
+              </>
+            ) : null}
+          </>
+        )}
         columns={[
           {
             key: "name",
@@ -160,12 +241,20 @@ export function UsersScreen() {
           { key: "mobile", header: t("f.mobile"), cell: (u) => <span dir="ltr">{u.mobile ?? "—"}</span> },
           { key: "email", header: t("f.email"), cell: (u) => u.email },
           { key: "role", header: t("f.role"), cell: (u) => roleName.get(u.roleId) ?? `#${u.roleId}` },
-          { key: "department", header: t("f.department"), cell: (u) => (u.departmentId ? (deptName.get(u.departmentId) ?? "—") : "—") },
+          {
+            key: "department",
+            header: t("f.department"),
+            cell: (u) => (u.departmentId ? (deptName.get(u.departmentId) ?? "—") : "—"),
+          },
           { key: "username", header: t("f.username"), cell: (u) => <span dir="ltr">{u.username}</span> },
           {
             key: "status",
             header: tc("status"),
-            cell: (u) => <StatusBadge tone={u.status === "active" ? "ok" : "muted"}>{u.status === "active" ? tc("statuses.active") : tc("statuses.inactive")}</StatusBadge>,
+            cell: (u) => (
+              <StatusBadge tone={u.status === "active" ? "ok" : "muted"}>
+                {u.status === "active" ? tc("statuses.active") : tc("statuses.inactive")}
+              </StatusBadge>
+            ),
           },
         ]}
       />
@@ -174,10 +263,39 @@ export function UsersScreen() {
         <UserSheet user={editing === "new" ? null : editing} data={data} onClose={() => setEditing(null)} />
       ) : null}
       {assigning?.kind === "vehicles" && data ? (
-        <AssignVehiclesSheet user={assigning.user} saved={grantsOf(data.vehicles.data, assigning.user.id)} onClose={() => setAssigning(null)} />
+        <AssignVehiclesSheet
+          user={assigning.user}
+          saved={grantsOf(data.vehicles.data, assigning.user.id)}
+          onClose={() => setAssigning(null)}
+        />
       ) : null}
       {assigning?.kind === "drivers" && data ? (
-        <AssignDriversSheet user={assigning.user} saved={grantsOf(data.drivers.data, assigning.user.id)} onClose={() => setAssigning(null)} />
+        <AssignDriversSheet
+          user={assigning.user}
+          saved={grantsOf(data.drivers.data, assigning.user.id)}
+          onClose={() => setAssigning(null)}
+        />
+      ) : null}
+      {assigning?.kind === "groups" && data ? (
+        <AssignGroupsSheet
+          user={assigning.user}
+          groups={data.vehicleGroups.data}
+          saved={grantsOf(data.vehicleGroups.data, assigning.user.id)}
+          onClose={() => setAssigning(null)}
+        />
+      ) : null}
+      {history ? <LoginHistorySheet user={history} onClose={() => setHistory(null)} /> : null}
+      {permissionsOf && data ? (
+        <RolePermissionsSheet
+          roleId={permissionsOf.roleId}
+          // Permissions belong to the role: say whose role it is and who else it affects.
+          notice={t("rolePermissionsNotice", {
+            name: permissionsOf.name,
+            role: roleName.get(permissionsOf.roleId) ?? "",
+            n: data.users.data.filter((x) => x.roleId === permissionsOf.roleId).length,
+          })}
+          onClose={() => setPermissionsOf(null)}
+        />
       ) : null}
 
       <ConfirmDelete
@@ -212,10 +330,15 @@ function UserSheet({ user, data, onClose }: { user: User | null; data: UsersResu
   const isSelf = Boolean(user && user.id === lookups.meId);
   // The company's user limit (the API enforces it as well).
   const maxUsers = lookups.company?.maxUsers ?? null;
-  const atLimit = !user && limitReached(maxUsers, data.users.data.filter((u) => u.companyId === lookups.companyId).length);
+  const atLimit =
+    !user && limitReached(maxUsers, data.users.data.filter((u) => u.companyId === lookups.companyId).length);
 
-  const roles = data.roles.data.filter((r) => r.companyId === lookups.companyId && (r.status === "active" || r.id === form.roleId));
-  const departments = data.departments.data.filter((d) => d.companyId === lookups.companyId).sort((a, b) => a.name.localeCompare(b.name));
+  const roles = data.roles.data.filter(
+    (r) => r.companyId === lookups.companyId && (r.status === "active" || r.id === form.roleId),
+  );
+  const departments = data.departments.data
+    .filter((d) => d.companyId === lookups.companyId)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const save = async () => {
     const others = data.users.data.filter((u) => u.id !== user?.id);
@@ -241,7 +364,11 @@ function UserSheet({ user, data, onClose }: { user: User | null; data: UsersResu
     }
   };
 
-  const text = (key: keyof UserForm, label: string, opts: { required?: boolean; type?: string; dir?: "ltr"; span?: boolean; hint?: string; autoComplete?: string } = {}) => (
+  const text = (
+    key: keyof UserForm,
+    label: string,
+    opts: { required?: boolean; type?: string; dir?: "ltr"; span?: boolean; hint?: string; autoComplete?: string } = {},
+  ) => (
     <div className={opts.span ? "sm:col-span-2" : undefined}>
       <Field id={`u-${key}`} label={opts.required ? `${label} *` : label} error={errors[key]} hint={opts.hint}>
         <Input
@@ -300,7 +427,10 @@ function UserSheet({ user, data, onClose }: { user: User | null; data: UsersResu
               canAdd={lookups.allow("department", "add")}
               validate={({ name }) => validateLookupName(name, departments)}
               onCreate={async ({ name }) => {
-                const res = await run<{ createDepartment: { id: string } }>(CREATE_DEPARTMENT, { companyId: lookups.companyId, name });
+                const res = await run<{ createDepartment: { id: string } }>(CREATE_DEPARTMENT, {
+                  companyId: lookups.companyId,
+                  name,
+                });
                 await refresh();
                 return res.createDepartment.id;
               }}
@@ -309,26 +439,58 @@ function UserSheet({ user, data, onClose }: { user: User | null; data: UsersResu
           {text("address", t("f.address"), { span: true })}
           <div className="sm:col-span-2">
             <Field id="u-photo" label={t("f.photo")} error={errors.photoPath}>
-              <FileUpload id="u-photo" purpose="user_photo" value={form.photoPath} onChange={(url) => set("photoPath", url)} />
+              <FileUpload
+                id="u-photo"
+                purpose="user_photo"
+                value={form.photoPath}
+                onChange={(url) => set("photoPath", url)}
+              />
             </Field>
           </div>
         </FormSection>
 
         <FormSection title={t("sections.login")} description={user ? t("passwordKeepHint") : undefined}>
           {text("username", t("f.username"), { required: true, dir: "ltr", autoComplete: "off" })}
-          <Field id="u-status" label={`${tc("status")} *`} error={errors.status} hint={isSelf ? t("selfLocked") : undefined}>
+          <Field
+            id="u-status"
+            label={`${tc("status")} *`}
+            error={errors.status}
+            hint={isSelf ? t("selfLocked") : undefined}
+          >
             <Select id="u-status" value={form.status} disabled={isSelf} onChange={(e) => set("status", e.target.value)}>
               <option value="active">{tc("statuses.active")}</option>
               <option value="inactive">{tc("statuses.inactive")}</option>
             </Select>
           </Field>
-          {text("password", user ? t("f.newPassword") : t("f.password"), { required: !user, type: "password", dir: "ltr", autoComplete: "new-password", hint: tc("passwordRule") })}
-          {text("confirmPassword", t("f.confirmPassword"), { required: !user, type: "password", dir: "ltr", autoComplete: "new-password" })}
+          {text("password", user ? t("f.newPassword") : t("f.password"), {
+            required: !user,
+            type: "password",
+            dir: "ltr",
+            autoComplete: "new-password",
+            hint: tc("passwordRule"),
+          })}
+          {text("confirmPassword", t("f.confirmPassword"), {
+            required: !user,
+            type: "password",
+            dir: "ltr",
+            autoComplete: "new-password",
+          })}
         </FormSection>
 
         <FormSection title={t("sections.access")}>
-          <Field id="u-roleId" label={`${t("f.role")} *`} error={errors.roleId} hint={isSelf ? t("selfLocked") : roles.length === 0 ? t("noRoles") : undefined}>
-            <Select id="u-roleId" value={form.roleId} disabled={isSelf} onChange={(e) => set("roleId", e.target.value)} aria-invalid={errors.roleId ? true : undefined}>
+          <Field
+            id="u-roleId"
+            label={`${t("f.role")} *`}
+            error={errors.roleId}
+            hint={isSelf ? t("selfLocked") : roles.length === 0 ? t("noRoles") : undefined}
+          >
+            <Select
+              id="u-roleId"
+              value={form.roleId}
+              disabled={isSelf}
+              onChange={(e) => set("roleId", e.target.value)}
+              aria-invalid={errors.roleId ? true : undefined}
+            >
               <option value="">{tc("choose")}</option>
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -338,7 +500,12 @@ function UserSheet({ user, data, onClose }: { user: User | null; data: UsersResu
             </Select>
           </Field>
           <div className="grid content-end gap-1 pb-1">
-            <Checkbox label={t("f.isAdmin")} checked={form.isAdmin} disabled={isSelf} onChange={(e) => set("isAdmin", e.target.checked)} />
+            <Checkbox
+              label={t("f.isAdmin")}
+              checked={form.isAdmin}
+              disabled={isSelf}
+              onChange={(e) => set("isAdmin", e.target.checked)}
+            />
             <p className="text-xs text-subtle">{t("isAdminHint")}</p>
           </div>
         </FormSection>
@@ -416,7 +583,9 @@ function AssignDriversSheet({ user, saved, onClose }: { user: User; saved: Grant
   const [pending, setPending] = useState(false);
 
   const q = query.trim().toLowerCase();
-  const available = lookups.drivers.filter((d) => !chosen.has(d.id) && (!q || `${d.name} ${d.mobile} ${d.employeeId ?? ""}`.toLowerCase().includes(q)));
+  const available = lookups.drivers.filter(
+    (d) => !chosen.has(d.id) && (!q || `${d.name} ${d.mobile} ${d.employeeId ?? ""}`.toLowerCase().includes(q)),
+  );
   const assigned = lookups.drivers.filter((d) => chosen.has(d.id));
   const toggle = (id: string, on: boolean) =>
     setChosen((prev) => {
@@ -475,15 +644,29 @@ function AssignDriversSheet({ user, saved, onClose }: { user: User; saved: Grant
               {t("driverList")}
             </h3>
             <div className="relative">
-              <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-subtle" aria-hidden />
-              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("searchDrivers")} aria-label={t("searchDrivers")} className="h-8 ps-8" />
+              <Search
+                className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-subtle"
+                aria-hidden
+              />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("searchDrivers")}
+                aria-label={t("searchDrivers")}
+                className="h-8 ps-8"
+              />
             </div>
             <ul className={listBox}>
-              {available.length === 0 ? <li className="px-1 py-2 text-[13px] text-muted-foreground">{tc("noMatches")}</li> : null}
+              {available.length === 0 ? (
+                <li className="px-1 py-2 text-[13px] text-muted-foreground">{tc("noMatches")}</li>
+              ) : null}
               {available.map((d) => (
                 <li key={d.id} className="flex items-center justify-between gap-2 rounded px-1 py-1 hover:bg-surface-2">
                   <span className="min-w-0 truncate text-[13px]">
-                    {d.name} <span className="text-subtle" dir="ltr">· {d.mobile}</span>
+                    {d.name}{" "}
+                    <span className="text-subtle" dir="ltr">
+                      · {d.mobile}
+                    </span>
                   </span>
                   <Button variant="secondary" size="sm" onClick={() => toggle(d.id, true)}>
                     <Plus />
@@ -498,11 +681,18 @@ function AssignDriversSheet({ user, saved, onClose }: { user: User; saved: Grant
               {t("assignedDrivers", { count: assigned.length })}
             </h3>
             <ul className={listBox}>
-              {assigned.length === 0 ? <li className="px-1 py-2 text-[13px] text-muted-foreground">{t("noneAssigned")}</li> : null}
+              {assigned.length === 0 ? (
+                <li className="px-1 py-2 text-[13px] text-muted-foreground">{t("noneAssigned")}</li>
+              ) : null}
               {assigned.map((d) => (
                 <li key={d.id} className="flex items-center justify-between gap-2 rounded px-1 py-1 hover:bg-surface-2">
                   <span className="min-w-0 truncate text-[13px]">{d.name}</span>
-                  <Button variant="ghost" size="sm" onClick={() => toggle(d.id, false)} className="hover:text-destructive">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggle(d.id, false)}
+                    className="hover:text-destructive"
+                  >
                     <X />
                     {tc("remove")}
                   </Button>
@@ -513,6 +703,193 @@ function AssignDriversSheet({ user, saved, onClose }: { user: User; saved: Grant
         </div>
       )}
       {guard.dialog}
+    </Sheet>
+  );
+}
+
+/** Vehicle groups a non-admin user may see: access to a group covers every vehicle in it. */
+function AssignGroupsSheet({
+  user,
+  groups,
+  saved,
+  onClose,
+}: {
+  user: User;
+  groups: AmVehicleGroup[];
+  saved: Grants;
+  onClose: () => void;
+}) {
+  const t = useTranslations("masters.am.users");
+  const tc = useTranslations("masters.common");
+  const { run, refresh, fail } = useVmMutations();
+  const [chosen, setChosen] = useState(() => new Set(saved.keys()));
+  const guard = useDiscardGuard(isDirty([...chosen].sort(), [...saved.keys()].sort()), onClose);
+  const [pending, setPending] = useState(false);
+  // Only the user's own company's groups can be granted to them.
+  const tree = useMemo(() => groupTree(groups.filter((g) => g.companyId === user.companyId)), [groups, user.companyId]);
+
+  const toggle = (id: string, on: boolean) =>
+    setChosen((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  const save = async () => {
+    setPending(true);
+    try {
+      await applyGrants(
+        chosen,
+        saved,
+        (vehicleGroupId) => run(GRANT_USER_VEHICLE_GROUP, { userId: user.id, vehicleGroupId }),
+        (id) => run(REVOKE_USER_VEHICLE_GROUP, { id }),
+      );
+      await refresh();
+      toast.success(tc("saved"));
+      onClose();
+    } catch (err) {
+      fail(err);
+      await refresh();
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Sheet
+      open
+      onOpenChange={(open) => !open && guard.requestClose()}
+      size="lg"
+      title={t("assignGroupsTitle", { name: user.name })}
+      description={t("assignGroupsHint")}
+      footer={
+        <>
+          <Button variant="secondary" onClick={guard.requestClose}>
+            {tc("cancel")}
+          </Button>
+          <Button onClick={save} disabled={pending}>
+            {pending ? tc("saving") : tc("save")}
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        {user.isAdmin ? <Alert tone="info">{t("adminSeesAll")}</Alert> : null}
+        {tree.length === 0 ? (
+          <p className="text-[13px] text-muted-foreground">{t("noGroups")}</p>
+        ) : (
+          <ul className="grid max-h-[60vh] content-start gap-1 overflow-y-auto rounded-ctl border border-border p-2">
+            {tree.map(({ group, depth }) => (
+              <li key={group.id} style={{ paddingInlineStart: depth * 20 }}>
+                <Checkbox
+                  checked={chosen.has(group.id)}
+                  onChange={(e) => toggle(group.id, e.target.checked)}
+                  className="w-full rounded-md px-2 py-1.5 text-[13px] hover:bg-surface-2"
+                  label={
+                    <span className="inline-flex items-center gap-1.5 font-medium">
+                      <Layers className="size-4 text-muted-foreground" aria-hidden />
+                      {group.name}
+                    </span>
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="text-xs text-muted-foreground">{t("groupsSelected", { n: chosen.size })}</p>
+      </div>
+      {guard.dialog}
+    </Sheet>
+  );
+}
+
+const LOGIN_PAGE_SIZE = 500;
+const LOGIN_MAX_PAGES = 10;
+
+/** A user's sign-ins, newest first. The API lists everyone's, so pages are fetched and filtered here. */
+function LoginHistorySheet({ user, onClose }: { user: User; onClose: () => void }) {
+  const t = useTranslations("masters.am.users");
+  const tc = useTranslations("masters.common");
+  const errorText = useErrorText();
+  const zone = useCompanyTimeZone();
+  const logs = useQuery({
+    queryKey: ["vm", "am-login-logs"],
+    queryFn: async () => {
+      const all: UserLoginLog[] = [];
+      for (let page = 1, last = 1; page <= last && page <= LOGIN_MAX_PAGES; page++) {
+        const res = await gqlRequest<{ userLoginLogs: { data: UserLoginLog[]; paginatorInfo: { lastPage: number } } }>(
+          USER_LOGIN_LOGS,
+          {
+            first: LOGIN_PAGE_SIZE,
+            page,
+          },
+        );
+        all.push(...res.userLoginLogs.data);
+        last = res.userLoginLogs.paginatorInfo.lastPage;
+      }
+      return all;
+    },
+    staleTime: 60_000,
+  });
+  const rows = (logs.data ?? [])
+    .filter((l) => l.userId === user.id)
+    .sort((a, b) => (b.loggedInAt ?? b.createdAt).localeCompare(a.loggedInAt ?? a.createdAt));
+
+  return (
+    <Sheet
+      open
+      onOpenChange={(open) => !open && onClose()}
+      size="lg"
+      title={t("loginHistoryTitle", { name: user.name })}
+      description={t("loginHistoryHint")}
+      footer={
+        <Button variant="secondary" onClick={onClose}>
+          {tc("close")}
+        </Button>
+      }
+    >
+      {logs.isPending ? (
+        <p className="text-[13px] text-muted-foreground">{t("loadingLogins")}</p>
+      ) : logs.error ? (
+        <Alert tone="error">{errorText(logs.error)}</Alert>
+      ) : rows.length === 0 ? (
+        <p className="text-[13px] text-muted-foreground">{t("noLogins")}</p>
+      ) : (
+        <div className="overflow-x-auto rounded-ctl border border-border">
+          <table className="w-full text-[13px]">
+            <caption className="sr-only">{t("loginHistoryTitle", { name: user.name })}</caption>
+            <thead className="bg-surface-2 text-xs text-muted-foreground">
+              <tr>
+                <th scope="col" className="px-3 py-2 text-start font-medium">
+                  {t("loginAt")}
+                </th>
+                <th scope="col" className="px-3 py-2 text-start font-medium">
+                  {t("loginIp")}
+                </th>
+                <th scope="col" className="px-3 py-2 text-start font-medium">
+                  {t("loginDevice")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((l) => (
+                <tr key={l.id} className="border-t border-border">
+                  <td className="whitespace-nowrap px-3 py-2" dir="ltr">
+                    {formatInCompanyTz(l.loggedInAt ?? l.createdAt, zone)}
+                  </td>
+                  <td className="px-3 py-2" dir="ltr">
+                    {l.ipAddress ?? "—"}
+                  </td>
+                  <td className="max-w-72 truncate px-3 py-2 text-muted-foreground" title={l.userAgent ?? undefined}>
+                    {l.userAgent ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Sheet>
   );
 }

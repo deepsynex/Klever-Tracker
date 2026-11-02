@@ -1,0 +1,25 @@
+$kind: http-request
+method: POST
+url: '{{graphqlUrl}}'
+order: 2000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "query { me { id } }"
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // No bearer token: the API must refuse with the standard message (the BFF maps it to a sign-in redirect).
+      const body = pm.response.json();
+      pm.test("Unauthenticated error", () => pm.expect(body.errors?.[0]?.message).to.eql("Unauthenticated."));
+      pm.test("No data leaks", () => pm.expect(body.data?.me ?? null).to.be.null);

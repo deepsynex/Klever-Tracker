@@ -1,0 +1,37 @@
+$kind: http-request
+method: POST
+url: '{{graphqlUrl}}'
+order: 4000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "query Me { me { id name email companyId company { id name timezone } roles permissions } }"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const body = pm.response.json();
+      pm.test("No GraphQL errors", () => pm.expect(body.errors, JSON.stringify(body.errors)).to.be.undefined);
+
+      const me = body.data.me;
+      pm.test("Signed-in user", () => {
+        pm.expect(me.id).to.be.a("string");
+        pm.expect(me.email).to.include("@");
+      });
+      pm.test("Permissions are module.action strings", () => {
+        pm.expect(me.permissions).to.be.an("array");
+        me.permissions.forEach((p) => pm.expect(p).to.match(/^[a-z-]+\.(view|add|edit|delete)$/));
+      });
+      pm.test("Roles is a list of names", () => pm.expect(me.roles).to.be.an("array"));
+      pm.test("Company time zone is an IANA zone (or a platform account)", () => {
+        if (me.companyId === null) return pm.expect(me.company).to.be.null;
+        pm.expect(me.company.timezone).to.match(/^[A-Za-z_]+(\/[A-Za-z_+-]+)*$|^UTC$/);
+      });
+      pm.collectionVariables.set("meId", me.id);

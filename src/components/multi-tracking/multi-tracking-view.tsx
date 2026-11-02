@@ -13,6 +13,7 @@ import {
   MAX_SINGLE,
   PRELOAD_OPTIONS,
   trailColor,
+  windowSize,
   type PreloadMinutes,
   type ViewMode,
 } from "@/lib/multi-tracking/core";
@@ -210,12 +211,19 @@ function Workspace({ userKey, apiKey }: { userKey: string; apiKey: string }) {
                       return (
                         <motion.div
                           key={id}
-                          className="h-[300px] min-h-0 lg:h-1/3 lg:w-1/4 lg:p-1.5"
+                          className="h-[300px] min-h-0 lg:h-(--win-h) lg:w-(--win-w) lg:p-1.5"
                           initial={{ opacity: 0, y: 18, rotateX: 10, scale: 0.97 }}
                           animate={{ opacity: 1, y: 0, rotateX: 0, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.95 }}
                           transition={{ type: "spring", stiffness: 220, damping: 24 }}
-                          style={{ transformOrigin: "50% 100%" }}
+                          // Bigger windows when fewer vehicles are tracked (windowSize).
+                          style={
+                            {
+                              transformOrigin: "50% 100%",
+                              "--win-w": `${windowSize(selected.length).width}%`,
+                              "--win-h": `${windowSize(selected.length).height}%`,
+                            } as React.CSSProperties
+                          }
                         >
                           <VehicleTile
                             id={id}

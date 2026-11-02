@@ -1,7 +1,7 @@
 import { TZDate } from "@date-fns/tz";
 import { format } from "date-fns";
 import { bearing, MAX_PLAUSIBLE_SPEED_KMH, metres } from "@/lib/history/road-path";
-import { COMPANY_TIME_ZONE } from "@/lib/history/selection";
+import { getDisplayTimeZone } from "@/lib/time-zone";
 import { parseApiDateTime } from "@/lib/vehicle-management/helpers";
 
 /**
@@ -143,6 +143,19 @@ export function headingOf(track: Track): number {
   return 0;
 }
 
+/**
+ * Grid view window size (percent of the map area) for `n` open windows: as large as the count
+ * allows, shrinking to the TouchTraks ¼ × ⅓ only when 10–12 vehicles are tracked.
+ */
+export function windowSize(n: number): { width: number; height: number } {
+  if (n <= 1) return { width: 60, height: 70 };
+  if (n === 2) return { width: 50, height: 60 };
+  if (n <= 4) return { width: 50, height: 50 };
+  if (n <= 6) return { width: 100 / 3, height: 50 };
+  if (n <= 9) return { width: 100 / 3, height: 100 / 3 };
+  return { width: 25, height: 100 / 3 };
+}
+
 /** Plan §8.3: 1 → 1×1, 2 → 2×1, 3–4 → 2×2, 5–6 → 3×2, 7–9 → 3×3, 10–12 → 4×3. */
 export function gridShape(n: number): { cols: number; rows: number } {
   const cols = n <= 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4;
@@ -179,9 +192,9 @@ export function trailColor(index: number): string {
   return TRAIL_COLORS[index % TRAIL_COLORS.length];
 }
 
-/** "02-11-2026 09:47:56 AM" in the company time zone. */
+/** "02-11-2026 09:47:56 AM" in the display time zone (personal choice, else the company's). */
 export function formatFixTime(time: number, pattern = "dd-MM-yyyy hh:mm:ss a"): string {
-  return format(new TZDate(time, COMPANY_TIME_ZONE), pattern);
+  return format(new TZDate(time, getDisplayTimeZone()), pattern);
 }
 
 /** Age split for "updated x ago" (the UI words it through messages). */

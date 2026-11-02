@@ -1,0 +1,27 @@
+$kind: http-request
+description: 'Uses meId set by the Me request.'
+method: POST
+url: '{{graphqlUrl}}'
+order: 10000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "query MyProfile($id: ID!) { user(id: $id) { id name username email mobile address lastLoginAt } }",
+      "variables": {
+        "id": "{{meId}}"
+      }
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const body = pm.response.json();
+      pm.test("No GraphQL errors", () => pm.expect(body.errors, JSON.stringify(body.errors)).to.be.undefined);
+
+      pm.test("The signed-in user's own record", () => pm.expect(body.data.user.id).to.eql(pm.collectionVariables.get("meId")));

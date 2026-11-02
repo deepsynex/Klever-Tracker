@@ -1,9 +1,11 @@
 import { TZDate } from "@date-fns/tz";
 import { format, subDays } from "date-fns";
+import { DEFAULT_TIME_ZONE, getDisplayTimeZone } from "@/lib/time-zone";
 
 /** Pure helpers for the tracking history page, kept free of React so Vitest can test them. */
 
-export const COMPANY_TIME_ZONE = "Asia/Dubai";
+/** The fallback zone; the zone actually used is getDisplayTimeZone() (lib/time-zone.ts). */
+export const COMPANY_TIME_ZONE = DEFAULT_TIME_ZONE;
 
 /** Something the user can track: a vehicle (all its history) or a single tracker device. */
 export type TrackTarget = { key: string; kind: "vehicle" | "device"; id: string; label: string; vehicleId?: string | null };
@@ -47,10 +49,10 @@ export function historyFilter(target: TrackTarget): { vehicleId: string } | { de
 export function companyTimeToUtcIso(date: string, time: string, seconds = 0): string {
   const [y, m, d] = date.split("-").map(Number);
   const [hh, mm] = time.split(":").map(Number);
-  return new Date(new TZDate(y, m - 1, d, hh, mm, seconds, COMPANY_TIME_ZONE).getTime()).toISOString();
+  return new Date(new TZDate(y, m - 1, d, hh, mm, seconds, getDisplayTimeZone()).getTime()).toISOString();
 }
 
 /** A "yyyy-MM-dd" date `daysAgo` days before today in the company time zone. */
 export function companyDate(daysAgo = 0, now: Date = new Date()): string {
-  return format(subDays(new TZDate(now.getTime(), COMPANY_TIME_ZONE), daysAgo), "yyyy-MM-dd");
+  return format(subDays(new TZDate(now.getTime(), getDisplayTimeZone()), daysAgo), "yyyy-MM-dd");
 }

@@ -164,7 +164,7 @@
     "open": "Open menu",
     "historyShort": "History",
     "vehicles": "Vehicles",
-    "accounts": "Accounts",
+    "accounts": "Account & settings",
     "settings": "Settings",
     "track": "Tracking",
     "liveTracking": "Live Tracking",
@@ -182,7 +182,12 @@
     "signOut": "Sign out",
     "signedInAs": "Signed in as {email}",
     "changePassword": "Change password",
-    "tagline": "Vehicle tracking system"
+    "tagline": "Vehicle tracking system",
+    "forbidden": {
+      "title": "You don't have permission",
+      "body": "Your role can't open this screen. Ask your administrator if you need access.",
+      "back": "Back to the dashboard"
+    }
   },
   "dashboard": {
     "title": "Dashboard",
@@ -937,7 +942,7 @@
       }
     },
     "am": {
-      "title": "Account management",
+      "title": "Account & settings",
       "description": "Accounts, users, drivers, roles and driver scoring.",
       "modules": {
         "label": "Account management sections",
@@ -946,7 +951,10 @@
         "drivers": "Driver",
         "roles": "Menu setting",
         "changePassword": "Change password",
-        "driverBehaviour": "Driver behaviour"
+        "driverBehaviour": "Driver behaviour",
+        "departments": "Departments",
+        "auditLog": "Audit log",
+        "profile": "My profile"
       },
       "moduleHints": {
         "accounts": "Company details, contacts, billing and limits.",
@@ -954,7 +962,10 @@
         "drivers": "Driver records, licences, permits and driver-app logins. Import from Excel.",
         "roles": "Roles and what each can view, add, edit and delete.",
         "changePassword": "Change your own password.",
-        "driverBehaviour": "How driver scores are calculated for each company."
+        "driverBehaviour": "How driver scores are calculated for each company.",
+        "departments": "Group users by department: add, rename or remove departments.",
+        "auditLog": "Who changed what and when, with the values before and after.",
+        "profile": "Your own name, mobile and address."
       },
       "accounts": {
         "title": "Accounts",
@@ -1072,7 +1083,23 @@
         "assignedDrivers": "Assigned drivers ({count})",
         "noneAssigned": "No drivers assigned.",
         "limitReached": "This company has reached its limit of {max} users. Raise the limit on the Account, or remove a user first.",
-        "selfLocked": "You can’t change your own status, role or admin access."
+        "selfLocked": "You can’t change your own status, role or admin access.",
+        "assignGroups": "Assign vehicle groups",
+        "assignGroupsTitle": "Vehicle groups for {name}",
+        "assignGroupsHint": "The user can see every vehicle in the groups you tick, as well as any vehicles assigned one by one.",
+        "noGroups": "No vehicle groups yet. Create them under Vehicle Management → Groups.",
+        "groupsSelected": "{n, plural, =0 {No groups selected} one {# group selected} other {# groups selected}}",
+        "loginHistory": "Login history",
+        "loginHistoryTitle": "Login history: {name}",
+        "loginHistoryHint": "Each sign-in to the platform, newest first, in your company's time zone.",
+        "loadingLogins": "Loading sign-ins…",
+        "noLogins": "No sign-ins recorded for this user yet.",
+        "loginAt": "Signed in",
+        "loginIp": "IP address",
+        "loginDevice": "Device / browser",
+        "rolePermissions": "Role permissions",
+        "rolePermissionsOf": "Permissions of the role {role}",
+        "rolePermissionsNotice": "{name} has the role “{role}”. Permissions belong to the role, so changes here apply to {n, plural, one {this user} other {all # users with this role}}. To give {name} different permissions, assign another role with Edit."
       },
       "drivers": {
         "title": "Drivers",
@@ -1245,6 +1272,64 @@
           "weightSeatbelt": "Seat belt"
         },
         "weightsTotalError": "The weights add up to {total}%. They must total 100%."
+      },
+      "departments": {
+        "title": "Departments",
+        "description": "An internal grouping of users, such as Sales or Logistics.",
+        "add": "Add department",
+        "edit": "Edit department",
+        "empty": "No departments yet.",
+        "users": "Users",
+        "company": "Company",
+        "created": "Created",
+        "usersKept": "{n, plural, one {# user is} other {# users are}} in this department. They are kept; only their department is cleared."
+      },
+      "audit": {
+        "title": "Audit log",
+        "description": "An append-only record of changes: who made them, when, and what changed.",
+        "filter": "Filter this page by action, record, user or IP…",
+        "total": "{n, plural, =0 {No entries} one {# entry} other {# entries}}",
+        "when": "When",
+        "who": "User",
+        "action": "Action",
+        "record": "Record",
+        "ip": "IP address",
+        "loading": "Loading the audit log…",
+        "empty": "No changes have been recorded yet.",
+        "noMatch": "No entries on this page match the filter.",
+        "showChanges": "Show the changed values",
+        "system": "System",
+        "newer": "Newer",
+        "older": "Older",
+        "pageOf": "Page {page} of {last}"
+      },
+      "profile": {
+        "title": "My profile",
+        "description": "Your own details. Your administrator manages your role, status and vehicle access.",
+        "changePassword": "Change password",
+        "editable": "Your details",
+        "account": "Account",
+        "name": "Name",
+        "mobile": "Mobile",
+        "address": "Address",
+        "email": "Email",
+        "username": "Username",
+        "role": "Role",
+        "company": "Company",
+        "platform": "Platform (all companies)",
+        "timeZone": "Time zone",
+        "lastLogin": "Last sign-in",
+        "readOnlyHint": "To change your email, username or role, ask your administrator.",
+        "timeZoneTitle": "Time zone",
+        "timeZoneHint": "Every date and time in the app (tracking, history, logs, reports) is shown in this time zone, and the dates and times you enter are read in it.",
+        "timeZoneNow": "Times are shown in",
+        "timeZoneCompany": "Use my company’s time zone: {zone}",
+        "timeZoneDefault": "Use the default time zone (Asia/Dubai)",
+        "timeZoneBrowser": "Saved for you on this browser.",
+        "timeZoneCompanyLink": "Change the company’s default time zone in Accounts.",
+        "timeZoneSaved": "Times are now shown in {zone}.",
+        "timeZoneCommon": "Common time zones",
+        "timeZoneAll": "All time zones"
       }
     }
   },

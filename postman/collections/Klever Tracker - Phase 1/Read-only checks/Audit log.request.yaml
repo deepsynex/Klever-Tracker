@@ -1,0 +1,31 @@
+$kind: http-request
+method: POST
+url: '{{graphqlUrl}}'
+order: 9000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "query AuditLogs($first: Int!, $page: Int) { auditLogs(first: $first, page: $page) { data { id userId action auditableType auditableId oldValues newValues createdAt } paginatorInfo { total currentPage lastPage } } }",
+      "variables": {
+        "first": 50,
+        "page": 1
+      }
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const body = pm.response.json();
+      pm.test("No GraphQL errors", () => pm.expect(body.errors, JSON.stringify(body.errors)).to.be.undefined);
+
+      const page = body.data.auditLogs;
+      pm.test("Paged with totals", () => pm.expect(page.paginatorInfo.total).to.be.a("number"));
+      pm.test("Before/after values are JSON strings when present", () => page.data.forEach((e) => ["oldValues", "newValues"].forEach((k) => {
+        if (e[k] != null) pm.expect(() => JSON.parse(e[k]), `${e.id}.${k}`).to.not.throw();
+      })));

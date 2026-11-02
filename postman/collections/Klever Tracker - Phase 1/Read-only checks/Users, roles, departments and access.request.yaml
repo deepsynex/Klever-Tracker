@@ -1,0 +1,40 @@
+$kind: http-request
+method: POST
+url: '{{graphqlUrl}}'
+order: 5000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "query Users($first: Int!) { users(first: $first) { data { id companyId roleId departmentId name username email status isAdmin } } roles(first: $first) { data { id companyId name status } } departments(first: $first) { data { id companyId name } } vehicles(first: $first) { data { id userAccess { id userId } } } vehicleGroups(first: $first) { data { id companyId parentId name userAccess { id userId } } } }",
+      "variables": {
+        "first": 100
+      }
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const body = pm.response.json();
+      pm.test("No GraphQL errors", () => pm.expect(body.errors, JSON.stringify(body.errors)).to.be.undefined);
+
+      const d = body.data;
+      pm.test("Every list is paginated data", () => ["users", "roles", "departments", "vehicles", "vehicleGroups"].forEach((k) => pm.expect(d[k].data, k).to.be.an("array")));
+      pm.test("Every user has a role that is listed", () => {
+        const roles = new Set(d.roles.data.map((r) => r.id));
+        d.users.data.forEach((u) => pm.expect(roles.has(u.roleId), `user ${u.id} role ${u.roleId}`).to.be.true);
+      });
+      pm.test("A user's department, when set, is listed", () => {
+        const depts = new Set(d.departments.data.map((x) => x.id));
+        d.users.data.filter((u) => u.departmentId).forEach((u) => pm.expect(depts.has(u.departmentId), `user ${u.id}`).to.be.true);
+      });
+      pm.test("Status is active or inactive", () => d.users.data.forEach((u) => pm.expect(["active", "inactive"]).to.include(u.status)));
+      pm.test("Access grants point at listed users", () => {
+        const users = new Set(d.users.data.map((u) => u.id));
+        [...d.vehicles.data, ...d.vehicleGroups.data].flatMap((x) => x.userAccess).forEach((g) => pm.expect(users.has(g.userId), `grant ${g.id}`).to.be.true);
+      });

@@ -10,7 +10,7 @@ import { useErrorText } from "@/lib/vehicle-management/use-vm";
 /**
  * Delete confirmation. `permanent` says the row is removed for good (most types); otherwise
  * it's a soft delete (vehicles, drivers). `failHint` replaces the error after a failed delete,
- * e.g. "in use, mark it inactive instead".
+ * e.g. "in use, mark it inactive instead". `notice` is shown before confirming (what else changes).
  */
 export function ConfirmDelete({
   open,
@@ -18,6 +18,7 @@ export function ConfirmDelete({
   name,
   permanent = true,
   failHint,
+  notice,
   onConfirm,
 }: {
   open: boolean;
@@ -25,6 +26,7 @@ export function ConfirmDelete({
   name: ReactNode;
   permanent?: boolean;
   failHint?: ReactNode;
+  notice?: ReactNode;
   onConfirm: () => Promise<void>;
 }) {
   const t = useTranslations("masters.common");
@@ -69,6 +71,7 @@ export function ConfirmDelete({
         </>
       }
     >
+      {notice && !error ? <Alert tone="warning">{notice}</Alert> : null}
       {error ? <Alert tone="error">{error}</Alert> : null}
     </Dialog>
   );

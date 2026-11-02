@@ -135,5 +135,7 @@ export function useDraggablePanel<T extends HTMLElement>(storageKey: string) {
     save(storageKey, ZERO);
   };
 
-  return { ref: setPanel, offset, dragging, handleProps, onHandleKeyDown, reset };
+  // `attach` is the panel's callback ref. Not named `ref`: the React Compiler would then treat the
+  // whole returned object as a ref and refuse reads of `offset` / `dragging` during render.
+  return { attach: setPanel, offset, dragging, handleProps, onHandleKeyDown, reset };
 }

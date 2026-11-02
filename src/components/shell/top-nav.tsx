@@ -15,7 +15,6 @@ import {
   Navigation,
   Radio,
   Route,
-  Settings,
   Truck,
   UserCog,
   Video,
@@ -25,6 +24,8 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useVisibleModules } from "@/components/masters/vm-nav";
 import { VM_MODULES } from "@/components/masters/vm-modules";
+import { can, useMe } from "@/lib/permissions";
+import { TRACKING_PERMISSION } from "./route-permissions";
 import { Sheet } from "@/components/ui/sheet";
 import { Link, usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
@@ -64,6 +65,9 @@ const TRACKING_CHILDREN: NavItem[] = [
 
 function useNavEntries() {
   const visibleVehicleModules = useVisibleModules(VM_MODULES);
+  // Every tracking screen reads positions; hidden until the role is known, like the masters tabs.
+  const { data: me } = useMe();
+  const canTrack = can(me, TRACKING_PERMISSION);
 
   const vehicleChildren: NavItem[] = visibleVehicleModules.map((m) => ({
     key: m.key,
@@ -73,11 +77,15 @@ function useNavEntries() {
 
   const entries: NavEntry[] = [
     { key: "dashboard", icon: Home, href: "/dashboard" },
-    {
-      key: "tracking",
-      icon: Navigation,
-      children: TRACKING_CHILDREN,
-    },
+    ...(canTrack
+      ? [
+          {
+            key: "tracking",
+            icon: Navigation,
+            children: TRACKING_CHILDREN,
+          } satisfies NavGroup,
+        ]
+      : []),
     { key: "alerts", icon: Bell, phase: 4 },
     { key: "reports", icon: BarChart3, phase: 5 },
     { key: "geofences", icon: CircleDashed, phase: 4 },
@@ -92,8 +100,8 @@ function useNavEntries() {
           } satisfies NavGroup,
         ]
       : []),
+    // Account & settings in one place: users, roles, departments, audit log, my profile, password.
     { key: "accounts", icon: UserCog, href: "/masters/account-management" },
-    { key: "settings", icon: Settings, phase: 1 },
   ];
 
   return entries;
@@ -156,9 +164,7 @@ function NavDropdown({ group }: { group: NavGroup }) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isGroupActive =
-    group.children.some(
-      (child) => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)),
-    ) ||
+    group.children.some((child) => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`))) ||
     (group.key === "vehicles" &&
       (pathname === "/masters/vehicle-management" || pathname.startsWith("/masters/vehicle-management/")));
 
@@ -182,12 +188,7 @@ function NavDropdown({ group }: { group: NavGroup }) {
   }, []);
 
   return (
-    <div
-      ref={containerRef}
-      className="relative"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
+    <div ref={containerRef} className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       <button
         type="button"
         aria-haspopup="menu"
@@ -205,10 +206,7 @@ function NavDropdown({ group }: { group: NavGroup }) {
       >
         <group.icon aria-hidden />
         <span className="max-[1679px]:sr-only">{tNav(group.key)}</span>
-        <ChevronDown
-          aria-hidden
-          className={cn("size-3.5 transition-transform duration-150", open && "rotate-180")}
-        />
+        <ChevronDown aria-hidden className={cn("size-3.5 transition-transform duration-150", open && "rotate-180")} />
       </button>
 
       {open && (
@@ -219,8 +217,7 @@ function NavDropdown({ group }: { group: NavGroup }) {
         >
           <ul className="grid max-h-[min(480px,calc(100vh-5rem))] gap-0.5 overflow-y-auto p-1.5">
             {group.children.map((child) => {
-              const active =
-                !!child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`));
+              const active = !!child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`));
               return (
                 <li key={child.key} role="none">
                   <Link
@@ -254,9 +251,7 @@ function NavGroupStacked({ group, onNavigate }: { group: NavGroup; onNavigate?: 
   const tGroup = useTranslations(group.namespace ?? "nav");
   const pathname = usePathname();
   const isGroupActive =
-    group.children.some(
-      (child) => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)),
-    ) ||
+    group.children.some((child) => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`))) ||
     (group.key === "vehicles" &&
       (pathname === "/masters/vehicle-management" || pathname.startsWith("/masters/vehicle-management/")));
   const [open, setOpen] = useState(isGroupActive);
@@ -284,8 +279,7 @@ function NavGroupStacked({ group, onNavigate }: { group: NavGroup; onNavigate?: 
       {open && (
         <ul className="ms-4 mt-0.5 grid gap-0.5 border-s border-border/50 ps-3">
           {group.children.map((child) => {
-            const active =
-              !!child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`));
+            const active = !!child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`));
             return (
               <li key={child.key}>
                 <Link

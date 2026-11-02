@@ -1,6 +1,7 @@
 import { TZDate } from "@date-fns/tz";
 import { format } from "date-fns";
-import { COMPANY_TIME_ZONE, companyTimeToUtcIso } from "@/lib/history/selection";
+import { companyTimeToUtcIso } from "@/lib/history/selection";
+import { getDisplayTimeZone } from "@/lib/time-zone";
 
 /** Pure helpers for the Vehicle Management screens (no React), so Vitest can test them. */
 
@@ -60,7 +61,7 @@ export function serializeWorkingDays(days: readonly string[]): string | null {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Times and dates (the API is UTC; the company works in Asia/Dubai)
+// Times and dates (the API is UTC; people read them in the display time zone, lib/time-zone.ts)
 // ---------------------------------------------------------------------------------------------
 
 /** "08:00:00" → "08:00" for <input type="time">. */
@@ -93,7 +94,7 @@ export function parseApiDateTime(value: string | null | undefined): Date | null 
 /** API timestamp → "28 Oct 2026, 12:00" in the company time zone; "—" when empty. */
 export function formatDateTime(value: string | null | undefined): string {
   const date = parseApiDateTime(value);
-  return date ? format(new TZDate(date.getTime(), COMPANY_TIME_ZONE), "dd MMM yyyy, HH:mm") : "—";
+  return date ? format(new TZDate(date.getTime(), getDisplayTimeZone()), "dd MMM yyyy, HH:mm") : "—";
 }
 
 /** API date ("2026-10-28", or a timestamp) → "28 Oct 2026"; "—" when empty. Dates have no zone. */
@@ -105,7 +106,7 @@ export function formatDate(value: string | null | undefined): string {
     return format(new Date(y, m - 1, d), "dd MMM yyyy");
   }
   const date = parseApiDateTime(value);
-  return date ? format(new TZDate(date.getTime(), COMPANY_TIME_ZONE), "dd MMM yyyy") : "—";
+  return date ? format(new TZDate(date.getTime(), getDisplayTimeZone()), "dd MMM yyyy") : "—";
 }
 
 /** "2026-10-28 00:00:00" or "2026-10-28" → "2026-10-28" for <input type="date">. */
@@ -117,7 +118,7 @@ export function dateInputValue(value: string | null | undefined): string {
 export function companyDateTimeParts(value: string | null | undefined): { date: string; time: string } {
   const date = parseApiDateTime(value);
   if (!date) return { date: "", time: "" };
-  const local = new TZDate(date.getTime(), COMPANY_TIME_ZONE);
+  const local = new TZDate(date.getTime(), getDisplayTimeZone());
   return { date: format(local, "yyyy-MM-dd"), time: format(local, "HH:mm") };
 }
 
@@ -129,12 +130,12 @@ export function companyPartsToUtc(date: string, time: string): string | null {
 
 /** Today in the company time zone, "yyyy-MM-dd". */
 export function companyToday(now: Date = new Date()): string {
-  return format(new TZDate(now.getTime(), COMPANY_TIME_ZONE), "yyyy-MM-dd");
+  return format(new TZDate(now.getTime(), getDisplayTimeZone()), "yyyy-MM-dd");
 }
 
 /** Now in the company time zone, "HH:mm". */
 export function companyNowTime(now: Date = new Date()): string {
-  return format(new TZDate(now.getTime(), COMPANY_TIME_ZONE), "HH:mm");
+  return format(new TZDate(now.getTime(), getDisplayTimeZone()), "HH:mm");
 }
 
 // ---------------------------------------------------------------------------------------------

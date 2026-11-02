@@ -2,7 +2,7 @@
 
 import { Eye, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
@@ -44,7 +44,10 @@ function effectiveFlags(modules: Module[], saved: RolePermission[]): Record<stri
   return Object.fromEntries(
     modules.map((m) => {
       const p = byModule.get(m.id);
-      return [m.id, p ? { canView: p.canView, canAdd: p.canAdd, canEdit: p.canEdit, canDelete: p.canDelete } : { ...ALL }];
+      return [
+        m.id,
+        p ? { canView: p.canView, canAdd: p.canAdd, canEdit: p.canEdit, canDelete: p.canDelete } : { ...ALL },
+      ];
     }),
   );
 }
@@ -82,7 +85,9 @@ export function RolesScreen() {
   const access = (r: Role) => {
     const flags = Object.values(effectiveFlags(modules, permsByRole.get(r.id) ?? []));
     const allowed = flags.reduce((n, f) => n + ACTIONS.filter((a) => f[a]).length, 0);
-    return allowed === flags.length * ACTIONS.length ? t("fullAccess") : t("partialAccess", { count: flags.filter((f) => f.canView).length, total: flags.length });
+    return allowed === flags.length * ACTIONS.length
+      ? t("fullAccess")
+      : t("partialAccess", { count: flags.filter((f) => f.canView).length, total: flags.length });
   };
 
   return (
@@ -108,7 +113,14 @@ export function RolesScreen() {
         onDelete={lookups.allow("core", "delete") ? (r) => own(r) && setDeleting(r) : undefined}
         rowActions={(r) =>
           editable(r) ? null : (
-            <Button variant="ghost" size="icon" className="size-8" onClick={() => setEditing(r)} aria-label={t("view")} title={t("view")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              onClick={() => setEditing(r)}
+              aria-label={t("view")}
+              title={t("view")}
+            >
               <Eye />
             </Button>
           )
@@ -124,12 +136,24 @@ export function RolesScreen() {
               </span>
             ),
           },
-          ...(lookups.isPlatform ? [{ key: "account", header: t("account"), cell: (r: Role) => (r.companyId ? lookups.companyName(r.companyId) : "—") }] : []),
+          ...(lookups.isPlatform
+            ? [
+                {
+                  key: "account",
+                  header: t("account"),
+                  cell: (r: Role) => (r.companyId ? lookups.companyName(r.companyId) : "—"),
+                },
+              ]
+            : []),
           { key: "access", header: t("access"), cell: access },
           {
             key: "status",
             header: tc("status"),
-            cell: (r) => <StatusBadge tone={r.status === "active" ? "ok" : "muted"}>{r.status === "active" ? tc("statuses.active") : tc("statuses.inactive")}</StatusBadge>,
+            cell: (r) => (
+              <StatusBadge tone={r.status === "active" ? "ok" : "muted"}>
+                {r.status === "active" ? tc("statuses.active") : tc("statuses.inactive")}
+              </StatusBadge>
+            ),
           },
         ]}
       />
@@ -140,7 +164,9 @@ export function RolesScreen() {
           readOnly={editing !== "new" && !editable(editing)}
           modules={modules}
           saved={editing === "new" ? [] : (permsByRole.get(editing.id) ?? [])}
-          siblings={data.roles.data.filter((r) => r.companyId === lookups.companyId && (editing === "new" || r.id !== editing.id))}
+          siblings={data.roles.data.filter(
+            (r) => r.companyId === lookups.companyId && (editing === "new" || r.id !== editing.id),
+          )}
           onClose={() => setEditing(null)}
         />
       ) : null}
@@ -154,12 +180,53 @@ export function RolesScreen() {
           if (!deleting) return;
           await run(DELETE_ROLE, { id: deleting.id });
           // Its permission rows are only removed once the role itself is gone (a role in use stays intact).
-          await Promise.all((permsByRole.get(deleting.id) ?? []).map((p) => run(DELETE_ROLE_PERMISSION, { id: p.id }).catch(() => undefined)));
+          await Promise.all(
+            (permsByRole.get(deleting.id) ?? []).map((p) =>
+              run(DELETE_ROLE_PERMISSION, { id: p.id }).catch(() => undefined),
+            ),
+          );
           await refresh();
           toast.success(tc("deleted"));
         }}
       />
     </div>
+  );
+}
+
+/**
+ * The permission drawer for one role, opened from elsewhere (the users list's role action).
+ * Same data and the same "who may edit" rules as RolesScreen; `notice` explains the context.
+ */
+export function RolePermissionsSheet({
+  roleId,
+  notice,
+  onClose,
+}: {
+  roleId: string;
+  notice?: ReactNode;
+  onClose: () => void;
+}) {
+  const lookups = useVmLookups();
+  const list = useVmQuery<RolesResult>("am-roles", ROLES);
+  const errorText = useErrorText();
+  const data = list.data;
+  const role = data?.roles.data.find((r) => r.id === roleId) ?? null;
+
+  if (list.error) return <Alert tone="error">{errorText(list.error)}</Alert>;
+  // Still loading, or the role is gone (deleted since the list loaded): nothing to show.
+  if (!data || !lookups.isSuccess || !role) return null;
+  const modules = [...data.modules.data].sort((a, b) => Number(a.id) - Number(b.id));
+  const editable = role.companyId !== null && role.companyId === lookups.companyId && lookups.allow("core", "edit");
+  return (
+    <RoleSheet
+      role={role}
+      readOnly={!editable}
+      modules={modules}
+      saved={data.rolePermissions.data.filter((p) => p.roleId === role.id)}
+      siblings={data.roles.data.filter((r) => r.companyId === lookups.companyId && r.id !== role.id)}
+      notice={notice}
+      onClose={onClose}
+    />
   );
 }
 
@@ -169,6 +236,7 @@ function RoleSheet({
   modules,
   saved,
   siblings,
+  notice,
   onClose,
 }: {
   role: Role | null;
@@ -176,6 +244,7 @@ function RoleSheet({
   modules: Module[];
   saved: RolePermission[];
   siblings: Role[];
+  notice?: ReactNode;
   onClose: () => void;
 }) {
   const t = useTranslations("masters.am.roles");
@@ -186,7 +255,11 @@ function RoleSheet({
   const [name, setName] = useState(role?.name ?? "");
   const [status, setStatus] = useState(role?.status ?? "active");
   const [flags, setFlags] = useState(() => effectiveFlags(modules, saved));
-  const [initial] = useState(() => ({ name: role?.name ?? "", status: role?.status ?? "active", flags: effectiveFlags(modules, saved) }));
+  const [initial] = useState(() => ({
+    name: role?.name ?? "",
+    status: role?.status ?? "active",
+    flags: effectiveFlags(modules, saved),
+  }));
   const guard = useDiscardGuard(!readOnly && isDirty({ name, status, flags }, initial), onClose);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
@@ -200,7 +273,11 @@ function RoleSheet({
       if (!on && action === "canView") for (const a of ACTIONS) row[a] = false;
       return { ...f, [moduleId]: row };
     });
-  const setRow = (moduleId: string, on: boolean) => setFlags((f) => ({ ...f, [moduleId]: on ? { ...ALL } : { canView: false, canAdd: false, canEdit: false, canDelete: false } }));
+  const setRow = (moduleId: string, on: boolean) =>
+    setFlags((f) => ({
+      ...f,
+      [moduleId]: on ? { ...ALL } : { canView: false, canAdd: false, canEdit: false, canDelete: false },
+    }));
   const setColumn = (action: Action, on: boolean) => {
     for (const m of modules) setOne(m.id, action, on);
   };
@@ -208,14 +285,25 @@ function RoleSheet({
 
   const save = async () => {
     // A role must be allowed to see at least one module.
-    const found = validateRole(name, siblings.map((r) => r.name), Object.values(flags).some((f) => f.canView));
+    const found = validateRole(
+      name,
+      siblings.map((r) => r.name),
+      Object.values(flags).some((f) => f.canView),
+    );
     setErrors(found);
     if (Object.keys(found).length) return;
     setPending(true);
     try {
       let roleId = role?.id;
       if (roleId) await run(UPDATE_ROLE, { id: roleId, name: name.trim(), status });
-      else roleId = (await run<{ createRole: { id: string } }>(CREATE_ROLE, { companyId: lookups.companyId, name: name.trim(), status })).createRole.id;
+      else
+        roleId = (
+          await run<{ createRole: { id: string } }>(CREATE_ROLE, {
+            companyId: lookups.companyId,
+            name: name.trim(),
+            status,
+          })
+        ).createRole.id;
       // Every module gets an explicit row, so the role keeps exactly these rights.
       const byModule = new Map(saved.map((p) => [p.moduleId, p]));
       await Promise.all(
@@ -223,7 +311,9 @@ function RoleSheet({
           const want = flags[m.id]!;
           const have = byModule.get(m.id);
           if (!have) return run(CREATE_ROLE_PERMISSION, { roleId, moduleId: m.id, ...want });
-          return ACTIONS.some((a) => have[a] !== want[a]) ? run(UPDATE_ROLE_PERMISSION, { id: have.id, ...want }) : null;
+          return ACTIONS.some((a) => have[a] !== want[a])
+            ? run(UPDATE_ROLE_PERMISSION, { id: have.id, ...want })
+            : null;
         }),
       );
       await refresh();
@@ -269,10 +359,20 @@ function RoleSheet({
           if (!readOnly) void save();
         }}
       >
-        {readOnly ? <Alert tone="info">{role?.companyId === null ? t("platformReadOnly") : t("readOnly")}</Alert> : null}
+        {notice ? <Alert tone="warning">{notice}</Alert> : null}
+        {readOnly ? (
+          <Alert tone="info">{role?.companyId === null ? t("platformReadOnly") : t("readOnly")}</Alert>
+        ) : null}
         <FormSection title={t("sections.role")}>
           <Field id="r-name" label={`${t("f.name")} *`} error={errors.name}>
-            <Input id="r-name" maxLength={MAX_LENGTH.name} value={name} disabled={readOnly} onChange={(e) => setName(e.target.value)} aria-invalid={errors.name ? true : undefined} />
+            <Input
+              id="r-name"
+              maxLength={MAX_LENGTH.name}
+              value={name}
+              disabled={readOnly}
+              onChange={(e) => setName(e.target.value)}
+              aria-invalid={errors.name ? true : undefined}
+            />
           </Field>
           <Field id="r-status" label={`${tc("status")} *`}>
             <Select id="r-status" value={status} disabled={readOnly} onChange={(e) => setStatus(e.target.value)}>
@@ -321,7 +421,9 @@ function RoleSheet({
                     <tr key={m.id} className="border-b border-border last:border-0 hover:bg-surface-2/50">
                       <th scope="row" className="px-3 py-2 text-start font-medium">
                         {label}
-                        {t.has(`moduleHints.${m.code}`) ? <span className="block text-xs font-normal text-subtle">{t(`moduleHints.${m.code}`)}</span> : null}
+                        {t.has(`moduleHints.${m.code}`) ? (
+                          <span className="block text-xs font-normal text-subtle">{t(`moduleHints.${m.code}`)}</span>
+                        ) : null}
                       </th>
                       {ACTIONS.map((a) => (
                         <td key={a} className="px-3 py-2 text-center">
