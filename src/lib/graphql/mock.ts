@@ -1,5 +1,6 @@
 import "server-only";
 import { demoPositions } from "@/lib/heatmap/demo-tracks";
+import { DEMO_TYPES, demoLatest, demoTrail, demoVehicle, demoVehiclePage } from "@/lib/multi-tracking/demo";
 
 /**
  * Minimal stand-in for the Klever API, used only when KLEVER_MOCK=true in development.
@@ -119,6 +120,29 @@ export async function mockFetch(rawBody: string, token?: string) {
 
   if (token !== MOCK_TOKEN) {
     return error("Unauthenticated.", { category: "authentication" });
+  }
+
+  // Multi Tracking (src/lib/multi-tracking): a demo fleet that moves with the real clock.
+  // Matched by operation name, before the generic vehicles / positionHistory handlers.
+  if (/\bMultiTrackVehicles\b/.test(query)) {
+    const page = demoVehiclePage((vars.search as string | null) ?? null, Number(vars.first ?? 50), Number(vars.page ?? 1));
+    return json(200, { data: { vehicles: page } });
+  }
+  if (/\bMultiTrackTypes\b/.test(query)) {
+    return json(200, { data: { vehicleTypes: { data: DEMO_TYPES } } });
+  }
+  if (/\bMultiTrackSelected\b/.test(query)) {
+    const data: Record<string, unknown> = {};
+    for (const [, alias, id] of query.matchAll(/(v\d+):\s*vehicle\(id:\s*(\d+)\)/g)) data[alias] = demoVehicle(id);
+    return json(200, { data });
+  }
+  if (/\bMultiTrackPositions\b/.test(query)) {
+    const ids = Array.isArray(vars.vehicleIds) ? vars.vehicleIds.map(String) : [];
+    return json(200, { data: { deviceLastPositionsForVehicles: demoLatest(ids) } });
+  }
+  if (/\bMultiTrackTrail\b/.test(query)) {
+    const rows = demoTrail(String(vars.vehicleId), Date.parse(String(vars.from)), Date.parse(String(vars.to)), Number(vars.first ?? 500));
+    return json(200, { data: { positionHistory: { data: rows, paginatorInfo: { total: rows.length } } } });
   }
 
   // Vehicles query

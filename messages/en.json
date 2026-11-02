@@ -339,6 +339,7 @@
       "currentLocation": "Current Playback Position",
       "plannedRoute": "Planned Route",
       "noPoints": "No tracking data found for the selected vehicle and time range.",
+      "tooManyPoints": "This range has {total} GPS points; the limit is {max}. Choose a shorter date range.",
       "selectVehiclePrompt": "Select a vehicle plate number and date range above, then click Track Vehicle."
     },
     "panel": {
@@ -1368,6 +1369,106 @@
     "sales": {
       "title": "Sales Tracking",
       "description": "Field sales visits, customer check-ins, and route coverage for sales teams."
+    },
+    "screen": {
+      "gpsStream": "GPS Stream",
+      "livePolling": "Live Polling",
+      "fleetTelemetry": "Fleet Telemetry",
+      "readyForPhase": "Ready for Phase {n}",
+      "mapRendering": "Map Rendering",
+      "mapEngine": "Google Maps JS API"
+    }
+  },
+  "multiTracking": {
+    "title": "Multi Tracking",
+    "subtitle": "Follow several vehicles live, side by side or on one map.",
+    "noApiKey": "The maps can't load: the Google Maps API key is missing.",
+    "status": {
+      "moving": "Moving",
+      "idle": "Idle",
+      "stopped": "Stopped",
+      "offline": "Offline"
+    },
+    "speed": "{n} km/h",
+    "age": {
+      "s": "{n} s ago",
+      "m": "{n} min ago",
+      "h": "{n} h ago",
+      "d": "{n} d ago",
+      "never": "No data yet"
+    },
+    "list": {
+      "title": "Vehicles",
+      "selectedCount": "{n}/{max} tracked",
+      "search": "Search plate, name or registration…",
+      "loading": "Loading vehicles…",
+      "failed": "The vehicle list couldn't be loaded.",
+      "empty": "No vehicles you can track yet.",
+      "noMatch": "No vehicles match your search.",
+      "loadMore": "Load more ({shown} of {total})",
+      "clearAll": "Clear all",
+      "asset": "Asset",
+      "trackDate": "Track date"
+    },
+    "view": {
+      "label": "View",
+      "grid": "Grid",
+      "single": "One map"
+    },
+    "preload": {
+      "label": "Trail on open",
+      "off": "Off",
+      "min": "Last {n} min"
+    },
+    "feed": {
+      "idle": "Not tracking",
+      "live": "Live",
+      "updated": "updated",
+      "paused": "Paused while this tab is hidden",
+      "retrying": "Connection problem, retrying…",
+      "failed": "Stopped",
+      "retry": "Retry"
+    },
+    "tile": {
+      "close": "Stop tracking",
+      "closeNamed": "Stop tracking {plate}",
+      "noPosition": "No position reported yet",
+      "loading": "Loading…",
+      "loadingTrail": "Loading recent trail…",
+      "lock": "Lock",
+      "locked": "Locked",
+      "lockHint": "Stop following this vehicle so you can move the map freely",
+      "unlockHint": "Unlock: follow the vehicle again"
+    },
+    "single": {
+      "fitAll": "Fit all",
+      "legend": "Tracked vehicles"
+    },
+    "notice": {
+      "gridLimit": "Grid view shows up to {max} vehicles. Switch to One map to track more.",
+      "singleLimit": "You can track up to {max} vehicles at once.",
+      "tooManyForGrid": "Grid view shows up to {max} vehicles. Untick some vehicles first.",
+      "dismiss": "Dismiss"
+    },
+    "empty": {
+      "title": "Pick vehicles to track",
+      "body": "Tick vehicles in the list. Each one opens its own live map tile (up to {grid}); One map shows up to {single} together."
+    },
+    "maps": {
+      "title": {
+        "quota": "Google Maps daily limit reached",
+        "billing": "Google Maps billing isn’t enabled",
+        "key": "Google Maps rejected the API key",
+        "load": "Google Maps couldn’t be loaded"
+      },
+      "body": {
+        "quota": "The Google Maps key used by this app has used up its daily quota, so maps can’t be drawn. They come back when the quota resets (reload the page then), or ask an administrator to enable billing on the key.",
+        "billing": "The Google Cloud project behind the Maps key has no billing account. Ask an administrator to enable billing.",
+        "key": "The key is invalid, not allowed for this website, or the Maps JavaScript API isn’t enabled for it. Ask an administrator to check the key in Google Cloud.",
+        "load": "The Google Maps script didn’t load. Check your internet connection, then reload the page."
+      },
+      "stillTracking": "Vehicle status, speed and update times in the list and window headers keep updating.",
+      "unavailable": "Map unavailable"
     }
   }
 }

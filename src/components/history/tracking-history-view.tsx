@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, type ChangeEvent } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, type ChangeEvent } from "react";
 import { useTranslations } from "next-intl";
 import {
   Play,
@@ -38,7 +38,6 @@ import {
   GET_ROUTE_DETAIL,
   GET_EVENT_TYPES,
   GET_ALERT_EVENTS,
-  GET_POSITION_HISTORY,
   type VehiclesResult,
   type DevicesResult,
   type RouteItem,
@@ -50,7 +49,6 @@ import {
   type AlertEventItem,
   type AlertEventsResult,
   type PositionHistoryPoint,
-  type PositionHistoryResult,
 } from "@/lib/graphql/operations";
 import {
   buildTrackTargets,
@@ -59,6 +57,8 @@ import {
   historyFilter,
   type TrackTarget,
 } from "@/lib/history/selection";
+import { cleanTrack } from "@/lib/history/clean-track";
+import { fetchHistoryFixes, MAX_HISTORY_FIXES, TooManyFixesError, type HistoryFix } from "@/lib/history/fetch-history";
 import { cn } from "@/lib/utils";
 
 /** Default window: the last 7 days in the company time zone. */
@@ -244,7 +244,7 @@ export function TrackingHistoryView() {
   const [allAlertEvents, setAllAlertEvents] = useState<AlertEventItem[]>([]);
 
   // Telemetry Position History
-  const [positions, setPositions] = useState<PositionHistoryPoint[]>([]);
+  const [positions, setPositions] = useState<HistoryFix[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -264,10 +264,15 @@ export function TrackingHistoryView() {
   const [paramsOpen, setParamsOpen] = useState(true);
   const paramsPanel = useDraggablePanel<HTMLElement>("kt-history-params-position");
 
-  // Fetches position history for a vehicle or device and window (up to 1000 points)
+  // Only the latest request may update the page: an earlier, larger window (e.g. the default range
+  // loaded on open) can finish after the one the user just asked for.
+  const latestRequest = useRef(0);
+
+  // Fetches every fix for a vehicle or device and window
   const fetchHistory = useCallback(
     async (target: TrackTarget | null, fDate: string, fTime: string, tDate: string, tTime: string) => {
       if (!target) return;
+      const request = ++latestRequest.current;
       setIsLoading(true);
       setErrorMsg(null);
       setIsPlaying(false);
@@ -275,25 +280,28 @@ export function TrackingHistoryView() {
       setFocusedLeg(null);
 
       try {
-        const res = await gqlRequest<PositionHistoryResult>(GET_POSITION_HISTORY, {
-          ...historyFilter(target),
-          from: companyTimeToUtcIso(fDate, fTime),
-          to: companyTimeToUtcIso(tDate, tTime, 59),
-          first: 1000,
-        });
+        // Every page of the window, oldest first (one `first: 1000` call dropped the start of busy windows).
+        const sorted = await fetchHistoryFixes(
+          historyFilter(target),
+          companyTimeToUtcIso(fDate, fTime),
+          companyTimeToUtcIso(tDate, tTime, 59),
+        );
 
-        const rawData = res?.positionHistory?.data || [];
-        const sorted = [...rawData].sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime());
-
+        if (request !== latestRequest.current) return;
         setPositions(sorted);
         if (sorted.length === 0) {
           setErrorMsg(t("map.noPoints"));
         }
       } catch (err: unknown) {
+        if (request !== latestRequest.current) return;
         setPositions([]);
-        setErrorMsg(te(err instanceof ApiRequestError ? err.error.kind : "unknown"));
+        setErrorMsg(
+          err instanceof TooManyFixesError
+            ? t("map.tooManyPoints", { total: err.total.toLocaleString("en"), max: MAX_HISTORY_FIXES.toLocaleString("en") })
+            : te(err instanceof ApiRequestError ? err.error.kind : "unknown"),
+        );
       } finally {
-        setIsLoading(false);
+        if (request === latestRequest.current) setIsLoading(false);
       }
     },
     [t, te],
@@ -382,9 +390,10 @@ export function TrackingHistoryView() {
     });
   }, [allAlertEvents, selectedTarget, selectedEventTypeId]);
 
-  // Filtered valid points (non-zero lat/lng)
+  // Valid fixes (non-zero lat/lng), with parked-GPS drift collapsed into one point per stop
+  // (clean-track.ts): a parked tracker's scattered fixes would otherwise draw a star of fake lines.
   const validPoints = useMemo(() => {
-    return positions.filter(
+    const valid = positions.filter(
       (p) =>
         p.locationLat != null &&
         p.locationLng != null &&
@@ -393,6 +402,7 @@ export function TrackingHistoryView() {
         !isNaN(p.locationLat) &&
         !isNaN(p.locationLng),
     );
+    return cleanTrack(valid).points;
   }, [positions]);
 
   // Detected exact route legs used by the vehicle

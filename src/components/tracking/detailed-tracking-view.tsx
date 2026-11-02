@@ -108,6 +108,7 @@ function resolveLocation(lat: number, lng: number): string {
 
 export function DetailedTrackingView() {
   const t = useTranslations("tracking.detailed");
+  const tNav = useTranslations("nav");
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 
   // 1. Company-Scoped Lookups: automatically scopes vehicles, drivers & vehicleTypes company-wise
@@ -392,9 +393,9 @@ export function DetailedTrackingView() {
           <VehiclesHeaderBanner className="flex-1 max-w-[650px] justify-center" />
           <div className="flex flex-col items-end gap-2 shrink-0">
             <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-              <span>Tracking</span>
-              <ChevronRight className="size-3 text-muted-foreground/60" />
-              <span className="text-foreground">Detail Tracking</span>
+              <span>{tNav("tracking")}</span>
+              <ChevronRight className="size-3 text-muted-foreground/60 rtl:rotate-180" />
+              <span className="text-foreground">{t("title")}</span>
             </div>
             <button
               type="button"
