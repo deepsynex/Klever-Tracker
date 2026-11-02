@@ -1,0 +1,37 @@
+$kind: http-request
+method: POST
+url: '{{graphqlUrl}}'
+order: 6000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "query Roles($first: Int!) { roles(first: $first) { data { id companyId name status } } modules(first: $first) { data { id name code } } rolePermissions(first: 500) { data { id roleId moduleId canView canAdd canEdit canDelete } } }",
+      "variables": {
+        "first": 100
+      }
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const body = pm.response.json();
+      pm.test("No GraphQL errors", () => pm.expect(body.errors, JSON.stringify(body.errors)).to.be.undefined);
+
+      const d = body.data;
+      pm.test("Modules have codes", () => d.modules.data.forEach((m) => pm.expect(m.code).to.match(/^[a-z-]+$/)));
+      pm.test("Permission flags are booleans", () => d.rolePermissions.data.forEach((p) => ["canView", "canAdd", "canEdit", "canDelete"].forEach((k) => pm.expect(p[k], `${p.id}.${k}`).to.be.a("boolean"))));
+      pm.test("Add, edit or delete imply view", () => d.rolePermissions.data.filter((p) => p.canAdd || p.canEdit || p.canDelete).forEach((p) => pm.expect(p.canView, `permission ${p.id}`).to.be.true));
+      pm.test("Permissions reference listed roles and modules", () => {
+        const roles = new Set(d.roles.data.map((r) => r.id));
+        const modules = new Set(d.modules.data.map((m) => m.id));
+        d.rolePermissions.data.forEach((p) => {
+          pm.expect(roles.has(p.roleId), `role ${p.roleId}`).to.be.true;
+          pm.expect(modules.has(p.moduleId), `module ${p.moduleId}`).to.be.true;
+        });
+      });

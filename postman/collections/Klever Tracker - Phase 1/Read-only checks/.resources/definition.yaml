@@ -1,0 +1,4 @@
+$kind: collection
+name: Read-only checks
+description: Queries only. Safe to run against any environment, including in CI.
+order: 1000

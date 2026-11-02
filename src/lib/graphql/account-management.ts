@@ -234,14 +234,19 @@ export const USERS = /* GraphQL */ `
     drivers(first: $first) {
       data { id userAccess { id userId } }
     }
+    vehicleGroups(first: $first) {
+      data { id companyId parentId name userAccess { id userId } }
+    }
   }
 `;
+export type AmVehicleGroup = { id: string; companyId: string; parentId: string | null; name: string; userAccess: AccessGrant[] };
 export type UsersResult = {
   users: Paginated<User>;
   roles: Paginated<Role>;
   departments: Paginated<Department>;
   vehicles: Paginated<{ id: string; userAccess: AccessGrant[] }>;
   drivers: Paginated<{ id: string; userAccess: AccessGrant[] }>;
+  vehicleGroups: Paginated<AmVehicleGroup>;
 };
 
 const USER_ARGS = `
@@ -488,6 +493,135 @@ export const UPDATE_BEHAVIOUR_SETTING = /* GraphQL */ `
 export const DELETE_BEHAVIOUR_SETTING = /* GraphQL */ `
   mutation DeleteDriverBehaviourSetting($id: ID!) {
     deleteDriverBehaviourSetting(id: $id) {
+      id
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------------------------
+// Phase 1 additions: vehicle-group access, departments, login history, audit log, own profile
+// ---------------------------------------------------------------------------------------------
+
+export const GRANT_USER_VEHICLE_GROUP = /* GraphQL */ `
+  mutation GrantUserVehicleGroupAccess($userId: ID!, $vehicleGroupId: ID!) {
+    grantUserVehicleGroupAccess(userId: $userId, vehicleGroupId: $vehicleGroupId) {
+      id
+    }
+  }
+`;
+export const REVOKE_USER_VEHICLE_GROUP = /* GraphQL */ `
+  mutation RevokeUserVehicleGroupAccess($id: ID!) {
+    revokeUserVehicleGroupAccess(id: $id) {
+      id
+    }
+  }
+`;
+
+/** Departments with how many users each has (users are needed to warn before deleting). */
+export const DEPARTMENTS = /* GraphQL */ `
+  query Departments($first: Int!) {
+    departments(first: $first) {
+      data { id companyId name createdAt }
+    }
+    users(first: $first) {
+      data { id departmentId }
+    }
+  }
+`;
+export type DepartmentsResult = {
+  departments: Paginated<Department & { createdAt: string }>;
+  users: Paginated<{ id: string; departmentId: string | null }>;
+};
+export const UPDATE_DEPARTMENT = /* GraphQL */ `
+  mutation UpdateDepartment($id: ID!, $name: String) {
+    updateDepartment(id: $id, name: $name) {
+      id
+    }
+  }
+`;
+export const DELETE_DEPARTMENT = /* GraphQL */ `
+  mutation DeleteDepartment($id: ID!) {
+    deleteDepartment(id: $id) {
+      id
+    }
+  }
+`;
+
+/** Sign-ins (API Doc §6.13, read-only). The API can't filter by user, so pages are filtered here. */
+export const USER_LOGIN_LOGS = /* GraphQL */ `
+  query UserLoginLogs($first: Int!, $page: Int) {
+    userLoginLogs(first: $first, page: $page) {
+      data { id userId loggedInAt ipAddress userAgent locationLat locationLng createdAt }
+      paginatorInfo { total currentPage lastPage }
+    }
+  }
+`;
+export type UserLoginLog = {
+  id: string;
+  userId: string;
+  loggedInAt: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
+  createdAt: string;
+};
+
+/** Audit trail (API Doc §6.13, append-only): who changed what, with before/after values as JSON strings. */
+export const AUDIT_LOGS = /* GraphQL */ `
+  query AuditLogs($first: Int!, $page: Int) {
+    auditLogs(first: $first, page: $page) {
+      data { id userId companyId action auditableType auditableId oldValues newValues ipAddress createdAt }
+      paginatorInfo { total currentPage lastPage }
+    }
+    users(first: 500) {
+      data { id name email }
+    }
+  }
+`;
+export type AuditLogEntry = {
+  id: string;
+  userId: string | null;
+  companyId: string | null;
+  action: string;
+  auditableType: string | null;
+  auditableId: string | null;
+  oldValues: string | null;
+  newValues: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+};
+export type AuditLogsResult = {
+  auditLogs: { data: AuditLogEntry[]; paginatorInfo: { total: number; currentPage: number; lastPage: number } };
+  users: Paginated<{ id: string; name: string; email: string }>;
+};
+
+/** The signed-in user's own record, for My profile. */
+export const MY_PROFILE = /* GraphQL */ `
+  query MyProfile($id: ID!) {
+    user(id: $id) {
+      id
+      name
+      username
+      email
+      mobile
+      address
+      lastLoginAt
+    }
+  }
+`;
+export type MyProfile = {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  mobile: string | null;
+  address: string | null;
+  lastLoginAt: string | null;
+};
+export const UPDATE_MY_PROFILE = /* GraphQL */ `
+  mutation UpdateMyProfile($id: ID!, $name: String, $mobile: String, $address: String) {
+    updateUser(id: $id, name: $name, mobile: $mobile, address: $address) {
       id
     }
   }

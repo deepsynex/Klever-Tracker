@@ -1,0 +1,23 @@
+$kind: http-request
+method: POST
+url: '{{graphqlUrl}}'
+order: 1000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "query { ping }"
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const body = pm.response.json();
+      pm.test("API is up", () => pm.expect(body.data.ping).to.be.a("string").and.not.empty);

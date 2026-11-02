@@ -1,0 +1,35 @@
+$kind: http-request
+method: POST
+url: '{{graphqlUrl}}'
+order: 7000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "query Departments($first: Int!) { departments(first: $first) { data { id companyId name createdAt } } }",
+      "variables": {
+        "first": 100
+      }
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const body = pm.response.json();
+      pm.test("No GraphQL errors", () => pm.expect(body.errors, JSON.stringify(body.errors)).to.be.undefined);
+
+      const list = body.data.departments.data;
+      pm.test("Names are present", () => list.forEach((x) => pm.expect(x.name).to.be.a("string").and.not.empty));
+      pm.test("Names are unique per company (case-insensitive)", () => {
+        const seen = new Set();
+        list.forEach((x) => {
+          const key = `${x.companyId}|${x.name.trim().toLowerCase()}`;
+          pm.expect(seen.has(key), x.name).to.be.false;
+          seen.add(key);
+        });
+      });

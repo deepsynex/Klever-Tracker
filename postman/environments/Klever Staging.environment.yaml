@@ -1,0 +1,54 @@
+name: Klever Staging
+values:
+  - key: graphqlUrl
+    value: 'https://tiretracker.klever.ae/graphql'
+    enabled: true
+    type: default
+    description: Klever GraphQL endpoint.
+  - key: token
+    value: ''
+    enabled: true
+    type: secret
+    description: Sanctum bearer token. Pass at run time (--env-var token=...); never commit it.
+  - key: email
+    value: ''
+    enabled: true
+    type: secret
+    description: Test account email (Mutations folder only).
+  - key: password
+    value: ''
+    enabled: true
+    type: secret
+    description: Test account password (Mutations folder only).
+  - key: newPassword
+    value: ''
+    enabled: true
+    type: secret
+    description: New password for Change / Reset password.
+  - key: resetToken
+    value: ''
+    enabled: true
+    type: secret
+    description: Token from the reset email link.
+  - key: companyId
+    value: ''
+    enabled: true
+    type: default
+    description: Company to create test records in.
+  - key: userId
+    value: ''
+    enabled: true
+    type: default
+    description: User to grant or revoke access for.
+  - key: vehicleId
+    value: ''
+    enabled: true
+    type: default
+  - key: vehicleGroupId
+    value: ''
+    enabled: true
+    type: default
+  - key: profileName
+    value: ''
+    enabled: true
+    type: default

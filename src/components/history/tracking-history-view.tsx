@@ -58,6 +58,7 @@ import {
   type TrackTarget,
 } from "@/lib/history/selection";
 import { cleanTrack } from "@/lib/history/clean-track";
+import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { fetchHistoryFixes, MAX_HISTORY_FIXES, TooManyFixesError, type HistoryFix } from "@/lib/history/fetch-history";
 import { cn } from "@/lib/utils";
 
@@ -223,6 +224,7 @@ function computeRouteLegs(points: PositionHistoryPoint[]): RouteLeg[] {
 export function TrackingHistoryView() {
   const t = useTranslations("history");
   const te = useTranslations("errors");
+  const displayZone = useCompanyTimeZone();
 
   // Form fields. Dates and times are in the company time zone (Asia/Dubai).
   const [selectedKey, setSelectedKey] = useState<string>("");
@@ -262,7 +264,16 @@ export function TrackingHistoryView() {
   const [focusedLeg, setFocusedLeg] = useState<RouteLeg | null>(null);
   const [activeTab, setActiveTab] = useState<"map" | "legs" | "points" | "events">("map");
   const [paramsOpen, setParamsOpen] = useState(true);
-  const paramsPanel = useDraggablePanel<HTMLElement>("kt-history-params-position");
+  // Destructured: passing a property of one object to a JSX `ref` makes the React Compiler treat the
+  // whole object as a ref (and refuse reads of its other fields during render).
+  const {
+    attach: attachParamsPanel,
+    offset: paramsOffset,
+    dragging: paramsDragging,
+    handleProps: paramsHandleProps,
+    onHandleKeyDown: onParamsHandleKeyDown,
+    reset: resetParamsPanel,
+  } = useDraggablePanel<HTMLElement>("kt-history-params-position");
 
   // Only the latest request may update the page: an earlier, larger window (e.g. the default range
   // loaded on open) can finish after the one the user just asked for.
@@ -337,7 +348,9 @@ export function TrackingHistoryView() {
         setTargets(loadedTargets);
         setHasTargets(loadedTargets.length > 0);
         const defaultTarget = loadedTargets[0] ?? null;
-        setSelectedKey(defaultTarget?.key ?? "");
+        // Only when nothing is chosen yet: a slow (or, in development, repeated) load must not
+        // overwrite a vehicle the user already picked.
+        setSelectedKey((current) => current || (defaultTarget?.key ?? ""));
 
         if (routesRes.status === "fulfilled" && routesRes.value?.routes?.data) {
           setRoutes(routesRes.value.routes.data);
@@ -546,21 +559,21 @@ export function TrackingHistoryView() {
 
       {/* Tracking parameters: floating panel on the start side, collapsible to its title */}
       <section
-        ref={paramsPanel.ref}
+        ref={attachParamsPanel}
         aria-labelledby="history-title"
-        style={{ transform: `translate(${paramsPanel.offset.x}px, ${paramsPanel.offset.y}px)` }}
+        style={{ transform: `translate(${paramsOffset.x}px, ${paramsOffset.y}px)` }}
         className={cn(
           "glass-panel absolute start-3 top-3 z-20 flex max-h-[calc(100%-20rem)] flex-col rounded-2xl sm:start-4 sm:top-4 lg:max-h-[calc(100%-9rem)]",
           paramsOpen ? "w-[min(380px,calc(100%-1.5rem))]" : "w-auto",
-          paramsPanel.dragging && "z-40 ring-2 ring-primary/40",
+          paramsDragging && "z-40 ring-2 ring-primary/40",
         )}
       >
         {/* The header is the drag area; the grip is its keyboard-reachable handle. */}
         <div
-          {...paramsPanel.handleProps}
+          {...paramsHandleProps}
           className={cn(
             "flex touch-none select-none items-start gap-2 p-4 pb-3 ps-2",
-            paramsPanel.dragging ? "cursor-grabbing" : "cursor-grab",
+            paramsDragging ? "cursor-grabbing" : "cursor-grab",
           )}
         >
           <button
@@ -568,8 +581,8 @@ export function TrackingHistoryView() {
             data-drag-handle
             aria-label={t("panel.move")}
             title={t("panel.moveHint")}
-            onKeyDown={paramsPanel.onHandleKeyDown}
-            onDoubleClick={paramsPanel.reset}
+            onKeyDown={onParamsHandleKeyDown}
+            onDoubleClick={resetParamsPanel}
             className="grid h-8 w-6 shrink-0 cursor-[inherit] place-items-center rounded-md text-subtle hover:bg-surface-2 hover:text-foreground"
           >
             <GripVertical className="size-4" />
@@ -898,7 +911,7 @@ export function TrackingHistoryView() {
                           <div className="flex items-center gap-1.5 text-muted-foreground">
                             <Clock className="size-3.5 text-subtle" />
                             <span>
-                              {leg.startTime.substring(11, 16)} → {leg.endTime.substring(11, 16)} ({leg.durationMins}m)
+                              <span dir="ltr">{formatInCompanyTz(leg.startTime, displayZone, "HH:mm")} → {formatInCompanyTz(leg.endTime, displayZone, "HH:mm")}</span> ({leg.durationMins}m)
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -965,7 +978,7 @@ export function TrackingHistoryView() {
                         }}
                       >
                         <td className="p-2 font-mono">{idx + 1}</td>
-                        <td className="p-2 font-mono">{p.recordedAt}</td>
+                        <td className="p-2 font-mono" dir="ltr">{formatInCompanyTz(p.recordedAt, displayZone)}</td>
                         <td className="p-2 font-mono">{p.speed ?? 0} km/h</td>
                         <td className="p-2 font-mono">{p.locationLat?.toFixed(6)}</td>
                         <td className="p-2 font-mono">{p.locationLng?.toFixed(6)}</td>
@@ -1149,7 +1162,7 @@ export function TrackingHistoryView() {
         </div>
         {activePoint && (
           <div className="mt-2 flex items-center justify-end gap-3 font-mono text-[11px] text-muted-foreground">
-            <span>{t("playback.currentTime", { time: activePoint.recordedAt })}</span>
+            <span dir="ltr">{t("playback.currentTime", { time: formatInCompanyTz(activePoint.recordedAt, displayZone) })}</span>
             <span className="font-semibold text-primary">
               {t("playback.currentSpeed", { speed: activePoint.speed ?? 0 })}
             </span>

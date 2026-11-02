@@ -1,6 +1,8 @@
 import { useTranslations } from "next-intl";
 import { Suspense } from "react";
 import { Brand } from "@/components/brand";
+import { RouteGuard } from "@/components/shell/route-guard";
+import { TimeZoneSync } from "@/components/shell/time-zone-sync";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { TopNav } from "@/components/shell/top-nav";
 import { UserMenu, UserMenuSkeleton } from "@/components/shell/user-menu";
@@ -38,7 +40,9 @@ export default function AppLayout({ children }: LayoutProps<"/[locale]">) {
         </div>
       </header>
       <main id="main" className="flex-1 px-4 py-6 sm:px-6">
-        {children}
+        <TimeZoneSync>
+          <RouteGuard>{children}</RouteGuard>
+        </TimeZoneSync>
       </main>
     </div>
   );

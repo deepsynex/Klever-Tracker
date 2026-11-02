@@ -13,6 +13,7 @@ export const ME = /* GraphQL */ `
     me {
       id
       name
+      email
       companyId
       company {
         id
@@ -21,6 +22,7 @@ export const ME = /* GraphQL */ `
         maxUsers
         maxDrivers
       }
+      roles
       permissions
     }
   }
@@ -28,8 +30,11 @@ export const ME = /* GraphQL */ `
 export type Me = {
   id: string;
   name: string;
+  email: string;
   companyId: string | null;
   company: { id: string; name: string; timezone: string; maxUsers: number | null; maxDrivers: number | null } | null;
+  /** Role names (API Doc §3, `me`). */
+  roles: string[];
   permissions: string[];
 };
 

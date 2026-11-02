@@ -1,4 +1,4 @@
-import { CHANGE_PASSWORD_HREF } from "@/components/masters/am-modules";
+import { AUDIT_HREF, CHANGE_PASSWORD_HREF, PROFILE_HREF } from "@/components/masters/am-modules";
 import { CompanyPicker } from "@/components/masters/company-picker";
 import { AmNav, ModuleGuard } from "@/components/masters/vm-nav";
 import { CompanyScopeProvider } from "@/lib/vehicle-management/company-scope";
@@ -7,7 +7,7 @@ export default function AccountManagementLayout({ children }: LayoutProps<"/[loc
   return (
     <CompanyScopeProvider>
       <div className="mx-auto grid max-w-[1400px] gap-4">
-        <CompanyPicker hideOn={[CHANGE_PASSWORD_HREF]} />
+        <CompanyPicker hideOn={[CHANGE_PASSWORD_HREF, PROFILE_HREF, AUDIT_HREF]} />
         <AmNav />
         <ModuleGuard which="am">{children}</ModuleGuard>
       </div>

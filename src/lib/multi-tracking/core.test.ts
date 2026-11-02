@@ -4,6 +4,7 @@ import {
   applyFixes,
   emptyTrack,
   gridShape,
+  windowSize,
   headingOf,
   MAX_GRID,
   MAX_SINGLE,
@@ -101,6 +102,17 @@ describe("grid and selection", () => {
     expect([1, 2, 3, 4, 5, 6, 7, 9, 10, 12].map((n) => gridShape(n).cols)).toEqual([1, 2, 2, 2, 3, 3, 3, 3, 4, 4]);
     expect(gridShape(12)).toEqual({ cols: 4, rows: 3 });
     expect(gridShape(0)).toEqual({ cols: 1, rows: 1 });
+  });
+
+  it("makes windows as big as the count allows, and always fits them", () => {
+    expect(windowSize(1)).toEqual({ width: 60, height: 70 });
+    expect(windowSize(4)).toEqual({ width: 50, height: 50 });
+    expect(windowSize(12)).toEqual({ width: 25, height: 100 / 3 });
+    for (let n = 1; n <= 12; n++) {
+      const { width, height } = windowSize(n);
+      const perRow = Math.floor(100 / width + 1e-9);
+      expect(Math.ceil(n / perRow) * height).toBeLessThanOrEqual(100 + 1e-9);
+    }
   });
 
   it("blocks a 13th tile in grid view but not in single-map view", () => {

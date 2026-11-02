@@ -1,0 +1,31 @@
+$kind: collection
+name: Klever Tracker - Phase 1
+description: |-
+  GraphQL operations used by Phase 1 of the Klever Tracker web app (Foundation, Auth & Users):
+  sign-in and password reset, the signed-in user (me), users, roles and permissions,
+  departments, vehicle and vehicle-group access, login history and the audit log.
+
+  Every request is POST {{graphqlUrl}} with a JSON body { query, variables }. Authentication is a
+  Sanctum bearer token in {{token}} (environment secret; never commit it). Public operations
+  (ping, login, forgotPassword, resetPassword) override auth with noauth.
+
+  Run "Read-only checks" for regression checks: it changes no data. "Mutations (manual)" changes
+  data or sends email; run single requests deliberately, against a test company.
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{token}}'
+variables:
+  - key: graphqlUrl
+    value: 'https://tiretracker.klever.ae/graphql'
+    description: Klever GraphQL endpoint (overridden by the environment).
+scripts:
+  - type: http:afterResponse
+    language: text/javascript
+    code: |-
+      // GraphQL answers 200 even for errors; each request asserts on its own body.
+      pm.test("HTTP 200 with a JSON body", () => {
+        pm.response.to.have.status(200);
+        pm.expect(() => pm.response.json()).to.not.throw();
+      });

@@ -1,0 +1,30 @@
+$kind: http-request
+description: 'Issues a new token (tokens never expire, B4). Uses the email/password secrets.'
+method: POST
+url: '{{graphqlUrl}}'
+order: 1000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "mutation Login($email: String!, $password: String!) { login(email: $email, password: $password) { token user { id name email } } }",
+      "variables": {
+        "email": "{{email}}",
+        "password": "{{password}}"
+      }
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const body = pm.response.json();
+      pm.test("Signed in", () => pm.expect(body.data?.login?.token, JSON.stringify(body.errors)).to.be.a("string"));
+      // Kept for this run only (not written to the environment file).
+      if (body.data?.login?.token) pm.environment.set("token", body.data.login.token);

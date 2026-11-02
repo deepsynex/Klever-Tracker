@@ -1,0 +1,104 @@
+# Klever Tracker Web: checks on every push to main and every pull request.
+# Lint, type-check, unit tests and the production build run first; the Playwright suite then runs
+# against the dev server with the mock API (KLEVER_MOCK=true), so no backend credentials are needed.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Lint, types, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: End-to-end (Playwright, mock API)
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright
+        run: npm run test:e2e
+        env:
+          CI: "true"
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  api:
+    name: API contract (Postman, read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Runs the "Read-only checks" folder of postman/collections/Klever Tracker - Phase 1 against the
+    # real API. It changes no data. Needs the repository secret KLEVER_API_TOKEN (a bearer token for a
+    # test account); without it the job is skipped with a notice instead of failing.
+    env:
+      KLEVER_API_TOKEN: ${{ secrets.KLEVER_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No token configured
+        if: env.KLEVER_API_TOKEN == ''
+        run: echo "::notice::Set the KLEVER_API_TOKEN repository secret to run the Postman API checks."
+
+      - name: Install Postman CLI
+        if: env.KLEVER_API_TOKEN != ''
+        run: curl -o- "https://dl-cli.pstmn.io/install/linux64.sh" | sh
+
+      - name: Read-only API checks
+        if: env.KLEVER_API_TOKEN != ''
+        run: >
+          postman collection run "postman/collections/Klever Tracker - Phase 1"
+          -e "postman/environments/Klever Staging.environment.yaml"
+          -i "Read-only checks"
+          --env-var "token=$KLEVER_API_TOKEN"
