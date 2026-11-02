@@ -156,6 +156,45 @@ export function windowSize(n: number): { width: number; height: number } {
   return { width: 25, height: 100 / 3 };
 }
 
+/** A floating window's place in the map area, in percent of its width (x, w) and height (y, h). */
+export type WindowRect = { x: number; y: number; w: number; h: number };
+
+/**
+ * Where window `index` of `n` sits by default: TouchTraks order, filling from the bottom-right
+ * corner leftwards, then up a row (bottom-left first in right-to-left layouts).
+ */
+export function defaultWindowRect(index: number, n: number, rtl = false): WindowRect {
+  const { width: w, height: h } = windowSize(n);
+  const perRow = Math.max(1, Math.floor(100 / w + 1e-9));
+  const col = index % perRow;
+  const row = Math.floor(index / perRow);
+  return { x: rtl ? col * w : 100 - (col + 1) * w, y: 100 - (row + 1) * h, w, h };
+}
+
+/** Keeps a window inside the area and at least `minW` × `minH` percent (and at most the area). */
+export function clampWindowRect(r: WindowRect, minW: number, minH: number): WindowRect {
+  const w = Math.min(100, Math.max(minW, r.w));
+  const h = Math.min(100, Math.max(minH, r.h));
+  return { w, h, x: Math.min(100 - w, Math.max(0, r.x)), y: Math.min(100 - h, Math.max(0, r.y)) };
+}
+
+/** Saved window layout (per user, localStorage): vehicle id → rect; anything malformed is dropped. */
+export function parseLayout(raw: string | null): Record<string, WindowRect> {
+  if (!raw) return {};
+  try {
+    const v = JSON.parse(raw) as Record<string, Partial<WindowRect>>;
+    const out: Record<string, WindowRect> = {};
+    for (const [id, r] of Object.entries(v ?? {})) {
+      if (!/^\d+$/.test(id) || !r) continue;
+      const nums = [r.x, r.y, r.w, r.h];
+      if (nums.every((n) => typeof n === "number" && Number.isFinite(n))) out[id] = clampWindowRect(r as WindowRect, 5, 5);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 /** Plan §8.3: 1 → 1×1, 2 → 2×1, 3–4 → 2×2, 5–6 → 3×2, 7–9 → 3×3, 10–12 → 4×3. */
 export function gridShape(n: number): { cols: number; rows: number } {
   const cols = n <= 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4;

@@ -1554,6 +1554,11 @@
       },
       "stillTracking": "Vehicle status, speed and update times in the list and window headers keep updating.",
       "unavailable": "Map unavailable"
+    },
+    "windows": {
+      "label": "Live map for {plate}",
+      "reset": "Reset layout",
+      "hint": "Drag a title bar to move · drag the corner to resize · double-click to maximize"
     }
   }
 }

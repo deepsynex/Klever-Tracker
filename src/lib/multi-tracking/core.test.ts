@@ -5,6 +5,9 @@ import {
   emptyTrack,
   gridShape,
   windowSize,
+  defaultWindowRect,
+  clampWindowRect,
+  parseLayout,
   headingOf,
   MAX_GRID,
   MAX_SINGLE,
@@ -113,6 +116,30 @@ describe("grid and selection", () => {
       const perRow = Math.floor(100 / width + 1e-9);
       expect(Math.ceil(n / perRow) * height).toBeLessThanOrEqual(100 + 1e-9);
     }
+  });
+
+  it("places windows from the bottom-right corner, leftwards then up", () => {
+    expect(defaultWindowRect(0, 1)).toEqual({ x: 40, y: 30, w: 60, h: 70 });
+    // 4 windows (2 × 2): bottom-right, bottom-left, then top-right, top-left.
+    expect([0, 1, 2, 3].map((i) => defaultWindowRect(i, 4)).map((r) => [r.x, r.y])).toEqual([[50, 50], [0, 50], [50, 0], [0, 0]]);
+    // Right-to-left mirrors the order.
+    expect(defaultWindowRect(0, 4, true)).toMatchObject({ x: 0, y: 50 });
+    // 12 windows never leave the area.
+    for (let i = 0; i < 12; i++) {
+      const r = defaultWindowRect(i, 12);
+      expect(r.x).toBeGreaterThanOrEqual(-1e-9);
+      expect(r.y).toBeGreaterThanOrEqual(-1e-9);
+    }
+  });
+
+  it("keeps a moved or resized window inside the area and above the minimum size", () => {
+    expect(clampWindowRect({ x: 90, y: -10, w: 30, h: 20 }, 10, 10)).toEqual({ x: 70, y: 0, w: 30, h: 20 });
+    expect(clampWindowRect({ x: 10, y: 10, w: 2, h: 200 }, 15, 20)).toEqual({ x: 10, y: 0, w: 15, h: 100 });
+  });
+
+  it("reads a saved layout and drops anything malformed", () => {
+    expect(parseLayout('{"16":{"x":10,"y":20,"w":30,"h":40},"x":{"x":1},"17":{"x":"a"}}')).toEqual({ "16": { x: 10, y: 20, w: 30, h: 40 } });
+    expect(parseLayout("{bad")).toEqual({});
   });
 
   it("blocks a 13th tile in grid view but not in single-map view", () => {
