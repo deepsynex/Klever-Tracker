@@ -7,6 +7,7 @@ import {
   ChevronDown,
   CircleDashed,
   Flame,
+  Footprints,
   History,
   Home,
   MapPin,
@@ -15,9 +16,9 @@ import {
   Radio,
   Route,
   Settings,
-  ShoppingCart,
   Truck,
   UserCog,
+  Video,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -52,12 +53,13 @@ function isNavGroup(entry: NavEntry): entry is NavGroup {
 
 const TRACKING_CHILDREN: NavItem[] = [
   { key: "liveTracking", icon: Radio, href: "/live" },
-  { key: "detailedTracking", icon: MapPin, href: "/detailed" },
-  { key: "salesTracking", icon: ShoppingCart, href: "/sales" },
+  { key: "detailTracking", icon: MapPin, href: "/detailed" },
+  { key: "liveTraversed", icon: Footprints, href: "/live-traversed" },
   { key: "historyTracking", icon: History, href: "/history" },
   { key: "liveRoute", icon: Route, href: "/live-route" },
   { key: "multiTracking", icon: Truck, href: "/multi" },
   { key: "heatmap", icon: Flame, href: "/heatmap" },
+  { key: "videoMonitoring", icon: Video, href: "/video-monitoring" },
 ];
 
 function useNavEntries() {
@@ -72,7 +74,7 @@ function useNavEntries() {
   const entries: NavEntry[] = [
     { key: "dashboard", icon: Home, href: "/dashboard" },
     {
-      key: "track",
+      key: "tracking",
       icon: Navigation,
       children: TRACKING_CHILDREN,
     },

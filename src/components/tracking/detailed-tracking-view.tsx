@@ -392,9 +392,9 @@ export function DetailedTrackingView() {
           <VehiclesHeaderBanner className="flex-1 max-w-[650px] justify-center" />
           <div className="flex flex-col items-end gap-2 shrink-0">
             <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-              <span>Track</span>
+              <span>Tracking</span>
               <ChevronRight className="size-3 text-muted-foreground/60" />
-              <span className="text-foreground">Detailed Tracking</span>
+              <span className="text-foreground">Detail Tracking</span>
             </div>
             <button
               type="button"

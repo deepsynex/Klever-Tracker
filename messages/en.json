@@ -166,14 +166,16 @@
     "vehicles": "Vehicles",
     "accounts": "Accounts",
     "settings": "Settings",
-    "track": "Track",
+    "track": "Tracking",
     "liveTracking": "Live Tracking",
-    "detailedTracking": "Detailed Tracking",
-    "salesTracking": "Sales Tracking",
+    "detailedTracking": "Detail Tracking",
     "historyTracking": "History Tracking",
     "liveRoute": "Live Route",
     "multiTracking": "Multi Tracking",
-    "tracking": "Tracking"
+    "tracking": "Tracking",
+    "detailTracking": "Detail Tracking",
+    "liveTraversed": "Live Traversed",
+    "videoMonitoring": "Video Monitoring"
   },
   "shell": {
     "skipToContent": "Skip to content",
@@ -1344,12 +1346,8 @@
       "description": "Real-time GPS fleet positions, live movement alerts, and active vehicle telemetry."
     },
     "detailed": {
-      "title": "Detailed Tracking",
+      "title": "Detail Tracking",
       "description": "In-depth vehicle metrics, onboard sensor telemetry, and diagnostic logs."
-    },
-    "sales": {
-      "title": "Sales Tracking",
-      "description": "Field agent movements, commercial client site visits, and sales territory routes."
     },
     "liveRoute": {
       "title": "Live Route",
@@ -1358,6 +1356,14 @@
     "multi": {
       "title": "Multi Tracking",
       "description": "Simultaneous fleet multi-view, split monitoring, and multi-vehicle map surveillance."
+    },
+    "liveTraversed": {
+      "title": "Live Traversed",
+      "description": "Real-time traversed route logs, trip playback, and path history."
+    },
+    "videoMonitoring": {
+      "title": "Video Monitoring",
+      "description": "Live onboard dashcam feeds, multi-camera streaming, and safety video surveillance."
     }
   }
 }
