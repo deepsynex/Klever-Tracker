@@ -12,6 +12,7 @@ interface TrackingScreenProps {
 export function TrackingScreen({ translationKey, icon: Icon, phase = 3 }: TrackingScreenProps) {
   const t = useTranslations(`tracking.${translationKey}`);
   const tc = useTranslations("nav");
+  const ts = useTranslations("tracking.screen");
 
   return (
     <div className="grid gap-6">
@@ -59,22 +60,22 @@ export function TrackingScreen({ translationKey, icon: Icon, phase = 3 }: Tracki
           <div className="flex items-center gap-3 rounded-xl bg-surface-2/60 p-3.5">
             <Radio className="size-5 text-primary" aria-hidden />
             <div className="grid text-start">
-              <span className="text-xs text-muted-foreground">GPS Stream</span>
-              <span className="text-sm font-semibold">Live Polling</span>
+              <span className="text-xs text-muted-foreground">{ts("gpsStream")}</span>
+              <span className="text-sm font-semibold">{ts("livePolling")}</span>
             </div>
           </div>
           <div className="flex items-center gap-3 rounded-xl bg-surface-2/60 p-3.5">
             <Activity className="size-5 text-moving" aria-hidden />
             <div className="grid text-start">
-              <span className="text-xs text-muted-foreground">Fleet Telemetry</span>
-              <span className="text-sm font-semibold">Ready for Phase {phase}</span>
+              <span className="text-xs text-muted-foreground">{ts("fleetTelemetry")}</span>
+              <span className="text-sm font-semibold">{ts("readyForPhase", { n: phase })}</span>
             </div>
           </div>
           <div className="flex items-center gap-3 rounded-xl bg-surface-2/60 p-3.5">
             <Layers className="size-5 text-accent" aria-hidden />
             <div className="grid text-start">
-              <span className="text-xs text-muted-foreground">Map Rendering</span>
-              <span className="text-sm font-semibold">Google Maps JS API</span>
+              <span className="text-xs text-muted-foreground">{ts("mapRendering")}</span>
+              <span className="text-sm font-semibold">{ts("mapEngine")}</span>
             </div>
           </div>
         </div>
