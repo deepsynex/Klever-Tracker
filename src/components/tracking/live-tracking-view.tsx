@@ -1,6 +1,6 @@
 "use client";
 
-import { AdvancedMarker, APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
+import { AdvancedMarker, AdvancedMarkerAnchorPoint, APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
 import { Bike, CarFront, Navigation, RefreshCw, Search, Truck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
@@ -9,10 +9,12 @@ import { gqlRequest } from "@/lib/graphql/client";
 import {
   GET_POSITION_HISTORY,
   GET_VEHICLES,
+  type PositionHistoryPoint,
   type PositionHistoryResult,
   type VehiclesResult,
 } from "@/lib/graphql/operations";
 import { DUBAI_CENTER } from "@/lib/heatmap/client";
+import { bearing, metres } from "@/lib/history/road-path";
 import { cn } from "@/lib/utils";
 
 type LiveVehicle = {
@@ -25,7 +27,84 @@ type LiveVehicle = {
   speed: number;
   recordedAt: string | null;
   status: "moving" | "stopped" | "offline";
+  /** Compass degrees the arrow points (0 = north); null when unknown. */
+  heading: number | null;
 };
+
+/** Same arrow colour as the public /track page. */
+const ARROW_FILL = "#0B6E69";
+
+/**
+ * Direction for the arrow: the device's own heading for the newest fix, or else the bearing from
+ * the previous fix that is far enough away to give a direction (newest first).
+ */
+function headingFor(fixes: PositionHistoryPoint[]): number | null {
+  const [latest, ...older] = fixes;
+  if (!latest) return null;
+  if (typeof latest.heading === "number") return ((latest.heading % 360) + 360) % 360;
+  const here = { lat: latest.locationLat!, lng: latest.locationLng! };
+  const previous = older.find((p) => metres({ lat: p.locationLat!, lng: p.locationLng! }, here) > 10);
+  return previous ? bearing({ lat: previous.locationLat!, lng: previous.locationLng! }, here) : null;
+}
+
+/** The /track page's navigation arrow, turned to the vehicle's heading, with its details on hover. */
+function VehicleArrow({ vehicle, selected, hovered }: { vehicle: LiveVehicle; selected: boolean; hovered: boolean }) {
+  const t = useTranslations("tracking.marker");
+  const status =
+    vehicle.status === "moving" ? t("moving", { speed: vehicle.speed }) : vehicle.status === "stopped" ? t("stopped") : t("offline");
+
+  return (
+    <div className="relative grid size-9 cursor-pointer place-items-center">
+      {selected ? <span className="absolute inset-0 animate-ping rounded-full bg-primary/30" aria-hidden /> : null}
+      <svg
+        viewBox="0 0 24 24"
+        className={cn("relative size-7 drop-shadow-md transition-transform duration-500", (hovered || selected) && "scale-125")}
+        style={{ transform: `rotate(${vehicle.heading ?? 0}deg)` }}
+        aria-hidden
+      >
+        <path d="M12 2.5 20 21 12 16.8 4 21Z" fill={ARROW_FILL} stroke="#ffffff" strokeWidth="2" strokeLinejoin="round" />
+      </svg>
+
+      {hovered ? (
+        <div
+          role="tooltip"
+          className="pointer-events-none absolute bottom-full start-1/2 mb-2 w-max min-w-44 -translate-x-1/2 rounded-xl border border-border/70 bg-surface px-3 py-2.5 text-xs text-foreground shadow-xl rtl:translate-x-1/2"
+        >
+          <div className="flex items-center gap-1.5 font-bold">
+            {vehicle.kind === "bike" ? (
+              <Bike className="size-3.5" aria-hidden />
+            ) : vehicle.kind === "truck" ? (
+              <Truck className="size-3.5" aria-hidden />
+            ) : (
+              <CarFront className="size-3.5" aria-hidden />
+            )}
+            <span dir="ltr">{vehicle.plateNo}</span>
+          </div>
+          {vehicle.vehicleName ? <p className="mt-0.5 text-muted-foreground">{vehicle.vehicleName}</p> : null}
+          <p className="mt-1.5 flex items-center gap-1.5 font-semibold">
+            <span
+              className={cn(
+                "size-1.5 rounded-full",
+                vehicle.status === "moving" ? "bg-emerald-500" : vehicle.status === "stopped" ? "bg-amber-500" : "bg-slate-400",
+              )}
+              aria-hidden
+            />
+            {status}
+          </p>
+          {vehicle.heading !== null ? (
+            <p className="mt-0.5 text-muted-foreground">{t("heading", { deg: Math.round(vehicle.heading) })}</p>
+          ) : null}
+          {vehicle.recordedAt ? (
+            <p className="mt-0.5 text-muted-foreground">
+              {t("updated")}: <span className="font-mono text-[10px]" dir="ltr">{vehicle.recordedAt.slice(0, 16)}</span>
+            </p>
+          ) : null}
+          {!selected ? <p className="mt-1.5 text-[10px] text-subtle">{t("track")}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function getCategory(plate: string, name?: string | null): "truck" | "van" | "bike" | "car" {
   const combined = `${plate} ${name || ""}`.toLowerCase();
@@ -65,6 +144,7 @@ export function LiveTrackingView() {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
   const [search, setSearch] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [hoveredVehicleId, setHoveredVehicleId] = useState<string | null>(null);
 
   // Query vehicles from real database
   const vehiclesQuery = useQuery({
@@ -81,21 +161,25 @@ export function LiveTrackingView() {
           let speed = 0;
           let recordedAt: string | null = null;
           let status: "moving" | "stopped" | "offline" = "offline";
+          let heading: number | null = null;
 
           try {
             const posRes = await gqlRequest<PositionHistoryResult>(GET_POSITION_HISTORY, {
               vehicleId: v.id,
               first: 10,
             });
-            const valid = (posRes.positionHistory?.data ?? []).find(
+            // Newest first: the first valid fix is the current position.
+            const fixes = (posRes.positionHistory?.data ?? []).filter(
               (p) => p.locationLat && p.locationLng && Math.abs(p.locationLat) > 0.01,
             );
+            const valid = fixes[0];
             if (valid && valid.locationLat && valid.locationLng) {
               lat = valid.locationLat;
               lng = valid.locationLng;
               speed = Math.round(valid.speed ?? 0);
               recordedAt = valid.recordedAt;
               status = speed > 3 ? "moving" : "stopped";
+              heading = headingFor(fixes);
             }
           } catch {
             // Handled gracefully
@@ -111,6 +195,7 @@ export function LiveTrackingView() {
             speed,
             recordedAt,
             status,
+            heading,
           };
         }),
       );
@@ -155,46 +240,21 @@ export function LiveTrackingView() {
               .filter((v) => v.lat && v.lng)
               .map((v) => {
                 const isSelected = v.id === selectedVehicleId;
+                const isHovered = v.id === hoveredVehicleId;
                 return (
                   <AdvancedMarker
                     key={v.id}
                     position={{ lat: v.lat!, lng: v.lng! }}
                     title={v.plateNo}
+                    // Centre the arrow on the fix (the default anchor is bottom-centre, for pins).
+                    anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
+                    // The hovered arrow's card, then the followed vehicle, sit above the others.
+                    zIndex={isHovered ? 3 : isSelected ? 2 : 1}
                     onClick={() => setSelectedVehicleId(v.id)}
+                    onMouseEnter={() => setHoveredVehicleId(v.id)}
+                    onMouseLeave={() => setHoveredVehicleId((id) => (id === v.id ? null : id))}
                   >
-                    <div className="flex flex-col items-center cursor-pointer group">
-                      <div
-                        className={cn(
-                          "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-white text-xs font-bold shadow-lg transition-transform",
-                          isSelected ? "scale-110 ring-3 ring-primary" : "group-hover:scale-105",
-                          v.status === "moving"
-                            ? "bg-emerald-600"
-                            : v.status === "stopped"
-                              ? "bg-amber-600"
-                              : "bg-slate-600",
-                        )}
-                      >
-                        {v.kind === "bike" ? (
-                          <Bike className="size-3.5" />
-                        ) : v.kind === "truck" ? (
-                          <Truck className="size-3.5" />
-                        ) : (
-                          <CarFront className="size-3.5" />
-                        )}
-                        <span dir="ltr">{v.plateNo}</span>
-                        {v.speed > 0 && <span className="font-normal text-[10px]">{v.speed} km/h</span>}
-                      </div>
-                      <div
-                        className={cn(
-                          "size-2 rotate-45 -mt-1 shadow-xs",
-                          v.status === "moving"
-                            ? "bg-emerald-600"
-                            : v.status === "stopped"
-                              ? "bg-amber-600"
-                              : "bg-slate-600",
-                        )}
-                      />
-                    </div>
+                    <VehicleArrow vehicle={v} selected={isSelected} hovered={isHovered} />
                   </AdvancedMarker>
                 );
               })}

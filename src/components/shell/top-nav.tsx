@@ -20,6 +20,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useVisibleModules } from "@/components/masters/vm-nav";
+import { AM_MODULES } from "@/components/masters/am-modules";
 import { VM_MODULES } from "@/components/masters/vm-modules";
 import { can, useMe } from "@/lib/permissions";
 import { TRACKING_PERMISSION } from "./route-permissions";
@@ -59,11 +60,18 @@ const TRACKING_CHILDREN: NavItem[] = [
 
 function useNavEntries() {
   const visibleVehicleModules = useVisibleModules(VM_MODULES);
+  const visibleAccountModules = useVisibleModules(AM_MODULES);
   // Every tracking screen reads positions; hidden until the role is known, like the masters tabs.
   const { data: me } = useMe();
   const canTrack = can(me, TRACKING_PERMISSION);
 
   const vehicleChildren: NavItem[] = visibleVehicleModules.map((m) => ({
+    key: m.key,
+    icon: m.icon,
+    href: m.href,
+  }));
+
+  const accountChildren: NavItem[] = visibleAccountModules.map((m) => ({
     key: m.key,
     icon: m.icon,
     href: m.href,
@@ -94,8 +102,13 @@ function useNavEntries() {
           } satisfies NavGroup,
         ]
       : []),
-    // Account & settings in one place: users, roles, departments, audit log, my profile, password.
-    { key: "accounts", icon: UserCog, href: "/masters/account-management" },
+    // Account & settings: a dropdown like Vehicles (My profile and Change password are always visible).
+    {
+      key: "accounts",
+      icon: UserCog,
+      namespace: "masters.am.modules",
+      children: accountChildren,
+    } satisfies NavGroup,
   ];
 
   return entries;
@@ -158,9 +171,7 @@ function NavDropdown({ group }: { group: NavGroup }) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isGroupActive =
-    group.children.some((child) => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`))) ||
-    (group.key === "vehicles" &&
-      (pathname === "/masters/vehicle-management" || pathname.startsWith("/masters/vehicle-management/")));
+    group.children.some((child) => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)));
 
   function handleMouseEnter() {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -245,9 +256,7 @@ function NavGroupStacked({ group, onNavigate }: { group: NavGroup; onNavigate?: 
   const tGroup = useTranslations(group.namespace ?? "nav");
   const pathname = usePathname();
   const isGroupActive =
-    group.children.some((child) => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`))) ||
-    (group.key === "vehicles" &&
-      (pathname === "/masters/vehicle-management" || pathname.startsWith("/masters/vehicle-management/")));
+    group.children.some((child) => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)));
   const [open, setOpen] = useState(isGroupActive);
 
   return (

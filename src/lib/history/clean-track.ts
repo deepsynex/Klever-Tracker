@@ -37,7 +37,18 @@ export type TrackFix = {
   ignition?: boolean | null;
 };
 
-export type Stop = { lat: number; lng: number; start: string; end: string; fixes: number };
+export type Stop = {
+  lat: number;
+  lng: number;
+  start: string;
+  end: string;
+  /** Raw fixes merged into this stop. */
+  fixes: number;
+  /** How many of those fixes reported the ignition on (the heatmap's idle mode uses the share). */
+  ignitionOn: number;
+  /** Index of the stop's arrival fix in `points` (its departure fix is the next one). */
+  at: number;
+};
 
 export type CleanedTrack<T> = {
   points: T[];
@@ -67,6 +78,7 @@ export function cleanTrack<T extends TrackFix>(points: T[]): CleanedTrack<T> {
   const stopOutIndex: number[] = [];
   let i = 0;
 
+  const ignitionOn = (members: number[]) => members.filter((k) => points[k].ignition === true).length;
   const still = (k: number) => (points[k].speed ?? 0) < STILL_KMH && points[k].ignition !== true;
   /**
    * Clearly driving: real speed with the ignition on (or unknown). Parked drift often reports
@@ -142,7 +154,7 @@ export function cleanTrack<T extends TrackFix>(points: T[]): CleanedTrack<T> {
         const at = stopOutIndex[prev];
         out[at] = { ...out[at], locationLat: lat, locationLng: lng };
         out[at + 1] = { ...last, locationLat: lat, locationLng: lng, speed: 0 };
-        stops[prev] = { lat, lng, start: stops[prev].start, end: last.recordedAt, fixes: all.length };
+        stops[prev] = { lat, lng, start: stops[prev].start, end: last.recordedAt, fixes: all.length, ignitionOn: ignitionOn(all), at };
         stopMembers[prev] = all;
       } else {
         const lat = median(members.map((k) => points[k].locationLat as number));
@@ -150,7 +162,15 @@ export function cleanTrack<T extends TrackFix>(points: T[]): CleanedTrack<T> {
         stopOutIndex.push(out.length);
         out.push({ ...first, locationLat: lat, locationLng: lng, speed: 0 });
         out.push({ ...last, locationLat: lat, locationLng: lng, speed: 0 });
-        stops.push({ lat, lng, start: first.recordedAt, end: last.recordedAt, fixes: members.length });
+        stops.push({
+          lat,
+          lng,
+          start: first.recordedAt,
+          end: last.recordedAt,
+          fixes: members.length,
+          ignitionOn: ignitionOn(members),
+          at: out.length - 2,
+        });
         stopMembers.push(members);
       }
       // Continue after the stop's last still fix: spikes inside it are dropped, and trailing

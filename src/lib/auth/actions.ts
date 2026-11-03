@@ -8,12 +8,14 @@ import { kleverRequest } from "@/lib/graphql/klever";
 import {
   FORGOT_PASSWORD,
   LOGIN,
+  LOGOUT,
   RESET_PASSWORD,
   type ForgotPasswordResult,
   type LoginResult,
+  type LogoutResult,
   type ResetPasswordResult,
 } from "@/lib/graphql/operations";
-import { clearSession, setSession } from "@/lib/session";
+import { clearSession, getSessionToken, setSession } from "@/lib/session";
 import { fieldErrors, forgotPasswordSchema, loginSchema, resetPasswordSchema } from "./schemas";
 
 export type FormState = {
@@ -53,7 +55,8 @@ export async function forgotPasswordAction(_prev: FormState, formData: FormData)
   const parsed = forgotPasswordSchema.safeParse({ email: formData.get("email") });
   if (!parsed.success) return { status: "error", error: "invalid_input", fields: fieldErrors(parsed.error) };
 
-  const result = await kleverRequest<ForgotPasswordResult>(FORGOT_PASSWORD, parsed.data);
+  // The reset email and its link follow the language the user is viewing the app in.
+  const result = await kleverRequest<ForgotPasswordResult>(FORGOT_PASSWORD, { ...parsed.data, locale: localeFrom(formData) });
   // The API returns true whether or not the email exists, so only transport failures are errors.
   if (!result.ok && result.error.kind !== "validation") return { status: "error", error: result.error.kind };
   return { status: "success" };
@@ -85,7 +88,10 @@ export async function resetPasswordAction(_prev: FormState, formData: FormData):
 
 export async function logoutAction(formData: FormData): Promise<void> {
   const locale = localeFrom(formData);
-  // TODO(B4): call the backend `logout` mutation here once it exists, so the token is revoked.
+  // Revoke the token on the backend (B4), so a copied token stops working too. Sign-out still
+  // completes if that call fails (network, already-expired token): the cookie is cleared either way.
+  const token = await getSessionToken();
+  if (token) await kleverRequest<LogoutResult>(LOGOUT, {}, { token }).catch(() => undefined);
   await clearSession();
   redirect(`/${locale}/login`);
 }

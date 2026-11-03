@@ -79,6 +79,12 @@ describe("buildHeatmap", () => {
     expect(out.body.dropped_points).toBeGreaterThan(0); // vehicle 3's bad fixes
     expect(out.body.bounds).not.toBeNull();
     expect(Object.keys(out.body.cells[0]).sort()).toEqual(["lat", "lng", "weight"]);
+    // Each vehicle's own count for this range, for the vehicle list.
+    expect(Object.keys(out.body.target_points).sort()).toEqual(["vehicle:1", "vehicle:2", "vehicle:3"]);
+    const stored = Object.values(out.body.target_points).reduce((a, b) => a + b, 0);
+    // Drift spikes inside a parked stop are dropped by stop detection, so they're in neither total.
+    expect(stored).toBeGreaterThanOrEqual(out.body.total_points + out.body.dropped_points);
+    expect(stored - out.body.total_points - out.body.dropped_points).toBeLessThan(stored * 0.01);
   });
 
   it("re-aggregates a new zoom from cache without calling the API again", async () => {

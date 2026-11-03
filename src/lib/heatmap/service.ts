@@ -17,7 +17,13 @@ import type { HeatmapParams } from "./request";
 
 export type Requester = <T>(query: string, variables: Record<string, unknown>) => Promise<KleverResult<T>>;
 
-export type HeatmapResponse = HeatmapResult & { from: string; to: string; weight_mode: HeatmapParams["mode"] };
+export type HeatmapResponse = HeatmapResult & {
+  from: string;
+  to: string;
+  weight_mode: HeatmapParams["mode"];
+  /** GPS fixes stored for each requested target in this range, keyed "vehicle:<id>" / "device:<id>". */
+  target_points: Record<string, number>;
+};
 export type HeatmapErrorBody = { message: string; kind?: string; errors?: Record<string, string[]> };
 export type HeatmapOutcome = { status: 200; body: HeatmapResponse } | { status: number; body: HeatmapErrorBody };
 
@@ -170,7 +176,8 @@ export async function buildHeatmap(
     });
 
     const result = aggregateHeatmap([...tracks.values()], { mode: params.mode, zoom: params.zoom, bbox: params.bbox });
-    return { status: 200, body: { ...result, from: params.from, to: params.to, weight_mode: params.mode } };
+    const target_points = Object.fromEntries([...tracks].map(([t, track]) => [`${t.kind}:${t.id}`, track.length]));
+    return { status: 200, body: { ...result, from: params.from, to: params.to, weight_mode: params.mode, target_points } };
   } catch (err) {
     if (err instanceof UpstreamError) {
       return {

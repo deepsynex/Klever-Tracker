@@ -25,6 +25,33 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  async redirects() {
+    // Old links keep working. Account & settings moved to short addresses (/en/users instead of
+    // /en/masters/account-management/users).
+    return [
+      {
+        source: "/:locale(en|ar)/masters/account-management/:path+",
+        destination: "/:locale/:path+",
+        permanent: false,
+      },
+      {
+        source: "/:locale(en|ar)/masters/account-management",
+        destination: "/:locale/accounts",
+        permanent: false,
+      },
+      // Vehicles moved the same way (/en/vehicles instead of /en/masters/vehicle-management/vehicles).
+      {
+        source: "/:locale(en|ar)/masters/vehicle-management/:path+",
+        destination: "/:locale/:path+",
+        permanent: false,
+      },
+      {
+        source: "/:locale(en|ar)/masters/vehicle-management",
+        destination: "/:locale/vehicles",
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default withNextIntl(nextConfig);

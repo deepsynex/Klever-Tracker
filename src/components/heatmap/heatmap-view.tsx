@@ -159,12 +159,11 @@ export function HeatmapView({ today }: { today: string }) {
   });
   const targets = useMemo(() => targetsQuery.data ?? [], [targetsQuery.data]);
 
-  // Query real latest positions directly from the database for each vehicle
+  // Each vehicle's latest position, for its marker (not limited to the chosen period)
   const positionsQuery = useQuery({
     queryKey: ["heatmap", "vehicle-positions", targets.map((t) => t.id).join(",")],
     queryFn: async () => {
       const markers: VehicleMapMarker[] = [];
-      const counts: Record<string, number> = {};
 
       await Promise.all(
         targets.map(async (target) => {
@@ -174,8 +173,6 @@ export function HeatmapView({ today }: { today: string }) {
               first: 30,
             });
             const list = res.positionHistory?.data ?? [];
-            const total = res.positionHistory?.paginatorInfo?.total ?? list.length;
-            counts[target.key] = total;
 
             const valid = list.find(
               (p) => typeof p.locationLat === "number" && typeof p.locationLng === "number" && Math.abs(p.locationLat) > 0.01,
@@ -189,28 +186,19 @@ export function HeatmapView({ today }: { today: string }) {
                 position: { lat: valid.locationLat, lng: valid.locationLng },
                 speed: typeof valid.speed === "number" ? Math.round(valid.speed) : undefined,
                 recordedAt: valid.recordedAt,
-                totalPoints: total,
               });
             }
           } catch {
-            counts[target.key] = 0;
+            // No marker for this vehicle; the heatmap itself is unaffected.
           }
         }),
       );
-      return { markers, counts };
+      return { markers };
     },
     enabled: targets.length > 0,
     staleTime: 60_000,
   });
 
-  // Filter map markers: show selected targets or all real targets if none specifically selected
-  const realMarkers = useMemo(() => {
-    const list = positionsQuery.data?.markers ?? [];
-    if (selected.length === 0) return list;
-    return list.filter((m) => selected.some((s) => s.endsWith(`:${m.id}`)));
-  }, [positionsQuery.data?.markers, selected]);
-
-  const targetPointCounts = useMemo(() => positionsQuery.data?.counts ?? {}, [positionsQuery.data?.counts]);
 
   // Visible vehicles matching search in panel
   const visibleTargets = useMemo(() => {
@@ -245,6 +233,19 @@ export function HeatmapView({ today }: { today: string }) {
   });
 
   const data = submitted ? heatmap.data : undefined;
+
+  // GPS points per vehicle in the period the heatmap shows (from the same request, so they match it).
+  const targetPointCounts = useMemo(() => data?.target_points ?? {}, [data]);
+
+  // Filter map markers: show selected targets or all real targets if none specifically selected
+  const realMarkers = useMemo(() => {
+    const list = (positionsQuery.data?.markers ?? []).map((m) => ({
+      ...m,
+      totalPoints: targetPointCounts[`vehicle:${m.id}`] ?? targetPointCounts[`device:${m.id}`],
+    }));
+    if (selected.length === 0) return list;
+    return list.filter((m) => selected.some((s) => s.endsWith(`:${m.id}`)));
+  }, [positionsQuery.data?.markers, selected, targetPointCounts]);
   const ready = !!data && !heatmap.isPlaceholderData;
   const fitKey = submitted === null ? runId : ready ? submitted.id : -1;
 
@@ -443,10 +444,10 @@ export function HeatmapView({ today }: { today: string }) {
                         <span className="ms-auto shrink-0 text-[10px] font-medium">
                           {typeof pts === "number" && pts > 0 ? (
                             <span className="rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-1.5 py-0.5">
-                              {pts} pts
+                              {t("summary.pointsInRange", { count: pts.toLocaleString("en") })}
                             </span>
                           ) : typeof pts === "number" ? (
-                            <span className="text-muted-foreground/60">0 pts</span>
+                            <span className="text-muted-foreground/60">{t("summary.pointsInRange", { count: 0 })}</span>
                           ) : null}
                         </span>
                       </label>
@@ -601,26 +602,25 @@ export function HeatmapView({ today }: { today: string }) {
 
             {/* Weight mode */}
             <div>
-              <label className="block text-[11px] font-semibold text-foreground mb-1">Weight mode</label>
+              <label htmlFor="heatmap-mode" className="block text-[11px] font-semibold text-foreground mb-1">
+                {t("filters.weightMode")}
+              </label>
               <div className="relative">
                 <select
+                  id="heatmap-mode"
                   value={mode}
                   onChange={(e) => setMode(e.target.value as WeightMode)}
                   className="h-8.5 w-full rounded-xl border border-border/80 bg-surface px-3 text-xs text-foreground font-medium appearance-none focus:border-primary focus:outline-none cursor-pointer"
                 >
-                  <option value="dwell">Dwell time</option>
-                  <option value="idle">Idle time</option>
-                  <option value="density">Point count</option>
+                  {(["dwell", "idle", "density"] as const).map((m) => (
+                    <option key={m} value={m}>
+                      {t(`modes.${m}.label`)}
+                    </option>
+                  ))}
                 </select>
                 <ChevronDown className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
               </div>
-              <p className="text-[11px] text-muted-foreground pt-1.5 leading-relaxed">
-                {mode === "dwell"
-                  ? "The map shows high density areas where vehicles stayed longer. Increase time range for better results."
-                  : mode === "idle"
-                    ? "The map shows areas where vehicles remained idling with engine on."
-                    : "The map shows raw GPS fix frequency regardless of stop duration."}
-              </p>
+              <p className="text-[11px] text-muted-foreground pt-1.5 leading-relaxed">{t(`modes.${mode}.hint`)}</p>
             </div>
 
             {/* Actions */}
@@ -643,33 +643,30 @@ export function HeatmapView({ today }: { today: string }) {
               </Button>
             </div>
 
-            {/* Live DB Telemetry Stats */}
+            {/* Summary of the heatmap shown */}
             {data && (
               <div className="pt-2 border-t border-border/50 text-[11px] flex items-center justify-between text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="font-semibold text-foreground">Live DB Points:</span> {data.total_points}
+                <span>
+                  <span className="font-semibold text-foreground">{t("summary.points")}:</span>{" "}
+                  {data.total_points.toLocaleString("en")}
                 </span>
-                <span className="font-medium text-foreground">{data.cell_count} clusters</span>
+                <span>
+                  <span className="font-semibold text-foreground">{t("summary.cells")}:</span>{" "}
+                  {data.cell_count.toLocaleString("en")}
+                </span>
               </div>
             )}
+            {data?.truncated ? (
+              <Alert tone="warning">{t("summary.truncated", { count: data.cell_count.toLocaleString("en") })}</Alert>
+            ) : null}
+            {data && data.dropped_points > 0 ? (
+              <p className="text-[11px] text-muted-foreground">{t("summary.dropped", { count: data.dropped_points })}</p>
+            ) : null}
 
             {data && data.total_points === 0 && (
               <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-2.5 text-xs text-amber-800 dark:text-amber-200">
-                <p className="font-semibold">0 GPS points for this date range in DB</p>
-                <p className="text-[11px] mt-0.5 text-muted-foreground">
-                  Real fixes exist in Oct 2026 (161 for TEST-QA-001, 70 for VERIFY-1).
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFromDate("2026-10-01");
-                    setToDate("2026-10-31");
-                  }}
-                  className="mt-1 text-xs font-bold text-primary underline cursor-pointer"
-                >
-                  Switch to Oct 2026 data
-                </button>
+                <p className="font-semibold">{t("map.noData")}</p>
+                <p className="text-[11px] mt-0.5 text-muted-foreground">{t("map.noDataHint")}</p>
               </div>
             )}
 

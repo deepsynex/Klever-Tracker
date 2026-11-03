@@ -100,6 +100,11 @@ export async function mockFetch(rawBody: string, token?: string) {
     return error("This Google account is not registered.", { reason: "not_registered" });
   }
 
+  if (/\blogout\b/.test(query)) {
+    if (token !== MOCK_TOKEN) return error("Unauthenticated.");
+    return json(200, { data: { logout: true } });
+  }
+
   if (/\blogin\s*\(/.test(query)) {
     if (vars.email === MOCK_USER.email && vars.password === MOCK_PASSWORD) {
       return json(200, { data: { login: { token: MOCK_TOKEN, user: MOCK_USER } } });

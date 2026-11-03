@@ -27,9 +27,18 @@ export const LOGIN = /* GraphQL */ `
 export type LoginVariables = { email: string; password: string };
 export type LoginResult = { login: { token: string; user: { id: string; name: string; email: string } } };
 
+/** Revokes only the token sent with this request (B4); other sessions stay signed in. */
+export const LOGOUT = /* GraphQL */ `
+  mutation Logout {
+    logout
+  }
+`;
+export type LogoutResult = { logout: boolean };
+
+/** `locale` ("en" | "ar") sets the email's language and the /{locale}/reset-password link (B8). */
 export const FORGOT_PASSWORD = /* GraphQL */ `
-  mutation ForgotPassword($email: String!) {
-    forgotPassword(email: $email)
+  mutation ForgotPassword($email: String!, $locale: String) {
+    forgotPassword(email: $email, locale: $locale)
   }
 `;
 export type ForgotPasswordResult = { forgotPassword: boolean };
@@ -228,6 +237,7 @@ export const GET_POSITION_HISTORY = /* GraphQL */ `
         locationLat
         locationLng
         speed
+        heading
       }
       paginatorInfo {
         total
@@ -241,6 +251,8 @@ export type PositionHistoryPoint = {
   locationLat: number | null;
   locationLng: number | null;
   speed: number | null;
+  /** Compass degrees (0 = north, clockwise) reported by the device; null when it didn't send one. */
+  heading?: number | null;
 };
 export type PositionHistoryResult = {
   positionHistory: {

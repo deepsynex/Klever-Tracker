@@ -1,0 +1,3294 @@
+type Query {
+    "Simple reachability check — returns the app name if the GraphQL endpoint is up."
+    ping: String! @field(resolver: "App\\GraphQL\\Queries\\Ping")
+}
+
+# ---------------------------------------------------------------------------
+# File uploads (added 2026-10-28): a cross-cutting utility used by both Vehicle
+# (photoPath) and Document (filePath) — not tied to one domain, hence its own small
+# section rather than living inside either of those. Uses the standard GraphQL
+# multipart request spec via Lighthouse's built-in `Upload` scalar — the request still
+# goes to the same /graphql endpoint, just as multipart/form-data instead of plain
+# JSON, so this is not a REST route and doesn't need one.
+# ---------------------------------------------------------------------------
+
+scalar Upload @scalar(class: "Nuwave\\Lighthouse\\Schema\\Types\\Scalars\\Upload")
+
+extend type Mutation {
+    """
+    Upload a file and get back its public URL to paste into photoPath/logoPath/filePath
+    on the relevant create/update mutation. `purpose` is one of "vehicle_photo",
+    "user_photo", "driver_photo", "company_logo" (all: jpg/jpeg/png/webp, max 5 MB), or
+    "document" (pdf, max 10 MB) — picks both the validation rule and the storage folder.
+    Rejects a file whose actual content doesn't match its extension, not just a
+    mismatched filename.
+    """
+    uploadFile(file: Upload!, purpose: String!): String! @field(resolver: "App\\GraphQL\\Mutations\\UploadFile") @guard(with: ["sanctum"])
+}
+
+"One raw device transmission to be decoded and stored, same shape as the device log format."
+input PositionEntryInput {
+    "Device IMEI, as a string."
+    imei: String!
+
+    "Hex-encoded raw device bytes (Teltonika Codec 8 Extended currently supported)."
+    rawPayload: String!
+
+    "When the ingestion layer received this packet (not the GPS fix time — that's decoded from inside the payload)."
+    timestamp: String
+
+    "Source IP of the device connection, for traceability."
+    sourceIp: String
+}
+
+"Outcome of attempting to decode and store a single PositionEntryInput."
+type IngestResult {
+    imei: String!
+
+    "decoded | unrecognized | failed — see docs/API_INGEST_REFERENCE.md for meanings."
+    status: String!
+
+    "Present only when status is not 'decoded'."
+    error: String
+
+    "The device_raw_logs row this entry was stored as — every entry is kept, decoded or not."
+    rawLogId: ID!
+}
+
+type Mutation {
+    "Submit a batch of raw device transmissions for decoding and storage."
+    ingestPositions(entries: [PositionEntryInput!]!): [IngestResult!]! @guard(with: ["sanctum"])
+        @guard(with: ["sanctum"])
+}
+
+# =============================================================================
+# Auth: login, forgotPassword, resetPassword. Unlike every other mutation in this
+# schema, these three are deliberately PUBLIC — no @guard, no bearer token required —
+# since the whole point is the caller doesn't have a token yet. This is the one
+# place in the project where that's correct, not an oversight.
+#
+# `register` (new company self-signup) is explicitly deferred to a future task — not
+# built here.
+#
+# Known placeholders, safe but not yet production-real (see CHANGELOG):
+# - Password-reset emails are sent via Laravel's "log" mail driver (MAIL_MAILER in
+#   .env) — nothing fails, but no real email goes out until real SMTP credentials
+#   are configured.
+# - The reset link points at a placeholder frontend URL
+#   (FRONTEND_RESET_PASSWORD_URL in .env / config/app.php) until the real Next.js
+#   frontend exists.
+# =============================================================================
+
+"Returned by a successful login — a bearer token plus who just logged in."
+type AuthPayload {
+    "Use as: Authorization: Bearer <token>. Never expires, same as every other token in this project."
+    token: String!
+    user: User!
+}
+
+extend type Mutation {
+    "Log in with email + password. Public — see the note above this block."
+    login(email: String!, password: String!): AuthPayload!
+
+    """
+    Request a password-reset email. Public. Always returns true whether or not the
+    email matches a real account, so this can't be used to discover which emails are
+    registered. `locale` controls both the email's language and the emailed link's
+    `/{locale}/reset-password` path — anything other than "en"/"ar" silently falls
+    back to "en" rather than erroring. Added 2026-11-03, frontend gap B8.
+    """
+    forgotPassword(email: String!, locale: String = "en"): Boolean!
+
+    "Redeem a password-reset token (from the emailed link) to set a new password. Public. Tokens expire after 60 minutes (Laravel's default)."
+    resetPassword(token: String!, email: String!, password: String!): Boolean!
+
+    """
+    Sign in with a Google ID token (added 2026-10-30). Public, like `login` — no
+    self sign-up: only an *existing* user matched by email can sign in this way.
+    Returns the error "This Google account is not registered." (extensions.reason:
+    "not_registered") for an unknown email, or "Invalid Google token." for a bad,
+    expired, foreign (wrong aud), or unverified-email token. An inactive/suspended
+    existing user gets the same status error `login` gives them.
+    """
+    loginWithGoogle(idToken: String!): AuthPayload! @field(resolver: "App\\GraphQL\\Mutations\\LoginWithGoogle")
+}
+
+"""
+The caller's own identity, resolved from their bearer token — added 2026-10-29 so the
+frontend can tell a platform account from a company user without guessing from how many
+companies the `companies` query returns. companyId and company are null for a platform
+account (company_id is null on the users row); both are populated for a normal company
+user.
+"""
+type Me {
+    id: ID!
+    name: String!
+    email: String!
+    companyId: ID
+    company: Company
+    "This schema supports one role per user today, so this is always a single-element array."
+    roles: [String!]!
+    """
+    "{moduleCode}.{action}" strings, e.g. "vehicles.edit" — action is one of
+    view/add/edit/delete, moduleCode matches `modules.code` (see ModuleSeeder). A
+    platform account gets every module/action combination, since @requiresPermission
+    already bypasses them entirely. For a company user, a module with no configured
+    role_permissions row is fail-open (see RequiresPermissionDirective), so every
+    action on it is included here too — this list reflects what's actually allowed
+    right now, not just what's been explicitly granted.
+    """
+    permissions: [String!]!
+}
+
+extend type Query {
+    "Who the current bearer token belongs to."
+    me: Me! @field(resolver: "App\\GraphQL\\Queries\\Me") @guard(with: ["sanctum"])
+}
+
+extend type Mutation {
+    """
+    Change the authenticated caller's own password, given their current one — requires a
+    valid bearer token, unlike forgotPassword/resetPassword above (the "I forgot it, email
+    me a link" flow for someone who can't log in at all). Added 2026-10-29.
+    """
+    changePassword(oldPassword: String!, newPassword: String!): Boolean! @field(resolver: "App\\GraphQL\\Mutations\\ChangePassword") @guard(with: ["sanctum"])
+
+    """
+    Revokes the Sanctum token used to authenticate this request. Added 2026-11-03
+    (frontend gap B4) — previously sign-out only cleared the frontend's cookie and the
+    token kept working forever; tokens now also carry a 30-day rolling expiration
+    regardless of logout (see config/sanctum.php).
+    """
+    logout: Boolean! @field(resolver: "App\\GraphQL\\Mutations\\Logout") @guard(with: ["sanctum"])
+}
+
+"""
+A driver employed by a company. May optionally be linked to a user account
+(drivers.user_id) if they've been granted app login access — most drivers won't have
+one. This is separate from username/password below, which is the driver's own
+driver-app login identity (added 2026-10-29, Account Management gap analysis) —
+independent of whether they also have a full portal User account. password is
+write-only — hashed automatically on write by the model's own cast, never returned by
+any query, same convention as User.password. nationality and bloodGroup are personal
+data under UAE PDPL; this type is guarded behind authentication for that reason, same
+as every other field here.
+"""
+type Driver {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    userId: ID @rename(attribute: "user_id")
+    "This driver's own driver-app login name. Null if they haven't been given app access."
+    username: String
+    name: String!
+    mobile: String!
+    address: String
+    photoPath: String @rename(attribute: "photo_path")
+    nationality: String
+    bloodGroup: String @rename(attribute: "blood_group")
+    emergencyContactName: String @rename(attribute: "emergency_contact_name")
+    emergencyContactNumber: String @rename(attribute: "emergency_contact_number")
+    notes: String
+    employeeId: String @rename(attribute: "employee_id")
+    "active | inactive — distinct from employmentType (Permanent/Temporary)."
+    employmentStatus: String! @rename(attribute: "employment_status")
+    "permanent | temporary"
+    employmentType: String @rename(attribute: "employment_type")
+    workingHoursPerDay: Float @rename(attribute: "working_hours_per_day")
+    overtimeRate: Float @rename(attribute: "overtime_rate")
+    licenceNo: String @rename(attribute: "licence_no")
+    licenceExpiryDate: String @rename(attribute: "licence_expiry_date")
+    visaExpiryDate: String @rename(attribute: "visa_expiry_date")
+    otherPermitName: String @rename(attribute: "other_permit_name")
+    otherPermitNo: String @rename(attribute: "other_permit_no")
+    permitExpiresAt: String @rename(attribute: "permit_expires_at")
+    "Uploaded via uploadFile(purpose: \"document\")."
+    permitPdfPath: String @rename(attribute: "permit_pdf_path")
+    rfidTagId: String @rename(attribute: "rfid_tag_id")
+    preferredVehicleType: String @rename(attribute: "preferred_vehicle_type")
+    canDriveHeavy: Boolean! @rename(attribute: "can_drive_heavy")
+    canDriveLight: Boolean! @rename(attribute: "can_drive_light")
+    status: String!
+    "Users granted visibility into this driver ('Assign Driver To User' on the reference site)."
+    userAccess: [UserDriver!]! @hasMany
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    "Paginated list of drivers."
+    drivers: [Driver!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "drivers", action: "view")
+
+    "A single driver by ID."
+    driver(id: ID! @eq): Driver @find @guard(with: ["sanctum"]) @requiresPermission(module: "drivers", action: "view")
+}
+
+extend type Mutation {
+    "Create a new driver."
+    createDriver(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany @rules(apply: ["App\\Rules\\WithinDriverLimit"])
+        userId: ID @rename(attribute: "user_id")
+        username: String @rules(apply: ["nullable", "App\\Rules\\UniqueDriverUsername"])
+        "Plain text — hashed automatically on write by the model's own cast. Never returned by any query."
+        password: String
+        name: String!
+        mobile: String!
+        address: String
+        photoPath: String @rename(attribute: "photo_path")
+        nationality: String
+        bloodGroup: String @rename(attribute: "blood_group")
+        emergencyContactName: String @rename(attribute: "emergency_contact_name")
+        emergencyContactNumber: String @rename(attribute: "emergency_contact_number")
+        notes: String
+        employeeId: String @rename(attribute: "employee_id") @rules(apply: ["nullable", "App\\Rules\\UniqueDriverEmployeeId"])
+        employmentStatus: String @rename(attribute: "employment_status")
+        employmentType: String @rename(attribute: "employment_type")
+        workingHoursPerDay: Float @rename(attribute: "working_hours_per_day")
+        overtimeRate: Float @rename(attribute: "overtime_rate")
+        licenceNo: String @rename(attribute: "licence_no")
+        licenceExpiryDate: String @rename(attribute: "licence_expiry_date")
+        visaExpiryDate: String @rename(attribute: "visa_expiry_date")
+        otherPermitName: String @rename(attribute: "other_permit_name")
+        otherPermitNo: String @rename(attribute: "other_permit_no")
+        permitExpiresAt: String @rename(attribute: "permit_expires_at")
+        permitPdfPath: String @rename(attribute: "permit_pdf_path")
+        rfidTagId: String @rename(attribute: "rfid_tag_id")
+        preferredVehicleType: String @rename(attribute: "preferred_vehicle_type")
+        canDriveHeavy: Boolean @rename(attribute: "can_drive_heavy")
+        canDriveLight: Boolean @rename(attribute: "can_drive_light")
+        status: String
+    ): Driver! @create @guard(with: ["sanctum"]) @requiresPermission(module: "drivers", action: "add")
+
+    "Update an existing driver. Only pass the fields that should change."
+    updateDriver(
+        id: ID!
+        companyId: ID @rename(attribute: "company_id") @forceOwnCompany
+        userId: ID @rename(attribute: "user_id")
+        username: String @rules(apply: ["nullable", "App\\Rules\\UniqueDriverUsername"])
+        "Plain text — hashed automatically on write by the model's own cast. Pass only to reset it."
+        password: String
+        name: String
+        mobile: String
+        address: String
+        photoPath: String @rename(attribute: "photo_path")
+        nationality: String
+        bloodGroup: String @rename(attribute: "blood_group")
+        emergencyContactName: String @rename(attribute: "emergency_contact_name")
+        emergencyContactNumber: String @rename(attribute: "emergency_contact_number")
+        notes: String
+        employeeId: String @rename(attribute: "employee_id") @rules(apply: ["nullable", "App\\Rules\\UniqueDriverEmployeeId"])
+        employmentStatus: String @rename(attribute: "employment_status")
+        employmentType: String @rename(attribute: "employment_type")
+        workingHoursPerDay: Float @rename(attribute: "working_hours_per_day")
+        overtimeRate: Float @rename(attribute: "overtime_rate")
+        licenceNo: String @rename(attribute: "licence_no")
+        licenceExpiryDate: String @rename(attribute: "licence_expiry_date")
+        visaExpiryDate: String @rename(attribute: "visa_expiry_date")
+        otherPermitName: String @rename(attribute: "other_permit_name")
+        otherPermitNo: String @rename(attribute: "other_permit_no")
+        permitExpiresAt: String @rename(attribute: "permit_expires_at")
+        permitPdfPath: String @rename(attribute: "permit_pdf_path")
+        rfidTagId: String @rename(attribute: "rfid_tag_id")
+        preferredVehicleType: String @rename(attribute: "preferred_vehicle_type")
+        canDriveHeavy: Boolean @rename(attribute: "can_drive_heavy")
+        canDriveLight: Boolean @rename(attribute: "can_drive_light")
+        status: String
+    ): Driver! @update @guard(with: ["sanctum"]) @requiresPermission(module: "drivers", action: "edit")
+
+    "Soft-delete a driver (sets deleted_at — row is kept, not removed)."
+    deleteDriver(id: ID! @eq @authorizeParent(model: "App\\Models\\Driver")): Driver! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "drivers", action: "delete")
+}
+
+"A latitude/longitude pair used to set a geofence's centre point or polygon vertices."
+input GeoPointInput {
+    lat: Float!
+    lng: Float!
+}
+
+"""
+A geofence: a named area (circle, polygon, or route) a company draws to trigger alerts
+when a vehicle enters or exits it. `area` and `centre` are stored as native PostGIS
+geography columns — Eloquent has no built-in geography type, so they're exposed here as
+plain lat/lng/GeoJSON instead of raw columns. Unlike Driver, this table has no
+deleted_at column — deleteGeofence is a real delete, not a soft one; is_active is the
+intended way to deactivate a geofence without removing it.
+"""
+type Geofence {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    name: String!
+    address: String!
+    "circle | polygon | route"
+    type: String!
+    radiusM: Float @rename(attribute: "radius_m")
+    isActive: Boolean! @rename(attribute: "is_active")
+    createdBy: ID @rename(attribute: "created_by")
+    "Centre point latitude (circle/route geofences). Null if no centre has been set."
+    centreLat: Float @method(name: "centreLat")
+    "Centre point longitude (circle/route geofences). Null if no centre has been set."
+    centreLng: Float @method(name: "centreLng")
+    "The geofence boundary (polygon type) as GeoJSON. Null if no area has been set."
+    areaGeoJson: String @method(name: "areaGeoJson")
+    "Vehicles individually assigned to this geofence."
+    vehicles: [Vehicle!]! @belongsToMany @requiresPermission(module: "vehicles", action: "view")
+    "Vehicle groups assigned to this geofence (every vehicle in the group is watched)."
+    vehicleGroups: [VehicleGroup!]! @belongsToMany @requiresPermission(module: "vehicle-groups", action: "view")
+    "Raw single-vehicle assignment rows — use these ids with deleteGeofenceVehicle."
+    vehicleMemberships: [GeofenceVehicle!]! @hasMany
+    "Raw vehicle-group assignment rows — use these ids with deleteGeofenceVehicleGroup."
+    vehicleGroupMemberships: [GeofenceVehicleGroup!]! @hasMany
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    "Paginated list of geofences."
+    geofences: [Geofence!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "geofences", action: "view")
+
+    "A single geofence by ID."
+    geofence(id: ID! @eq): Geofence @find @guard(with: ["sanctum"]) @requiresPermission(module: "geofences", action: "view")
+}
+
+extend type Mutation {
+    """
+    Create a new geofence. Resolved by App\\GraphQL\\Mutations\\CreateGeofence (not the
+    generic @create directive — it can't write geography columns). Pass `centre` for a
+    circle/route geofence, or `area` (3+ points — the ring is auto-closed if needed) for
+    a polygon.
+    """
+    createGeofence(
+        companyId: ID! @forceOwnCompany
+        name: String!
+        address: String!
+        type: String!
+        radiusM: Float
+        isActive: Boolean
+        createdBy: ID
+        centre: GeoPointInput
+        area: [GeoPointInput!]
+    ): Geofence! @guard(with: ["sanctum"]) @requiresPermission(module: "geofences", action: "add")
+
+    """
+    Update an existing geofence (resolved by App\\GraphQL\\Mutations\\UpdateGeofence, for
+    the same reason as createGeofence). Only pass the fields that should change; passing
+    `centre` or `area` replaces that geometry entirely.
+    """
+    updateGeofence(
+        id: ID!
+        name: String
+        address: String
+        type: String
+        radiusM: Float
+        isActive: Boolean
+        createdBy: ID
+        centre: GeoPointInput
+        area: [GeoPointInput!]
+    ): Geofence! @guard(with: ["sanctum"]) @requiresPermission(module: "geofences", action: "edit")
+
+    "Permanently delete a geofence — no soft-delete column exists for this table. Cascades to its vehicle/vehicle-group assignments."
+    deleteGeofence(id: ID! @eq @authorizeParent(model: "App\\Models\\Geofence")): Geofence! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "geofences", action: "delete")
+}
+
+# ---------------------------------------------------------------------------
+# Alerts domain: EventType (catalogue) -> AlertRule (config) -> AlertRuleRecipient
+# (who gets notified) -> AlertEvent (an occurrence). None of these tables has a
+# deleted_at column — every delete below is permanent. No automatic rule-evaluation
+# engine exists yet (see AlertEvent model docblock) — alertEvents only has rows if
+# something creates them through this API.
+# ---------------------------------------------------------------------------
+
+"The catalogue of things an alert rule can fire on (speeding, harsh braking, geofence enter/exit, idle, etc.)."
+type EventType {
+    id: ID!
+    name: String!
+    code: String!
+    status: String!
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    eventTypes: [EventType!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"])
+    eventType(id: ID! @eq): EventType @find @guard(with: ["sanctum"])
+}
+
+extend type Mutation {
+    createEventType(name: String!, code: String!, status: String): EventType! @create @guard(with: ["sanctum"])
+    updateEventType(id: ID!, name: String, code: String, status: String): EventType! @update @guard(with: ["sanctum"])
+    "Permanently delete an event type. Will fail if any alert_rules still reference it (restrict-on-delete FK)."
+    deleteEventType(id: ID! @eq): EventType! @delete @guard(with: ["sanctum"])
+}
+
+"""
+A configurable "when X happens, notify Y via Z" rule. `schedule` and `parameters` are
+raw jsonb columns passed through as opaque JSON-encoded strings (this schema has no
+JSON scalar type) — the API stores/returns them as-is without parsing. vehicleGroupId
+has no backing type yet (VehicleGroup isn't modelled) — plain ID, no relation.
+"""
+type AlertRule {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    eventTypeId: ID! @rename(attribute: "event_type_id")
+    name: String!
+    description: String
+    isActive: Boolean! @rename(attribute: "is_active")
+    isSystemRule: Boolean! @rename(attribute: "is_system_rule")
+    isScheduled: Boolean! @rename(attribute: "is_scheduled")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    schedule: String
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    parameters: String
+    vehicleId: ID @rename(attribute: "vehicle_id")
+    vehicleGroupId: ID @rename(attribute: "vehicle_group_id")
+    notifyInApp: Boolean! @rename(attribute: "notify_in_app")
+    notifyPush: Boolean! @rename(attribute: "notify_push")
+    notifyEmail: Boolean! @rename(attribute: "notify_email")
+    notifySms: Boolean! @rename(attribute: "notify_sms")
+    notifyWhatsapp: Boolean! @rename(attribute: "notify_whatsapp")
+    emailSubject: String @rename(attribute: "email_subject")
+    emailMessage: String @rename(attribute: "email_message")
+    smsMessage: String @rename(attribute: "sms_message")
+    minRepeatIntervalMinutes: Int @rename(attribute: "min_repeat_interval_minutes")
+    resetIntervalOnAck: Boolean! @rename(attribute: "reset_interval_on_ack")
+    createdBy: ID @rename(attribute: "created_by")
+    "Who gets notified when this rule fires."
+    recipients: [AlertRuleRecipient!]! @hasMany
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    alertRules: [AlertRule!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "alerts", action: "view")
+    alertRule(id: ID! @eq): AlertRule @find @guard(with: ["sanctum"]) @requiresPermission(module: "alerts", action: "view")
+}
+
+extend type Mutation {
+    createAlertRule(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        eventTypeId: ID! @rename(attribute: "event_type_id")
+        name: String!
+        description: String
+        isActive: Boolean @rename(attribute: "is_active")
+        isSystemRule: Boolean @rename(attribute: "is_system_rule")
+        isScheduled: Boolean @rename(attribute: "is_scheduled")
+        schedule: String
+        parameters: String
+        vehicleId: ID @rename(attribute: "vehicle_id")
+        vehicleGroupId: ID @rename(attribute: "vehicle_group_id")
+        notifyInApp: Boolean @rename(attribute: "notify_in_app")
+        notifyPush: Boolean @rename(attribute: "notify_push")
+        notifyEmail: Boolean @rename(attribute: "notify_email")
+        notifySms: Boolean @rename(attribute: "notify_sms")
+        notifyWhatsapp: Boolean @rename(attribute: "notify_whatsapp")
+        emailSubject: String @rename(attribute: "email_subject")
+        emailMessage: String @rename(attribute: "email_message")
+        smsMessage: String @rename(attribute: "sms_message")
+        minRepeatIntervalMinutes: Int @rename(attribute: "min_repeat_interval_minutes")
+        resetIntervalOnAck: Boolean @rename(attribute: "reset_interval_on_ack")
+        createdBy: ID @rename(attribute: "created_by")
+    ): AlertRule! @create @guard(with: ["sanctum"]) @requiresPermission(module: "alerts", action: "add")
+
+    "Update an existing alert rule. Only pass the fields that should change."
+    updateAlertRule(
+        id: ID!
+        companyId: ID @rename(attribute: "company_id") @forceOwnCompany
+        eventTypeId: ID @rename(attribute: "event_type_id")
+        name: String
+        description: String
+        isActive: Boolean @rename(attribute: "is_active")
+        isSystemRule: Boolean @rename(attribute: "is_system_rule")
+        isScheduled: Boolean @rename(attribute: "is_scheduled")
+        schedule: String
+        parameters: String
+        vehicleId: ID @rename(attribute: "vehicle_id")
+        vehicleGroupId: ID @rename(attribute: "vehicle_group_id")
+        notifyInApp: Boolean @rename(attribute: "notify_in_app")
+        notifyPush: Boolean @rename(attribute: "notify_push")
+        notifyEmail: Boolean @rename(attribute: "notify_email")
+        notifySms: Boolean @rename(attribute: "notify_sms")
+        notifyWhatsapp: Boolean @rename(attribute: "notify_whatsapp")
+        emailSubject: String @rename(attribute: "email_subject")
+        emailMessage: String @rename(attribute: "email_message")
+        smsMessage: String @rename(attribute: "sms_message")
+        minRepeatIntervalMinutes: Int @rename(attribute: "min_repeat_interval_minutes")
+        resetIntervalOnAck: Boolean @rename(attribute: "reset_interval_on_ack")
+        createdBy: ID @rename(attribute: "created_by")
+    ): AlertRule! @update @guard(with: ["sanctum"]) @requiresPermission(module: "alerts", action: "edit")
+
+    "Permanently delete an alert rule. Cascades to its recipients and alert_events."
+    deleteAlertRule(id: ID! @eq @authorizeParent(model: "App\\Models\\AlertRule")): AlertRule! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "alerts", action: "delete")
+}
+
+"One notification target on an alert rule — either an app user, a raw email address, or a raw phone number (recipientType says which)."
+type AlertRuleRecipient {
+    id: ID!
+    alertRuleId: ID! @rename(attribute: "alert_rule_id")
+    "user | email | phone"
+    recipientType: String! @rename(attribute: "recipient_type")
+    userId: ID @rename(attribute: "user_id")
+    email: String
+    phone: String
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    "Add a recipient to an alert rule."
+    createAlertRuleRecipient(
+        alertRuleId: ID! @rename(attribute: "alert_rule_id") @authorizeParent(model: "App\\Models\\AlertRule")
+        recipientType: String! @rename(attribute: "recipient_type")
+        userId: ID @rename(attribute: "user_id")
+        email: String
+        phone: String
+    ): AlertRuleRecipient! @create @guard(with: ["sanctum"]) @requiresPermission(module: "alerts", action: "add")
+
+    "Remove a recipient from an alert rule."
+    deleteAlertRuleRecipient(id: ID! @eq @authorizeParent(model: "App\\Models\\AlertRuleRecipient")): AlertRuleRecipient! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "alerts", action: "delete")
+}
+
+"""
+One occurrence of an alert rule firing. occurredAt/acknowledgedAt/resolvedAt are plain
+strings (same convention as every other timestamp in this schema). There is no
+automatic rule-evaluation engine yet — see the AlertEvent model docblock — so rows here
+only exist if created directly through this API.
+"""
+type AlertEvent {
+    id: ID!
+    alertRuleId: ID! @rename(attribute: "alert_rule_id")
+    eventTypeId: ID! @rename(attribute: "event_type_id")
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    occurredAt: String! @rename(attribute: "occurred_at")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    parameters: String
+    acknowledgedAt: String @rename(attribute: "acknowledged_at")
+    acknowledgedBy: ID @rename(attribute: "acknowledged_by")
+    resolvedAt: String @rename(attribute: "resolved_at")
+    notes: String
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    alertEvents: [AlertEvent!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "alerts", action: "view")
+    alertEvent(id: ID! @eq): AlertEvent @find @guard(with: ["sanctum"]) @requiresPermission(module: "alerts", action: "view")
+}
+
+extend type Mutation {
+    createAlertEvent(
+        alertRuleId: ID! @rename(attribute: "alert_rule_id") @authorizeParent(model: "App\\Models\\AlertRule")
+        eventTypeId: ID! @rename(attribute: "event_type_id")
+        vehicleId: ID! @rename(attribute: "vehicle_id")
+        occurredAt: String! @rename(attribute: "occurred_at")
+        parameters: String
+        notes: String
+    ): AlertEvent! @create @guard(with: ["sanctum"]) @requiresPermission(module: "alerts", action: "add")
+
+    """
+    Update an alert event. Pass acknowledgedAt + acknowledgedBy to acknowledge it, or
+    resolvedAt to resolve it — this is a plain field update, not a state machine; the
+    caller is responsible for passing sensible values (e.g. the current time).
+    """
+    updateAlertEvent(
+        id: ID!
+        acknowledgedAt: String @rename(attribute: "acknowledged_at")
+        acknowledgedBy: ID @rename(attribute: "acknowledged_by")
+        resolvedAt: String @rename(attribute: "resolved_at")
+        notes: String
+    ): AlertEvent! @update @guard(with: ["sanctum"]) @requiresPermission(module: "alerts", action: "edit")
+
+    "Permanently delete an alert event."
+    deleteAlertEvent(id: ID! @eq @authorizeParent(model: "App\\Models\\AlertEvent")): AlertEvent! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "alerts", action: "delete")
+}
+
+# ---------------------------------------------------------------------------
+# Routes domain: Route (definition) -> RoutePoint (planned, ordered stops) ->
+# RouteRun (one actual execution on a date) -> RouteRunPoint (actual arrival/departure
+# at a stop during a run). None of these tables has a deleted_at column — every delete
+# below is permanent.
+# ---------------------------------------------------------------------------
+
+"""
+A recurring/scheduled route a company runs (e.g. a delivery route). daysOfWeek is an
+opaque JSON-encoded string (same convention as the alerts domain's jsonb fields).
+startTime is a plain "HH:MM:SS" string — a Postgres `time` column, no native time
+scalar in this schema. vehicleGroupId has no backing type yet (VehicleGroup isn't
+modelled) — plain ID, no relation.
+"""
+type Route {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    name: String!
+    description: String
+    colour: String
+    vehicleId: ID @rename(attribute: "vehicle_id")
+    vehicleGroupId: ID @rename(attribute: "vehicle_group_id")
+    startDate: String @rename(attribute: "start_date")
+    startTime: String @rename(attribute: "start_time")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    daysOfWeek: String @rename(attribute: "days_of_week")
+    alertEmail: String @rename(attribute: "alert_email")
+    "This route's stops, in order."
+    points: [RoutePoint!]! @hasMany
+    "This route's actual executions."
+    runs: [RouteRun!]! @hasMany
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    routes: [Route!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "view")
+    route(id: ID! @eq): Route @find @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "view")
+}
+
+extend type Mutation {
+    createRoute(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        name: String!
+        description: String
+        colour: String
+        vehicleId: ID @rename(attribute: "vehicle_id")
+        vehicleGroupId: ID @rename(attribute: "vehicle_group_id")
+        startDate: String @rename(attribute: "start_date")
+        startTime: String @rename(attribute: "start_time")
+        daysOfWeek: String @rename(attribute: "days_of_week")
+        alertEmail: String @rename(attribute: "alert_email")
+    ): Route! @create @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "add")
+
+    "Update an existing route. Only pass the fields that should change."
+    updateRoute(
+        id: ID!
+        name: String
+        description: String
+        colour: String
+        vehicleId: ID @rename(attribute: "vehicle_id")
+        vehicleGroupId: ID @rename(attribute: "vehicle_group_id")
+        startDate: String @rename(attribute: "start_date")
+        startTime: String @rename(attribute: "start_time")
+        daysOfWeek: String @rename(attribute: "days_of_week")
+        alertEmail: String @rename(attribute: "alert_email")
+    ): Route! @update @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "edit")
+
+    "Permanently delete a route. Cascades to its points and runs."
+    deleteRoute(id: ID! @eq @authorizeParent(model: "App\\Models\\Route")): Route! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "delete")
+}
+
+"""
+One stop on a route, in order (sequence). location is a raw PostGIS geography Point
+column, exposed as plain locationLat/locationLng (same approach as Geofence's
+centreLat/centreLng) since Eloquent has no native geography type.
+"""
+type RoutePoint {
+    id: ID!
+    routeId: ID! @rename(attribute: "route_id")
+    sequence: Int!
+    address: String
+    zone: String
+    plannedArrivalTime: String @rename(attribute: "planned_arrival_time")
+    stopTimeMinutes: Int @rename(attribute: "stop_time_minutes")
+    "Latitude of this stop. Null if no location has been set."
+    locationLat: Float @method(name: "locationLat")
+    "Longitude of this stop. Null if no location has been set."
+    locationLng: Float @method(name: "locationLng")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    "Create a route point (resolved by App\\GraphQL\\Mutations\\CreateRoutePoint — it can't be the generic @create directive, since that can't write a geography column)."
+    createRoutePoint(
+        routeId: ID! @authorizeParent(model: "App\\Models\\Route")
+        sequence: Int!
+        address: String
+        zone: String
+        plannedArrivalTime: String
+        stopTimeMinutes: Int
+        location: GeoPointInput
+    ): RoutePoint! @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "add")
+
+    "Update a route point (resolved by App\\GraphQL\\Mutations\\UpdateRoutePoint, for the same reason as createRoutePoint)."
+    updateRoutePoint(
+        id: ID!
+        sequence: Int
+        address: String
+        zone: String
+        plannedArrivalTime: String
+        stopTimeMinutes: Int
+        location: GeoPointInput
+    ): RoutePoint! @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "edit")
+
+    "Permanently delete a route point. Cascades to its route_run_points."
+    deleteRoutePoint(id: ID! @eq @authorizeParent(model: "App\\Models\\RoutePoint")): RoutePoint! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "delete")
+}
+
+"One actual execution of a route on a given date. zonesCovered is an opaque JSON-encoded string, same convention as elsewhere in this schema."
+type RouteRun {
+    id: ID!
+    routeId: ID! @rename(attribute: "route_id")
+    runDate: String! @rename(attribute: "run_date")
+    tripComplete: Boolean! @rename(attribute: "trip_complete")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    zonesCovered: String @rename(attribute: "zones_covered")
+    delayedStartMinutes: Int @rename(attribute: "delayed_start_minutes")
+    "Actual arrival/departure records for this run, one per stop reached."
+    runPoints: [RouteRunPoint!]! @hasMany
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    routeRuns: [RouteRun!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "view")
+    routeRun(id: ID! @eq): RouteRun @find @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "view")
+}
+
+extend type Mutation {
+    createRouteRun(
+        routeId: ID! @rename(attribute: "route_id") @authorizeParent(model: "App\\Models\\Route")
+        runDate: String! @rename(attribute: "run_date")
+        tripComplete: Boolean @rename(attribute: "trip_complete")
+        zonesCovered: String @rename(attribute: "zones_covered")
+        delayedStartMinutes: Int @rename(attribute: "delayed_start_minutes")
+    ): RouteRun! @create @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "add")
+
+    updateRouteRun(
+        id: ID!
+        runDate: String @rename(attribute: "run_date")
+        tripComplete: Boolean @rename(attribute: "trip_complete")
+        zonesCovered: String @rename(attribute: "zones_covered")
+        delayedStartMinutes: Int @rename(attribute: "delayed_start_minutes")
+    ): RouteRun! @update @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "edit")
+
+    "Permanently delete a route run. Cascades to its route_run_points."
+    deleteRouteRun(id: ID! @eq @authorizeParent(model: "App\\Models\\RouteRun")): RouteRun! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "delete")
+}
+
+"""
+Actual arrival/departure at one route point during one run — the realised counterpart
+to RoutePoint's planned schedule. Only ever read through Route.runs -> RouteRun.runPoints
+or RoutePoint's own relation — no standalone top-level query, same reasoning as
+AlertRuleRecipient (only meaningful in context of its parent run).
+"""
+type RouteRunPoint {
+    id: ID!
+    routeRunId: ID! @rename(attribute: "route_run_id")
+    routePointId: ID! @rename(attribute: "route_point_id")
+    actualEnterAt: String @rename(attribute: "actual_enter_at")
+    actualExitAt: String @rename(attribute: "actual_exit_at")
+    timeSpentMinutes: Int @rename(attribute: "time_spent_minutes")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    "Record that a run reached a route point."
+    createRouteRunPoint(
+        routeRunId: ID! @rename(attribute: "route_run_id") @authorizeParent(model: "App\\Models\\RouteRun")
+        routePointId: ID! @rename(attribute: "route_point_id") @authorizeParent(model: "App\\Models\\RoutePoint")
+        actualEnterAt: String @rename(attribute: "actual_enter_at")
+        actualExitAt: String @rename(attribute: "actual_exit_at")
+        timeSpentMinutes: Int @rename(attribute: "time_spent_minutes")
+    ): RouteRunPoint! @create @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "add")
+
+    "Update actual arrival/departure/time-spent for a route run point."
+    updateRouteRunPoint(
+        id: ID!
+        actualEnterAt: String @rename(attribute: "actual_enter_at")
+        actualExitAt: String @rename(attribute: "actual_exit_at")
+        timeSpentMinutes: Int @rename(attribute: "time_spent_minutes")
+    ): RouteRunPoint! @update @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "edit")
+
+    "Permanently delete a route run point record."
+    deleteRouteRunPoint(id: ID! @eq @authorizeParent(model: "App\\Models\\RouteRunPoint")): RouteRunPoint! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "routes", action: "delete")
+}
+
+# ---------------------------------------------------------------------------
+# Maintenance domain: MaintenanceType / ServiceType (per-company dropdown masters) ->
+# MaintenanceRecord (a garage visit/service/repair) -> MaintenanceItem (one line item
+# on its bill). Neither MaintenanceRecord nor MaintenanceItem has a deleted_at column —
+# every delete below is permanent. No geometry, no jsonb — the simplest domain wired up
+# so far.
+# ---------------------------------------------------------------------------
+
+"A company's own dropdown of maintenance types (General, Critical, Preventive, Tyre, Engine, Painting, ...)."
+type MaintenanceType {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    name: String!
+    "active | inactive"
+    status: String!
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    maintenanceTypes: [MaintenanceType!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "view")
+    maintenanceType(id: ID! @eq): MaintenanceType @find @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "view")
+}
+
+extend type Mutation {
+    createMaintenanceType(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        name: String! @rules(apply: ["App\\Rules\\UniqueMaintenanceTypeName"])
+        status: String
+    ): MaintenanceType! @create @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "add")
+
+    updateMaintenanceType(id: ID!, name: String @rules(apply: ["App\\Rules\\UniqueMaintenanceTypeName"]), status: String): MaintenanceType! @update @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "edit")
+
+    "Permanently delete a maintenance type. Will fail if any maintenance records still reference it (restrict-on-delete FK) — set status to \"inactive\" instead to retire it."
+    deleteMaintenanceType(id: ID! @eq @authorizeParent(model: "App\\Models\\MaintenanceType")): MaintenanceType! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "delete")
+}
+
+"A company's own dropdown of service types (Oil change, Battery Change, Car Wash, ...)."
+type ServiceType {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    name: String!
+    "active | inactive"
+    status: String!
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    serviceTypes: [ServiceType!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "view")
+    serviceType(id: ID! @eq): ServiceType @find @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "view")
+}
+
+extend type Mutation {
+    createServiceType(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        name: String! @rules(apply: ["App\\Rules\\UniqueServiceTypeName"])
+        status: String
+    ): ServiceType! @create @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "add")
+
+    updateServiceType(id: ID!, name: String @rules(apply: ["App\\Rules\\UniqueServiceTypeName"]), status: String): ServiceType! @update @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "edit")
+
+    "Permanently delete a service type. Will fail if any maintenance records still reference it (restrict-on-delete FK) — set status to \"inactive\" instead to retire it."
+    deleteServiceType(id: ID! @eq @authorizeParent(model: "App\\Models\\ServiceType")): ServiceType! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "delete")
+}
+
+"A vehicle maintenance/service record (a garage visit, repair, or scheduled service)."
+type MaintenanceRecord {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    driverId: ID @rename(attribute: "driver_id")
+    odometerKm: Float @rename(attribute: "odometer_km")
+    maintenanceTypeId: ID @rename(attribute: "maintenance_type_id")
+    serviceTypeId: ID @rename(attribute: "service_type_id")
+    "Plain date string (YYYY-MM-DD) — no date scalar in this schema."
+    serviceDate: String @rename(attribute: "service_date")
+    garageName: String @rename(attribute: "garage_name")
+    garageAddress: String @rename(attribute: "garage_address")
+    billNumber: String @rename(attribute: "bill_number")
+    extraWorkDone: String @rename(attribute: "extra_work_done")
+    discountAmount: Float @rename(attribute: "discount_amount")
+    discountPercent: Float @rename(attribute: "discount_percent")
+    subtotal: Float
+    total: Float
+    "scheduled | in_progress | completed"
+    status: String!
+    "Line items on this record's bill."
+    items: [MaintenanceItem!]! @hasMany
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    maintenanceRecords: [MaintenanceRecord!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "view")
+    maintenanceRecord(id: ID! @eq): MaintenanceRecord @find @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "view")
+}
+
+extend type Mutation {
+    createMaintenanceRecord(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        vehicleId: ID! @rename(attribute: "vehicle_id")
+        driverId: ID @rename(attribute: "driver_id")
+        odometerKm: Float @rename(attribute: "odometer_km") @rules(apply: ["nullable", "numeric", "min:0"])
+        maintenanceTypeId: ID @rename(attribute: "maintenance_type_id") @authorizeParent(model: "App\\Models\\MaintenanceType")
+        serviceTypeId: ID @rename(attribute: "service_type_id") @authorizeParent(model: "App\\Models\\ServiceType")
+        serviceDate: String @rename(attribute: "service_date")
+        garageName: String @rename(attribute: "garage_name")
+        garageAddress: String @rename(attribute: "garage_address")
+        billNumber: String @rename(attribute: "bill_number")
+        extraWorkDone: String @rename(attribute: "extra_work_done")
+        discountAmount: Float @rename(attribute: "discount_amount") @rules(apply: ["nullable", "numeric", "min:0", "App\\Rules\\MaintenanceDiscountWithinSubtotal"])
+        discountPercent: Float @rename(attribute: "discount_percent") @rules(apply: ["nullable", "numeric", "min:0", "max:100"])
+        subtotal: Float @rules(apply: ["nullable", "numeric", "min:0"])
+        total: Float @rules(apply: ["nullable", "numeric", "min:0"])
+        status: String
+    ): MaintenanceRecord! @create @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "add")
+
+    "Update an existing maintenance record. Only pass the fields that should change."
+    updateMaintenanceRecord(
+        id: ID!
+        driverId: ID @rename(attribute: "driver_id")
+        odometerKm: Float @rename(attribute: "odometer_km") @rules(apply: ["nullable", "numeric", "min:0"])
+        maintenanceTypeId: ID @rename(attribute: "maintenance_type_id") @authorizeParent(model: "App\\Models\\MaintenanceType")
+        serviceTypeId: ID @rename(attribute: "service_type_id") @authorizeParent(model: "App\\Models\\ServiceType")
+        serviceDate: String @rename(attribute: "service_date")
+        garageName: String @rename(attribute: "garage_name")
+        garageAddress: String @rename(attribute: "garage_address")
+        billNumber: String @rename(attribute: "bill_number")
+        extraWorkDone: String @rename(attribute: "extra_work_done")
+        discountAmount: Float @rename(attribute: "discount_amount") @rules(apply: ["nullable", "numeric", "min:0", "App\\Rules\\MaintenanceDiscountWithinSubtotal"])
+        discountPercent: Float @rename(attribute: "discount_percent") @rules(apply: ["nullable", "numeric", "min:0", "max:100"])
+        subtotal: Float @rules(apply: ["nullable", "numeric", "min:0"])
+        total: Float @rules(apply: ["nullable", "numeric", "min:0"])
+        status: String
+    ): MaintenanceRecord! @update @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "edit")
+
+    "Permanently delete a maintenance record. Cascades to its line items."
+    deleteMaintenanceRecord(id: ID! @eq @authorizeParent(model: "App\\Models\\MaintenanceRecord")): MaintenanceRecord! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "delete")
+}
+
+"One line item on a maintenance record's bill. Only read through MaintenanceRecord.items — no standalone query, same reasoning as AlertRuleRecipient/RouteRunPoint."
+type MaintenanceItem {
+    id: ID!
+    maintenanceRecordId: ID! @rename(attribute: "maintenance_record_id")
+    itemName: String! @rename(attribute: "item_name")
+    quantity: Float!
+    unitPrice: Float @rename(attribute: "unit_price")
+    grossPrice: Float @rename(attribute: "gross_price")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    createMaintenanceItem(
+        maintenanceRecordId: ID! @rename(attribute: "maintenance_record_id") @authorizeParent(model: "App\\Models\\MaintenanceRecord")
+        itemName: String! @rename(attribute: "item_name")
+        quantity: Float @rules(apply: ["nullable", "numeric", "gt:0"])
+        unitPrice: Float @rename(attribute: "unit_price") @rules(apply: ["nullable", "numeric", "min:0"])
+        grossPrice: Float @rename(attribute: "gross_price") @rules(apply: ["nullable", "numeric", "min:0"])
+    ): MaintenanceItem! @create @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "add")
+
+    updateMaintenanceItem(
+        id: ID!
+        itemName: String @rename(attribute: "item_name")
+        quantity: Float @rules(apply: ["nullable", "numeric", "gt:0"])
+        unitPrice: Float @rename(attribute: "unit_price") @rules(apply: ["nullable", "numeric", "min:0"])
+        grossPrice: Float @rename(attribute: "gross_price") @rules(apply: ["nullable", "numeric", "min:0"])
+    ): MaintenanceItem! @update @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "edit")
+
+    "Permanently delete a maintenance line item."
+    deleteMaintenanceItem(id: ID! @eq @authorizeParent(model: "App\\Models\\MaintenanceItem")): MaintenanceItem! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "maintenance", action: "delete")
+}
+
+# ---------------------------------------------------------------------------
+# Billing domain: Plan (catalogue) -> CompanySubscription (a company's subscription to
+# a plan) -> Invoice (a bill, optionally tied to a subscription). None of these tables
+# has a deleted_at column — every delete below is permanent. Unlike the "detail row"
+# tables in other domains (AlertRuleRecipient, RouteRunPoint, MaintenanceItem), an
+# Invoice is independently meaningful (e.g. "look up this invoice by number for
+# support"), so it gets its own standalone paginated query, not just a relation field.
+# ---------------------------------------------------------------------------
+
+"A subscription plan companies can be on. features is an opaque JSON-encoded string, same convention as elsewhere in this schema."
+type Plan {
+    id: ID!
+    name: String!
+    monthlyPrice: Float @rename(attribute: "monthly_price")
+    deviceLimit: Int @rename(attribute: "device_limit")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    features: String
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    plans: [Plan!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"])
+    plan(id: ID! @eq): Plan @find @guard(with: ["sanctum"])
+}
+
+extend type Mutation {
+    createPlan(
+        name: String!
+        monthlyPrice: Float @rename(attribute: "monthly_price")
+        deviceLimit: Int @rename(attribute: "device_limit")
+        features: String
+    ): Plan! @create @guard(with: ["sanctum"])
+
+    updatePlan(
+        id: ID!
+        name: String
+        monthlyPrice: Float @rename(attribute: "monthly_price")
+        deviceLimit: Int @rename(attribute: "device_limit")
+        features: String
+    ): Plan! @update @guard(with: ["sanctum"])
+
+    "Permanently delete a plan. Will fail if any company_subscriptions still reference it (restrict-on-delete FK)."
+    deletePlan(id: ID! @eq): Plan! @delete @guard(with: ["sanctum"])
+}
+
+"A company's subscription to a plan."
+type CompanySubscription {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    planId: ID! @rename(attribute: "plan_id")
+    "Plain date string (YYYY-MM-DD) — no date scalar in this schema."
+    startsAt: String! @rename(attribute: "starts_at")
+    renewsAt: String @rename(attribute: "renews_at")
+    "active | past_due | cancelled"
+    status: String!
+    "Invoices billed against this subscription."
+    invoices: [Invoice!]! @hasMany @requiresPermission(module: "billing", action: "view")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    companySubscriptions: [CompanySubscription!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "billing", action: "view")
+    companySubscription(id: ID! @eq): CompanySubscription @find @guard(with: ["sanctum"]) @requiresPermission(module: "billing", action: "view")
+}
+
+extend type Mutation {
+    createCompanySubscription(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        planId: ID! @rename(attribute: "plan_id")
+        startsAt: String! @rename(attribute: "starts_at")
+        renewsAt: String @rename(attribute: "renews_at")
+        status: String
+    ): CompanySubscription! @create @guard(with: ["sanctum"]) @requiresPermission(module: "billing", action: "add")
+
+    "Update an existing subscription. Only pass the fields that should change."
+    updateCompanySubscription(
+        id: ID!
+        planId: ID @rename(attribute: "plan_id")
+        startsAt: String @rename(attribute: "starts_at")
+        renewsAt: String @rename(attribute: "renews_at")
+        status: String
+    ): CompanySubscription! @update @guard(with: ["sanctum"]) @requiresPermission(module: "billing", action: "edit")
+
+    "Permanently delete a subscription. Its invoices are kept (subscription_id is set null on them, not cascaded)."
+    deleteCompanySubscription(id: ID! @eq @authorizeParent(model: "App\\Models\\CompanySubscription")): CompanySubscription! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "billing", action: "delete")
+}
+
+"A bill issued to a company, optionally tied to a subscription."
+type Invoice {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    subscriptionId: ID @rename(attribute: "subscription_id")
+    invoiceNo: String! @rename(attribute: "invoice_no")
+    amount: Float!
+    issuedAt: String! @rename(attribute: "issued_at")
+    "Plain date string (YYYY-MM-DD) — no date scalar in this schema."
+    dueAt: String @rename(attribute: "due_at")
+    paidAt: String @rename(attribute: "paid_at")
+    "draft | sent | paid | overdue | void"
+    status: String!
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    invoices: [Invoice!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"])
+    invoice(id: ID! @eq): Invoice @find @guard(with: ["sanctum"]) @requiresPermission(module: "billing", action: "view")
+}
+
+extend type Mutation {
+    createInvoice(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        subscriptionId: ID @rename(attribute: "subscription_id")
+        invoiceNo: String! @rename(attribute: "invoice_no")
+        amount: Float!
+        issuedAt: String! @rename(attribute: "issued_at")
+        dueAt: String @rename(attribute: "due_at")
+        status: String
+    ): Invoice! @create @guard(with: ["sanctum"]) @requiresPermission(module: "billing", action: "add")
+
+    "Update an invoice. Pass paidAt plus status: \"paid\" to mark it paid — this is a plain field update, not a state machine."
+    updateInvoice(
+        id: ID!
+        dueAt: String @rename(attribute: "due_at")
+        paidAt: String @rename(attribute: "paid_at")
+        status: String
+    ): Invoice! @update @guard(with: ["sanctum"]) @requiresPermission(module: "billing", action: "edit")
+
+    "Permanently delete an invoice."
+    deleteInvoice(id: ID! @eq @authorizeParent(model: "App\\Models\\Invoice")): Invoice! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "billing", action: "delete")
+}
+
+# ---------------------------------------------------------------------------
+# Vehicle: the full fleet record — identification, driver assignment, installation,
+# tracking limits, odometer/service history, and purchase/finance detail. Previously
+# only a deliberately minimal, read-only stand-in existed (added just to make
+# VehicleGroup.vehicles resolvable) — this is the real thing, with full CRUD.
+#
+# Unlike every domain built after Driver, `vehicles` DOES have a deleted_at column
+# (it already used SoftDeletes before any of this reference-domain work started) — so
+# deleteVehicle, like deleteDriver, is a soft delete, not permanent.
+#
+# Driver references (primaryDriverId, attendant1Id, attendant2Id) are exposed as plain
+# IDs, not relation objects, even though Driver has its own type — this matches the
+# convention used everywhere else in this schema (e.g. AlertRule.eventTypeId): a
+# reference to another record is an ID unless that other record's own children are
+# being listed (as in VehicleGroup.vehicles), not just because a type happens to exist.
+# ---------------------------------------------------------------------------
+
+"""
+A company's own dropdown of vehicle types (Truck, Car, JCB, Crane, ...). Vehicle.vehicleTypeId
+is a restrict-on-delete FK — retire a type via `status` instead of deleting it once any
+vehicle references it.
+"""
+type VehicleType {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    name: String!
+    "active | inactive"
+    status: String!
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    vehicleTypes: [VehicleType!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "vehicles", action: "view")
+    vehicleType(id: ID! @eq): VehicleType @find @guard(with: ["sanctum"]) @requiresPermission(module: "vehicles", action: "view")
+}
+
+extend type Mutation {
+    createVehicleType(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        name: String! @rules(apply: ["App\\Rules\\UniqueVehicleTypeName"])
+        status: String
+    ): VehicleType! @create @guard(with: ["sanctum"]) @requiresPermission(module: "vehicles", action: "add")
+
+    updateVehicleType(id: ID!, name: String @rules(apply: ["App\\Rules\\UniqueVehicleTypeName"]), status: String): VehicleType! @update @guard(with: ["sanctum"]) @requiresPermission(module: "vehicles", action: "edit")
+
+    "Permanently delete a vehicle type. Will fail if any vehicles still reference it (restrict-on-delete FK) — set status to \"inactive\" instead to retire it."
+    deleteVehicleType(id: ID! @eq @authorizeParent(model: "App\\Models\\VehicleType")): VehicleType! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "vehicles", action: "delete")
+}
+
+"""
+A fleet vehicle. workingDays is an opaque JSON-encoded string (this project's usual
+convention for jsonb columns — see Route.daysOfWeek, AlertRule.parameters). Every
+date/time field (installDate, trackingHoursFrom, lastServiceDate, etc.) is a plain
+string — this schema has no date/time scalar.
+"""
+type Vehicle {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+
+    "--- Identification ---"
+    vehicleName: String @rename(attribute: "vehicle_name")
+    plateNo: String! @rename(attribute: "plate_no")
+    registrationNo: String @rename(attribute: "registration_no")
+    brand: String
+    manufacturer: String
+    model: String
+    year: Int
+    colour: String
+    vehicleTypeId: ID! @rename(attribute: "vehicle_type_id")
+    seats: Float
+    loadCapacityKg: Float @rename(attribute: "load_capacity_kg")
+    chassisNo: String @rename(attribute: "chassis_no")
+    barcode: String
+    mapIcon: String @rename(attribute: "map_icon")
+    photoPath: String @rename(attribute: "photo_path")
+    "owned | leased | rented"
+    ownership: String
+    comment: String
+
+    "--- Driver assignment (plain IDs — see note above) ---"
+    primaryDriverId: ID @rename(attribute: "primary_driver_id")
+    attendant1Id: ID @rename(attribute: "attendant_1_id")
+    attendant2Id: ID @rename(attribute: "attendant_2_id")
+    contactMobile: String @rename(attribute: "contact_mobile")
+
+    "--- Installation ---"
+    installDate: String! @rename(attribute: "install_date")
+    installerName: String @rename(attribute: "installer_name")
+    installLocationInVehicle: String @rename(attribute: "install_location_in_vehicle")
+    paymentType: String! @rename(attribute: "payment_type")
+    subscriptionExpiresAt: String @rename(attribute: "subscription_expires_at")
+    renewedAt: String @rename(attribute: "renewed_at")
+    timezone: String
+
+    "--- Tracking limits & schedule ---"
+    hasCanBus: Boolean! @rename(attribute: "has_can_bus")
+    speedLimitKmh: Int! @rename(attribute: "speed_limit_kmh")
+    idleLimitMinutes: Int! @rename(attribute: "idle_limit_minutes")
+    trackingHoursFrom: String @rename(attribute: "tracking_hours_from")
+    trackingHoursTo: String @rename(attribute: "tracking_hours_to")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    workingDays: String @rename(attribute: "working_days")
+
+    "--- Odometer & service history ---"
+    odometerKm: Float! @rename(attribute: "odometer_km")
+    odometerCorrectionKm: Float! @rename(attribute: "odometer_correction_km")
+    lastServiceDate: String @rename(attribute: "last_service_date")
+    lastOilChangeDate: String @rename(attribute: "last_oil_change_date")
+    lastTyreChangeDate: String @rename(attribute: "last_tyre_change_date")
+    serviceIntervalKm: Int @rename(attribute: "service_interval_km")
+    oilIntervalKm: Int @rename(attribute: "oil_interval_km")
+    tyreIntervalKm: Int @rename(attribute: "tyre_interval_km")
+    machineServiceHours: Float @rename(attribute: "machine_service_hours")
+
+    "--- Purchase & finance ---"
+    purchaseDate: String @rename(attribute: "purchase_date")
+    totalCost: Float @rename(attribute: "total_cost")
+    downPayment: Float @rename(attribute: "down_payment")
+    monthlyEmi: Float @rename(attribute: "monthly_emi")
+    emiCount: Int @rename(attribute: "emi_count")
+    emiDueDay: Int @rename(attribute: "emi_due_day")
+    fuelType: String @rename(attribute: "fuel_type")
+    fuelConsumptionRate: Float @rename(attribute: "fuel_consumption_rate")
+
+    "Users granted direct visibility into this vehicle (independent of any group)."
+    userAccess: [UserVehicle!]! @hasMany
+
+    "This vehicle's device's current/last-known position, if it has ever reported one."
+    lastPosition: DeviceLastPosition @hasOne
+
+    "active | inactive"
+    status: String!
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    "`search` matches plate number, vehicle name, or registration number (case-insensitive, partial)."
+    vehicles(search: String): [Vehicle!]! @paginate(builder: "App\\GraphQL\\Queries\\VehiclesQuery@builder", defaultCount: 25) @guard(with: ["sanctum"])
+    vehicle(id: ID! @eq): Vehicle @find @guard(with: ["sanctum"]) @requiresPermission(module: "vehicles", action: "view")
+}
+
+extend type Mutation {
+    createVehicle(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        vehicleName: String @rename(attribute: "vehicle_name")
+        plateNo: String! @rename(attribute: "plate_no") @rules(apply: ["App\\Rules\\UniqueVehiclePlateNo"])
+        registrationNo: String @rename(attribute: "registration_no")
+        brand: String
+        manufacturer: String
+        model: String
+        year: Int @rules(apply: ["nullable", "integer", "min:1950", "max:2100"])
+        colour: String
+        vehicleTypeId: ID! @rename(attribute: "vehicle_type_id") @authorizeParent(model: "App\\Models\\VehicleType")
+        seats: Float @rules(apply: ["nullable", "numeric", "min:0"])
+        loadCapacityKg: Float @rename(attribute: "load_capacity_kg") @rules(apply: ["nullable", "numeric", "min:0"])
+        chassisNo: String @rename(attribute: "chassis_no")
+        barcode: String
+        mapIcon: String @rename(attribute: "map_icon")
+        photoPath: String @rename(attribute: "photo_path")
+        ownership: String
+        comment: String
+        primaryDriverId: ID @rename(attribute: "primary_driver_id")
+        attendant1Id: ID @rename(attribute: "attendant_1_id")
+        attendant2Id: ID @rename(attribute: "attendant_2_id")
+        contactMobile: String @rename(attribute: "contact_mobile")
+        installDate: String! @rename(attribute: "install_date")
+        installerName: String @rename(attribute: "installer_name")
+        installLocationInVehicle: String @rename(attribute: "install_location_in_vehicle")
+        paymentType: String! @rename(attribute: "payment_type")
+        subscriptionExpiresAt: String @rename(attribute: "subscription_expires_at") @rules(apply: ["App\\Rules\\VehicleSubscriptionExpiresAfterInstall"])
+        renewedAt: String @rename(attribute: "renewed_at")
+        timezone: String
+        hasCanBus: Boolean @rename(attribute: "has_can_bus")
+        speedLimitKmh: Int! @rename(attribute: "speed_limit_kmh") @rules(apply: ["nullable", "integer", "min:0"])
+        idleLimitMinutes: Int! @rename(attribute: "idle_limit_minutes") @rules(apply: ["nullable", "integer", "min:0"])
+        trackingHoursFrom: String @rename(attribute: "tracking_hours_from")
+        trackingHoursTo: String @rename(attribute: "tracking_hours_to")
+        workingDays: String @rename(attribute: "working_days")
+        odometerKm: Float @rename(attribute: "odometer_km") @rules(apply: ["nullable", "numeric", "min:0"])
+        odometerCorrectionKm: Float @rename(attribute: "odometer_correction_km")
+        lastServiceDate: String @rename(attribute: "last_service_date")
+        lastOilChangeDate: String @rename(attribute: "last_oil_change_date")
+        lastTyreChangeDate: String @rename(attribute: "last_tyre_change_date")
+        serviceIntervalKm: Int @rename(attribute: "service_interval_km") @rules(apply: ["nullable", "integer", "min:0"])
+        oilIntervalKm: Int @rename(attribute: "oil_interval_km") @rules(apply: ["nullable", "integer", "min:0"])
+        tyreIntervalKm: Int @rename(attribute: "tyre_interval_km") @rules(apply: ["nullable", "integer", "min:0"])
+        machineServiceHours: Float @rename(attribute: "machine_service_hours") @rules(apply: ["nullable", "numeric", "min:0"])
+        purchaseDate: String @rename(attribute: "purchase_date")
+        totalCost: Float @rename(attribute: "total_cost") @rules(apply: ["nullable", "numeric", "min:0"])
+        downPayment: Float @rename(attribute: "down_payment") @rules(apply: ["nullable", "numeric", "min:0", "App\\Rules\\DownPaymentWithinTotalCost"])
+        monthlyEmi: Float @rename(attribute: "monthly_emi") @rules(apply: ["nullable", "numeric", "min:0"])
+        emiCount: Int @rename(attribute: "emi_count") @rules(apply: ["nullable", "integer", "min:0"])
+        emiDueDay: Int @rename(attribute: "emi_due_day") @rules(apply: ["nullable", "integer", "between:1,31"])
+        fuelType: String @rename(attribute: "fuel_type")
+        fuelConsumptionRate: Float @rename(attribute: "fuel_consumption_rate") @rules(apply: ["nullable", "numeric", "min:0"])
+        status: String
+    ): Vehicle! @create @guard(with: ["sanctum"]) @requiresPermission(module: "vehicles", action: "add")
+
+    "Update an existing vehicle. Only pass the fields that should change."
+    updateVehicle(
+        id: ID!
+        vehicleName: String @rename(attribute: "vehicle_name")
+        plateNo: String @rename(attribute: "plate_no") @rules(apply: ["App\\Rules\\UniqueVehiclePlateNo"])
+        registrationNo: String @rename(attribute: "registration_no")
+        brand: String
+        manufacturer: String
+        model: String
+        year: Int @rules(apply: ["nullable", "integer", "min:1950", "max:2100"])
+        colour: String
+        vehicleTypeId: ID @rename(attribute: "vehicle_type_id") @authorizeParent(model: "App\\Models\\VehicleType")
+        seats: Float @rules(apply: ["nullable", "numeric", "min:0"])
+        loadCapacityKg: Float @rename(attribute: "load_capacity_kg") @rules(apply: ["nullable", "numeric", "min:0"])
+        chassisNo: String @rename(attribute: "chassis_no")
+        barcode: String
+        mapIcon: String @rename(attribute: "map_icon")
+        photoPath: String @rename(attribute: "photo_path")
+        ownership: String
+        comment: String
+        primaryDriverId: ID @rename(attribute: "primary_driver_id")
+        attendant1Id: ID @rename(attribute: "attendant_1_id")
+        attendant2Id: ID @rename(attribute: "attendant_2_id")
+        contactMobile: String @rename(attribute: "contact_mobile")
+        installDate: String @rename(attribute: "install_date")
+        installerName: String @rename(attribute: "installer_name")
+        installLocationInVehicle: String @rename(attribute: "install_location_in_vehicle")
+        paymentType: String @rename(attribute: "payment_type")
+        subscriptionExpiresAt: String @rename(attribute: "subscription_expires_at") @rules(apply: ["App\\Rules\\VehicleSubscriptionExpiresAfterInstall"])
+        renewedAt: String @rename(attribute: "renewed_at")
+        timezone: String
+        hasCanBus: Boolean @rename(attribute: "has_can_bus")
+        speedLimitKmh: Int @rename(attribute: "speed_limit_kmh") @rules(apply: ["nullable", "integer", "min:0"])
+        idleLimitMinutes: Int @rename(attribute: "idle_limit_minutes") @rules(apply: ["nullable", "integer", "min:0"])
+        trackingHoursFrom: String @rename(attribute: "tracking_hours_from")
+        trackingHoursTo: String @rename(attribute: "tracking_hours_to")
+        workingDays: String @rename(attribute: "working_days")
+        odometerKm: Float @rename(attribute: "odometer_km") @rules(apply: ["nullable", "numeric", "min:0"])
+        odometerCorrectionKm: Float @rename(attribute: "odometer_correction_km")
+        lastServiceDate: String @rename(attribute: "last_service_date")
+        lastOilChangeDate: String @rename(attribute: "last_oil_change_date")
+        lastTyreChangeDate: String @rename(attribute: "last_tyre_change_date")
+        serviceIntervalKm: Int @rename(attribute: "service_interval_km") @rules(apply: ["nullable", "integer", "min:0"])
+        oilIntervalKm: Int @rename(attribute: "oil_interval_km") @rules(apply: ["nullable", "integer", "min:0"])
+        tyreIntervalKm: Int @rename(attribute: "tyre_interval_km") @rules(apply: ["nullable", "integer", "min:0"])
+        machineServiceHours: Float @rename(attribute: "machine_service_hours") @rules(apply: ["nullable", "numeric", "min:0"])
+        purchaseDate: String @rename(attribute: "purchase_date")
+        totalCost: Float @rename(attribute: "total_cost") @rules(apply: ["nullable", "numeric", "min:0"])
+        downPayment: Float @rename(attribute: "down_payment") @rules(apply: ["nullable", "numeric", "min:0", "App\\Rules\\DownPaymentWithinTotalCost"])
+        monthlyEmi: Float @rename(attribute: "monthly_emi") @rules(apply: ["nullable", "numeric", "min:0"])
+        emiCount: Int @rename(attribute: "emi_count") @rules(apply: ["nullable", "integer", "min:0"])
+        emiDueDay: Int @rename(attribute: "emi_due_day") @rules(apply: ["nullable", "integer", "between:1,31"])
+        fuelType: String @rename(attribute: "fuel_type")
+        fuelConsumptionRate: Float @rename(attribute: "fuel_consumption_rate") @rules(apply: ["nullable", "numeric", "min:0"])
+        status: String
+    ): Vehicle! @update @guard(with: ["sanctum"]) @requiresPermission(module: "vehicles", action: "edit")
+
+    "Soft-delete a vehicle (sets deleted_at — row is kept, not removed), same as deleteDriver."
+    deleteVehicle(id: ID! @eq @authorizeParent(model: "App\\Models\\Vehicle")): Vehicle! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "vehicles", action: "delete")
+}
+
+# ---------------------------------------------------------------------------
+# Vehicle groups: VehicleGroup (a possibly hierarchical grouping of vehicles) ->
+# VehicleGroupMember (one vehicle's membership in a group). No deleted_at column on
+# either table — every delete below is permanent. Several already-built domains
+# (AlertRule.vehicleGroupId, Route.vehicleGroupId) reference vehicle_groups by plain ID
+# — they are not upgraded to a relation here, since that's a deliberate schema change,
+# not something to bundle silently into adding this model.
+# ---------------------------------------------------------------------------
+
+"""
+A (possibly hierarchical) grouping of vehicles within a company — e.g. "North Region"
+containing sub-groups per depot. parentId references another VehicleGroup (nullable);
+deleting a parent does not delete its children, it just clears their parentId.
+"""
+type VehicleGroup {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    parentId: ID @rename(attribute: "parent_id")
+    name: String!
+    inchargeName: String @rename(attribute: "incharge_name")
+    inchargeEmail: String @rename(attribute: "incharge_email")
+    colour: String
+    "Direct child groups of this group."
+    children: [VehicleGroup!]! @hasMany
+    "Membership rows for this group — use these ids with deleteVehicleGroupMember."
+    members: [VehicleGroupMember!]! @hasMany
+    "Convenience: the actual Vehicle records in this group (reads through the same membership table as `members`)."
+    vehicles: [Vehicle!]! @belongsToMany
+    "Users granted visibility into this group."
+    userAccess: [UserVehicleGroup!]! @hasMany
+    "Geofences this entire group is assigned to."
+    geofenceMemberships: [GeofenceVehicleGroup!]! @hasMany
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    vehicleGroups: [VehicleGroup!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"])
+    vehicleGroup(id: ID! @eq): VehicleGroup @find @guard(with: ["sanctum"]) @requiresPermission(module: "vehicle-groups", action: "view")
+}
+
+extend type Mutation {
+    createVehicleGroup(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        parentId: ID @rename(attribute: "parent_id")
+        name: String! @rules(apply: ["App\\Rules\\UniqueVehicleGroupNameAtLevel"])
+        inchargeName: String @rename(attribute: "incharge_name")
+        inchargeEmail: String @rename(attribute: "incharge_email") @rules(apply: ["nullable", "email"])
+        colour: String
+    ): VehicleGroup! @create @guard(with: ["sanctum"]) @requiresPermission(module: "vehicle-groups", action: "add")
+
+    "Update an existing vehicle group. Only pass the fields that should change."
+    updateVehicleGroup(
+        id: ID!
+        parentId: ID @rename(attribute: "parent_id") @rules(apply: ["App\\Rules\\VehicleGroupParentNotOwnDescendant"])
+        name: String @rules(apply: ["App\\Rules\\UniqueVehicleGroupNameAtLevel"])
+        inchargeName: String @rename(attribute: "incharge_name")
+        inchargeEmail: String @rename(attribute: "incharge_email") @rules(apply: ["nullable", "email"])
+        colour: String
+    ): VehicleGroup! @update @guard(with: ["sanctum"]) @requiresPermission(module: "vehicle-groups", action: "edit")
+
+    "Permanently delete a vehicle group. Children have their parentId cleared (not deleted); memberships are cascaded."
+    deleteVehicleGroup(id: ID! @eq @authorizeParent(model: "App\\Models\\VehicleGroup")): VehicleGroup! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "vehicle-groups", action: "delete")
+}
+
+"One vehicle's membership in a vehicle group. Only read through VehicleGroup.members — no standalone query, same reasoning as the other join-as-entity tables (AlertRuleRecipient, RouteRunPoint, MaintenanceItem)."
+type VehicleGroupMember {
+    id: ID!
+    vehicleGroupId: ID! @rename(attribute: "vehicle_group_id")
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    "Add a vehicle to a group."
+    createVehicleGroupMember(
+        vehicleGroupId: ID! @rename(attribute: "vehicle_group_id") @authorizeParent(model: "App\\Models\\VehicleGroup")
+        vehicleId: ID! @rename(attribute: "vehicle_id")
+    ): VehicleGroupMember! @create @guard(with: ["sanctum"]) @requiresPermission(module: "vehicle-groups", action: "add")
+
+    "Remove a vehicle from a group."
+    deleteVehicleGroupMember(id: ID! @eq @authorizeParent(model: "App\\Models\\VehicleGroupMember")): VehicleGroupMember! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "vehicle-groups", action: "delete")
+}
+
+# =============================================================================
+# The remaining reference tables from the 57-table schema — six groups, matching
+# API Doc.md section 7's categorisation. None of these tables has a deleted_at
+# column, so every delete below is permanent. Pivot/log-type tables follow the
+# same conventions established above: a join-as-entity table (its own id) gets
+# create/delete only, read through its parent, no standalone query; a pure
+# append-only log (AuditLog, UserLoginLog, DeviceChangeLog) gets create + read
+# only — no update, no delete, since editing/removing an audit trail defeats its
+# purpose.
+# =============================================================================
+
+# --- Fuel ---------------------------------------------------------------------
+
+"A voltage-to-litres calibration curve for a fuel tank sensor."
+type FuelCalibration {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    name: String!
+    tankCapacityLitres: Float @rename(attribute: "tank_capacity_litres")
+    minVoltage: Float @rename(attribute: "min_voltage")
+    maxVoltage: Float @rename(attribute: "max_voltage")
+    "Calibration points on this curve."
+    points: [FuelCalibrationPoint!]! @hasMany
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    fuelCalibrations: [FuelCalibration!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "view")
+    fuelCalibration(id: ID! @eq): FuelCalibration @find @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "view")
+}
+
+extend type Mutation {
+    createFuelCalibration(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        name: String!
+        tankCapacityLitres: Float @rename(attribute: "tank_capacity_litres") @rules(apply: ["nullable", "numeric", "gt:0"])
+        minVoltage: Float @rename(attribute: "min_voltage") @rules(apply: ["App\\Rules\\FuelCalibrationMinVoltageBelowMax"])
+        maxVoltage: Float @rename(attribute: "max_voltage")
+    ): FuelCalibration! @create @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "add")
+
+    updateFuelCalibration(
+        id: ID!
+        name: String
+        tankCapacityLitres: Float @rename(attribute: "tank_capacity_litres") @rules(apply: ["nullable", "numeric", "gt:0"])
+        minVoltage: Float @rename(attribute: "min_voltage") @rules(apply: ["App\\Rules\\FuelCalibrationMinVoltageBelowMax"])
+        maxVoltage: Float @rename(attribute: "max_voltage")
+    ): FuelCalibration! @update @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "edit")
+
+    "Permanently delete a calibration curve. Cascades to its points and any tanks using it are set to no calibration."
+    deleteFuelCalibration(id: ID! @eq @authorizeParent(model: "App\\Models\\FuelCalibration")): FuelCalibration! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "delete")
+}
+
+"One voltage/litres reading on a FuelCalibration curve. Only read through FuelCalibration.points — no standalone query."
+type FuelCalibrationPoint {
+    id: ID!
+    fuelCalibrationId: ID! @rename(attribute: "fuel_calibration_id")
+    voltage: Float!
+    litres: Float!
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    createFuelCalibrationPoint(
+        fuelCalibrationId: ID! @rename(attribute: "fuel_calibration_id") @authorizeParent(model: "App\\Models\\FuelCalibration")
+        voltage: Float! @rules(apply: ["nullable", "numeric", "min:0"])
+        litres: Float! @rules(apply: ["nullable", "numeric", "min:0"])
+    ): FuelCalibrationPoint! @create @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "add")
+
+    updateFuelCalibrationPoint(id: ID!, voltage: Float @rules(apply: ["nullable", "numeric", "min:0"]), litres: Float @rules(apply: ["nullable", "numeric", "min:0"])): FuelCalibrationPoint! @requiresPermission(module: "fuel", action: "edit")
+        @update @guard(with: ["sanctum"])
+
+    deleteFuelCalibrationPoint(id: ID! @eq @authorizeParent(model: "App\\Models\\FuelCalibrationPoint")): FuelCalibrationPoint! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "delete")
+}
+
+"A company's recorded petrol/diesel price as of a given effective date."
+type FuelPrice {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    petrolPrice: Float @rename(attribute: "petrol_price")
+    dieselPrice: Float @rename(attribute: "diesel_price")
+    effectiveDate: String! @rename(attribute: "effective_date")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    fuelPrices: [FuelPrice!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "view")
+    fuelPrice(id: ID! @eq): FuelPrice @find @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "view")
+}
+
+extend type Mutation {
+    createFuelPrice(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        petrolPrice: Float @rename(attribute: "petrol_price")
+        dieselPrice: Float @rename(attribute: "diesel_price")
+        effectiveDate: String! @rename(attribute: "effective_date")
+    ): FuelPrice! @create @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "add")
+
+    updateFuelPrice(
+        id: ID!
+        petrolPrice: Float @rename(attribute: "petrol_price")
+        dieselPrice: Float @rename(attribute: "diesel_price")
+        effectiveDate: String @rename(attribute: "effective_date")
+    ): FuelPrice! @update @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "edit")
+
+    deleteFuelPrice(id: ID! @eq @authorizeParent(model: "App\\Models\\FuelPrice")): FuelPrice! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "delete")
+}
+
+"One fuel purchase/fill-up event for a vehicle."
+type FuelFill {
+    id: ID!
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    driverId: ID @rename(attribute: "driver_id")
+    litres: Float!
+    odometerKm: Float @rename(attribute: "odometer_km")
+    amount: Float!
+    filledAt: String! @rename(attribute: "filled_at")
+    billImagePath: String @rename(attribute: "bill_image_path")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    fuelFills: [FuelFill!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "view")
+    fuelFill(id: ID! @eq): FuelFill @find @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "view")
+}
+
+extend type Mutation {
+    createFuelFill(
+        vehicleId: ID! @rename(attribute: "vehicle_id") @authorizeParent(model: "App\\Models\\Vehicle")
+        driverId: ID @rename(attribute: "driver_id")
+        litres: Float!
+        odometerKm: Float @rename(attribute: "odometer_km")
+        amount: Float!
+        filledAt: String! @rename(attribute: "filled_at")
+        billImagePath: String @rename(attribute: "bill_image_path")
+    ): FuelFill! @create @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "add")
+
+    updateFuelFill(
+        id: ID!
+        driverId: ID @rename(attribute: "driver_id")
+        litres: Float
+        odometerKm: Float @rename(attribute: "odometer_km")
+        amount: Float
+        filledAt: String @rename(attribute: "filled_at")
+        billImagePath: String @rename(attribute: "bill_image_path")
+    ): FuelFill! @update @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "edit")
+
+    deleteFuelFill(id: ID! @eq @authorizeParent(model: "App\\Models\\FuelFill")): FuelFill! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "delete")
+}
+
+"A fuel-card transaction/receipt for a vehicle (distinct from FuelFill — the card provider's own record)."
+type FuelCardExpense {
+    id: ID!
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    station: String
+    product: String
+    volume: Float
+    unitPrice: Float @rename(attribute: "unit_price")
+    vatRate: Float @rename(attribute: "vat_rate")
+    vatAmount: Float @rename(attribute: "vat_amount")
+    receiptNumber: String @rename(attribute: "receipt_number")
+    odometerKm: Float @rename(attribute: "odometer_km")
+    costCentre: String @rename(attribute: "cost_centre")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    fuelCardExpenses: [FuelCardExpense!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "view")
+    fuelCardExpense(id: ID! @eq): FuelCardExpense @find @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "view")
+}
+
+extend type Mutation {
+    createFuelCardExpense(
+        vehicleId: ID! @rename(attribute: "vehicle_id") @authorizeParent(model: "App\\Models\\Vehicle")
+        station: String
+        product: String
+        volume: Float
+        unitPrice: Float @rename(attribute: "unit_price")
+        vatRate: Float @rename(attribute: "vat_rate")
+        vatAmount: Float @rename(attribute: "vat_amount")
+        receiptNumber: String @rename(attribute: "receipt_number")
+        odometerKm: Float @rename(attribute: "odometer_km")
+        costCentre: String @rename(attribute: "cost_centre")
+    ): FuelCardExpense! @create @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "add")
+
+    updateFuelCardExpense(
+        id: ID!
+        station: String
+        product: String
+        volume: Float
+        unitPrice: Float @rename(attribute: "unit_price")
+        vatRate: Float @rename(attribute: "vat_rate")
+        vatAmount: Float @rename(attribute: "vat_amount")
+        receiptNumber: String @rename(attribute: "receipt_number")
+        odometerKm: Float @rename(attribute: "odometer_km")
+        costCentre: String @rename(attribute: "cost_centre")
+    ): FuelCardExpense! @update @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "edit")
+
+    deleteFuelCardExpense(id: ID! @eq @authorizeParent(model: "App\\Models\\FuelCardExpense")): FuelCardExpense! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "delete")
+}
+
+"One physical fuel tank on a vehicle (vehicles can have more than one — see tankIndex)."
+type VehicleFuelTank {
+    id: ID!
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    tankIndex: Int! @rename(attribute: "tank_index")
+    "cylindrical | rectangular | custom"
+    shape: String
+    lengthMm: Float @rename(attribute: "length_mm")
+    widthMm: Float @rename(attribute: "width_mm")
+    heightMm: Float @rename(attribute: "height_mm")
+    diameterMm: Float @rename(attribute: "diameter_mm")
+    volumeLitres: Float @rename(attribute: "volume_litres")
+    sensorExternalId: String @rename(attribute: "sensor_external_id")
+    installationSpace: String @rename(attribute: "installation_space")
+    fuelCalibrationId: ID @rename(attribute: "fuel_calibration_id")
+    minimumRefillLitres: Float @rename(attribute: "minimum_refill_litres")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    vehicleFuelTanks: [VehicleFuelTank!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "view")
+    vehicleFuelTank(id: ID! @eq): VehicleFuelTank @find @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "view")
+}
+
+extend type Mutation {
+    createVehicleFuelTank(
+        vehicleId: ID! @rename(attribute: "vehicle_id") @authorizeParent(model: "App\\Models\\Vehicle")
+        tankIndex: Int @rename(attribute: "tank_index") @rules(apply: ["App\\Rules\\UniqueFuelTankIndexPerVehicle"])
+        shape: String
+        lengthMm: Float @rename(attribute: "length_mm")
+        widthMm: Float @rename(attribute: "width_mm")
+        heightMm: Float @rename(attribute: "height_mm")
+        diameterMm: Float @rename(attribute: "diameter_mm")
+        volumeLitres: Float @rename(attribute: "volume_litres") @rules(apply: ["nullable", "numeric", "gt:0"])
+        sensorExternalId: String @rename(attribute: "sensor_external_id")
+        installationSpace: String @rename(attribute: "installation_space")
+        fuelCalibrationId: ID @rename(attribute: "fuel_calibration_id")
+        minimumRefillLitres: Float @rename(attribute: "minimum_refill_litres")
+    ): VehicleFuelTank! @create @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "add")
+
+    updateVehicleFuelTank(
+        id: ID!
+        tankIndex: Int @rename(attribute: "tank_index") @rules(apply: ["App\\Rules\\UniqueFuelTankIndexPerVehicle"])
+        shape: String
+        lengthMm: Float @rename(attribute: "length_mm")
+        widthMm: Float @rename(attribute: "width_mm")
+        heightMm: Float @rename(attribute: "height_mm")
+        diameterMm: Float @rename(attribute: "diameter_mm")
+        volumeLitres: Float @rename(attribute: "volume_litres") @rules(apply: ["nullable", "numeric", "gt:0"])
+        sensorExternalId: String @rename(attribute: "sensor_external_id")
+        installationSpace: String @rename(attribute: "installation_space")
+        fuelCalibrationId: ID @rename(attribute: "fuel_calibration_id")
+        minimumRefillLitres: Float @rename(attribute: "minimum_refill_litres")
+    ): VehicleFuelTank! @update @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "edit")
+
+    deleteVehicleFuelTank(id: ID! @eq @authorizeParent(model: "App\\Models\\VehicleFuelTank")): VehicleFuelTank! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "fuel", action: "delete")
+}
+
+# --- Vehicle sharing & visibility ----------------------------------------------
+# All five of these are join-as-entity or standalone-link tables. userId has no
+# relation object — User has no GraphQL type yet (same situation Vehicle was in
+# before it got one).
+
+"Grants a user visibility into a vehicle group. Read through VehicleGroup.userAccess — no standalone query."
+type UserVehicleGroup {
+    id: ID!
+    userId: ID! @rename(attribute: "user_id")
+    vehicleGroupId: ID! @rename(attribute: "vehicle_group_id")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    grantUserVehicleGroupAccess(
+        userId: ID! @rename(attribute: "user_id")
+        vehicleGroupId: ID! @rename(attribute: "vehicle_group_id") @authorizeParent(model: "App\\Models\\VehicleGroup")
+    ): UserVehicleGroup! @create @guard(with: ["sanctum"]) @requiresPermission(module: "sharing", action: "add")
+
+    revokeUserVehicleGroupAccess(id: ID! @eq @authorizeParent(model: "App\\Models\\UserVehicleGroup")): UserVehicleGroup! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "sharing", action: "delete")
+}
+
+"Grants a user direct visibility into a single vehicle. Read through Vehicle.userAccess — no standalone query."
+type UserVehicle {
+    id: ID!
+    userId: ID! @rename(attribute: "user_id")
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    grantUserVehicleAccess(
+        userId: ID! @rename(attribute: "user_id")
+        vehicleId: ID! @rename(attribute: "vehicle_id") @authorizeParent(model: "App\\Models\\Vehicle")
+    ): UserVehicle! @create @guard(with: ["sanctum"]) @requiresPermission(module: "sharing", action: "add")
+
+    revokeUserVehicleAccess(id: ID! @eq @authorizeParent(model: "App\\Models\\UserVehicle")): UserVehicle! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "sharing", action: "delete")
+}
+
+"""
+Grants a user visibility into a driver ("Assign Driver To User" on the reference site,
+added 2026-10-29). Read through Driver.userAccess — no standalone query, same pattern as
+UserVehicle.
+"""
+type UserDriver {
+    id: ID!
+    userId: ID! @rename(attribute: "user_id")
+    driverId: ID! @rename(attribute: "driver_id")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    grantUserDriverAccess(
+        userId: ID! @rename(attribute: "user_id")
+        driverId: ID! @rename(attribute: "driver_id") @authorizeParent(model: "App\\Models\\Driver")
+    ): UserDriver! @create @guard(with: ["sanctum"]) @requiresPermission(module: "sharing", action: "add")
+
+    revokeUserDriverAccess(id: ID! @eq @authorizeParent(model: "App\\Models\\UserDriver")): UserDriver! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "sharing", action: "delete")
+}
+
+"A public, token-based share link for a vehicle's live position (e.g. a \"track my delivery\" link)."
+type SharedLiveLocation {
+    id: ID!
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    shareToken: String! @rename(attribute: "share_token")
+    createdBy: ID @rename(attribute: "created_by")
+    startsAt: String @rename(attribute: "starts_at")
+    expiresAt: String! @rename(attribute: "expires_at")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+
+    """
+    Flattened position fields for the public tracking page (added 2026-10-28) — these
+    are what `sharedLiveLocationByToken` is for: everything a map needs, with no login
+    and no other query to follow. Each is null if the vehicle has no device, or its
+    device has no fix yet, rather than an error.
+    """
+    plateNo: String @method(name: "plateNo")
+    latitude: Float @method(name: "latitude")
+    longitude: Float @method(name: "longitude")
+    speed: Float @method(name: "speed")
+    heading: Int @method(name: "heading")
+    positionRecordedAt: String @method(name: "positionRecordedAt")
+}
+
+extend type Query {
+    sharedLiveLocations: [SharedLiveLocation!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "sharing", action: "view")
+    sharedLiveLocation(id: ID! @eq): SharedLiveLocation @find @guard(with: ["sanctum"]) @requiresPermission(module: "sharing", action: "view")
+    """
+    Public lookup of a share link by its token alone — no bearer token required (same
+    tier as `ping`/`login`/`forgotPassword`). This is what an anonymous customer's
+    tracking page calls. Resolves to null if the token doesn't exist, or exists but is
+    outside its startsAt/expiresAt window — deliberately indistinguishable from a
+    wrong token, same "not found" principle used everywhere else in this schema.
+    """
+    sharedLiveLocationByToken(shareToken: String!): SharedLiveLocation @field(resolver: "App\\GraphQL\\Queries\\SharedLiveLocationByTokenQuery")
+}
+
+extend type Mutation {
+    createSharedLiveLocation(
+        vehicleId: ID! @rename(attribute: "vehicle_id") @authorizeParent(model: "App\\Models\\Vehicle")
+        shareToken: String! @rename(attribute: "share_token")
+        createdBy: ID @rename(attribute: "created_by")
+        startsAt: String @rename(attribute: "starts_at")
+        expiresAt: String! @rename(attribute: "expires_at")
+    ): SharedLiveLocation! @create @guard(with: ["sanctum"]) @requiresPermission(module: "sharing", action: "add")
+
+    updateSharedLiveLocation(id: ID!, expiresAt: String @rename(attribute: "expires_at")): SharedLiveLocation! @requiresPermission(module: "sharing", action: "edit")
+        @update @guard(with: ["sanctum"])
+
+    "Permanently delete (revoke) a share link."
+    deleteSharedLiveLocation(id: ID! @eq @authorizeParent(model: "App\\Models\\SharedLiveLocation")): SharedLiveLocation! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "sharing", action: "delete")
+}
+
+"One vehicle's assignment to a geofence for entry/exit alerting. Read through Geofence.vehicleMemberships — no standalone query."
+type GeofenceVehicle {
+    id: ID!
+    geofenceId: ID! @rename(attribute: "geofence_id")
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    createGeofenceVehicle(
+        geofenceId: ID! @rename(attribute: "geofence_id") @authorizeParent(model: "App\\Models\\Geofence")
+        vehicleId: ID! @rename(attribute: "vehicle_id")
+    ): GeofenceVehicle! @create @guard(with: ["sanctum"]) @requiresPermission(module: "geofences", action: "add")
+
+    deleteGeofenceVehicle(id: ID! @eq @authorizeParent(model: "App\\Models\\GeofenceVehicle")): GeofenceVehicle! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "geofences", action: "delete")
+}
+
+"An entire vehicle group's assignment to a geofence. Read through Geofence.vehicleGroupMemberships — no standalone query."
+type GeofenceVehicleGroup {
+    id: ID!
+    geofenceId: ID! @rename(attribute: "geofence_id")
+    vehicleGroupId: ID! @rename(attribute: "vehicle_group_id")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    createGeofenceVehicleGroup(
+        geofenceId: ID! @rename(attribute: "geofence_id") @authorizeParent(model: "App\\Models\\Geofence")
+        vehicleGroupId: ID! @rename(attribute: "vehicle_group_id")
+    ): GeofenceVehicleGroup! @create @guard(with: ["sanctum"]) @requiresPermission(module: "geofences", action: "add")
+
+    deleteGeofenceVehicleGroup(id: ID! @eq @authorizeParent(model: "App\\Models\\GeofenceVehicleGroup")): GeofenceVehicleGroup! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "geofences", action: "delete")
+}
+
+# --- Scheduling & shifts --------------------------------------------------------
+
+"""
+A named working-hours window a company assigns vehicles to. workingDays is an opaque
+JSON-encoded string, same convention as elsewhere in this schema.
+"""
+type Shift {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    name: String!
+    fromTime: String! @rename(attribute: "from_time")
+    toTime: String! @rename(attribute: "to_time")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    workingDays: String @rename(attribute: "working_days")
+    "Vehicles assigned to this shift."
+    vehicleAssignments: [ShiftVehicle!]! @hasMany
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    shifts: [Shift!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "view")
+    shift(id: ID! @eq): Shift @find @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "view")
+}
+
+extend type Mutation {
+    createShift(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        name: String! @rules(apply: ["App\\Rules\\UniqueShiftName"])
+        fromTime: String! @rename(attribute: "from_time")
+        toTime: String! @rename(attribute: "to_time")
+        workingDays: String @rename(attribute: "working_days") @rules(apply: ["App\\Rules\\ShiftHasAtLeastOneWorkingDay"])
+    ): Shift! @create @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "add")
+
+    updateShift(
+        id: ID!
+        name: String @rules(apply: ["App\\Rules\\UniqueShiftName"])
+        fromTime: String @rename(attribute: "from_time")
+        toTime: String @rename(attribute: "to_time")
+        workingDays: String @rename(attribute: "working_days") @rules(apply: ["App\\Rules\\ShiftHasAtLeastOneWorkingDay"])
+    ): Shift! @update @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "edit")
+
+    "Permanently delete a shift. Cascades to its vehicle assignments."
+    deleteShift(id: ID! @eq @authorizeParent(model: "App\\Models\\Shift")): Shift! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "delete")
+}
+
+"One vehicle's assignment to a shift. Read through Shift.vehicleAssignments — no standalone query."
+type ShiftVehicle {
+    id: ID!
+    shiftId: ID! @rename(attribute: "shift_id")
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    createShiftVehicle(
+        shiftId: ID! @rename(attribute: "shift_id") @authorizeParent(model: "App\\Models\\Shift")
+        vehicleId: ID! @rename(attribute: "vehicle_id")
+    ): ShiftVehicle! @create @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "add")
+
+    deleteShiftVehicle(id: ID! @eq @authorizeParent(model: "App\\Models\\ShiftVehicle")): ShiftVehicle! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "delete")
+}
+
+"A recurring report a company has configured to be emailed out automatically."
+type ScheduledReport {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    reportType: String! @rename(attribute: "report_type")
+    vehicleId: ID @rename(attribute: "vehicle_id")
+    vehicleGroupId: ID @rename(attribute: "vehicle_group_id")
+    "daily | weekly | monthly"
+    frequency: String!
+    isActive: Boolean! @rename(attribute: "is_active")
+    createdBy: ID @rename(attribute: "created_by")
+    "Email recipients of this report."
+    recipients: [ScheduledReportRecipient!]! @hasMany
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    scheduledReports: [ScheduledReport!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "view")
+    scheduledReport(id: ID! @eq): ScheduledReport @find @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "view")
+}
+
+extend type Mutation {
+    createScheduledReport(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        reportType: String! @rename(attribute: "report_type")
+        vehicleId: ID @rename(attribute: "vehicle_id")
+        vehicleGroupId: ID @rename(attribute: "vehicle_group_id")
+        frequency: String!
+        isActive: Boolean @rename(attribute: "is_active")
+        createdBy: ID @rename(attribute: "created_by")
+    ): ScheduledReport! @create @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "add")
+
+    updateScheduledReport(
+        id: ID!
+        reportType: String @rename(attribute: "report_type")
+        vehicleId: ID @rename(attribute: "vehicle_id")
+        vehicleGroupId: ID @rename(attribute: "vehicle_group_id")
+        frequency: String
+        isActive: Boolean @rename(attribute: "is_active")
+        createdBy: ID @rename(attribute: "created_by")
+    ): ScheduledReport! @update @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "edit")
+
+    "Permanently delete a scheduled report. Cascades to its recipients."
+    deleteScheduledReport(id: ID! @eq @authorizeParent(model: "App\\Models\\ScheduledReport")): ScheduledReport! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "delete")
+}
+
+"One email recipient of a ScheduledReport. Read through ScheduledReport.recipients — no standalone query."
+type ScheduledReportRecipient {
+    id: ID!
+    scheduledReportId: ID! @rename(attribute: "scheduled_report_id")
+    email: String!
+    isCc: Boolean! @rename(attribute: "is_cc")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Mutation {
+    createScheduledReportRecipient(
+        scheduledReportId: ID! @rename(attribute: "scheduled_report_id") @authorizeParent(model: "App\\Models\\ScheduledReport")
+        email: String!
+        isCc: Boolean @rename(attribute: "is_cc")
+    ): ScheduledReportRecipient! @create @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "add")
+
+    deleteScheduledReportRecipient(id: ID! @eq @authorizeParent(model: "App\\Models\\ScheduledReportRecipient")): ScheduledReportRecipient! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "scheduling", action: "delete")
+}
+
+# --- Points of interest ---------------------------------------------------------
+
+"""
+A point of interest (customer site, depot, fuel station, etc.). location is a raw
+PostGIS geography Point column, exposed as locationLat/locationLng — same approach as
+Geofence::$centre/RoutePoint::$location.
+"""
+type Poi {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    name: String!
+    description: String
+    customerName: String @rename(attribute: "customer_name")
+    address: String
+    phone: String
+    photoPath: String @rename(attribute: "photo_path")
+    "customer | depot | fuel_station | other"
+    type: String!
+    "active | inactive"
+    status: String!
+    "Latitude of this point. Null if no location has been set."
+    locationLat: Float @method(name: "locationLat")
+    "Longitude of this point. Null if no location has been set."
+    locationLng: Float @method(name: "locationLng")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    pois: [Poi!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "poi", action: "view")
+    poi(id: ID! @eq): Poi @find @guard(with: ["sanctum"]) @requiresPermission(module: "poi", action: "view")
+}
+
+extend type Mutation {
+    "Create a POI (resolved by App\\GraphQL\\Mutations\\CreatePoi — the generic @create directive can't write location)."
+    createPoi(
+        companyId: ID! @forceOwnCompany
+        name: String!
+        description: String
+        customerName: String
+        address: String
+        phone: String
+        photoPath: String
+        type: String
+        status: String
+        location: GeoPointInput
+    ): Poi! @guard(with: ["sanctum"]) @requiresPermission(module: "poi", action: "add")
+
+    "Update a POI (resolved by App\\GraphQL\\Mutations\\UpdatePoi, for the same reason as createPoi)."
+    updatePoi(
+        id: ID!
+        name: String
+        description: String
+        customerName: String
+        address: String
+        phone: String
+        photoPath: String
+        type: String
+        status: String
+        location: GeoPointInput
+    ): Poi! @guard(with: ["sanctum"]) @requiresPermission(module: "poi", action: "edit")
+
+    deletePoi(id: ID! @eq @authorizeParent(model: "App\\Models\\Poi")): Poi! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "poi", action: "delete")
+}
+
+# --- Admin, security & integration ----------------------------------------------
+
+"A permissionable feature area of the app (e.g. \"Drivers\", \"Billing\")."
+type Module {
+    id: ID!
+    name: String!
+    code: String!
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    modules: [Module!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"])
+    module(id: ID! @eq): Module @find @guard(with: ["sanctum"])
+}
+
+extend type Mutation {
+    createModule(name: String!, code: String!): Module! @create @guard(with: ["sanctum"])
+    updateModule(id: ID!, name: String, code: String): Module! @update @guard(with: ["sanctum"])
+    "Permanently delete a module. Cascades to its role permissions."
+    deleteModule(id: ID! @eq): Module! @delete @guard(with: ["sanctum"])
+}
+
+"One role's view/add/edit/delete permissions on one Module. Only read through Role in future — no standalone Role type exists yet, so this is reached by id directly."
+type RolePermission {
+    id: ID!
+    roleId: ID! @rename(attribute: "role_id")
+    moduleId: ID! @rename(attribute: "module_id")
+    canView: Boolean! @rename(attribute: "can_view")
+    canAdd: Boolean! @rename(attribute: "can_add")
+    canEdit: Boolean! @rename(attribute: "can_edit")
+    canDelete: Boolean! @rename(attribute: "can_delete")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    rolePermissions: [RolePermission!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+    rolePermission(id: ID! @eq): RolePermission @find @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+}
+
+extend type Mutation {
+    """
+    Resolved by App\\GraphQL\\Mutations\\CreateRolePermission (not the generic @create
+    directive) — it also blocks a caller from setting their own role's canView/canEdit
+    on the "core" module (Company/Role/User/Device) to false, which would lock them
+    out of fixing it themselves. See RoleSelfLockoutGuard.
+    """
+    createRolePermission(
+        roleId: ID! @rename(attribute: "role_id") @authorizeParent(model: "App\\Models\\Role")
+        moduleId: ID! @rename(attribute: "module_id")
+        canView: Boolean @rename(attribute: "can_view")
+        canAdd: Boolean @rename(attribute: "can_add")
+        canEdit: Boolean @rename(attribute: "can_edit")
+        canDelete: Boolean @rename(attribute: "can_delete")
+    ): RolePermission! @field(resolver: "App\\GraphQL\\Mutations\\CreateRolePermission") @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "add")
+
+    "Resolved by App\\GraphQL\\Mutations\\UpdateRolePermission, for the same self-lockout reason as createRolePermission."
+    updateRolePermission(
+        id: ID!
+        canView: Boolean @rename(attribute: "can_view")
+        canAdd: Boolean @rename(attribute: "can_add")
+        canEdit: Boolean @rename(attribute: "can_edit")
+        canDelete: Boolean @rename(attribute: "can_delete")
+    ): RolePermission! @field(resolver: "App\\GraphQL\\Mutations\\UpdateRolePermission") @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "edit")
+
+    deleteRolePermission(id: ID! @eq @authorizeParent(model: "App\\Models\\RolePermission")): RolePermission! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "delete")
+}
+
+"""
+An immutable record of a change made in the system. Create + read only — no update, no
+delete — editing or removing an audit trail defeats its purpose. oldValues/newValues
+are opaque JSON-encoded strings, same convention as elsewhere.
+"""
+type AuditLog {
+    id: ID!
+    userId: ID @rename(attribute: "user_id")
+    companyId: ID @rename(attribute: "company_id")
+    action: String!
+    auditableType: String @rename(attribute: "auditable_type")
+    auditableId: ID @rename(attribute: "auditable_id")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    oldValues: String @rename(attribute: "old_values")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    newValues: String @rename(attribute: "new_values")
+    ipAddress: String @rename(attribute: "ip_address")
+    createdAt: String! @rename(attribute: "created_at")
+}
+
+extend type Query {
+    auditLogs: [AuditLog!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+    auditLog(id: ID! @eq): AuditLog @find @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+}
+
+extend type Mutation {
+    createAuditLog(
+        userId: ID @rename(attribute: "user_id")
+        companyId: ID @rename(attribute: "company_id") @forceOwnCompany
+        action: String!
+        auditableType: String @rename(attribute: "auditable_type")
+        auditableId: ID @rename(attribute: "auditable_id")
+        oldValues: String @rename(attribute: "old_values")
+        newValues: String @rename(attribute: "new_values")
+        ipAddress: String @rename(attribute: "ip_address")
+    ): AuditLog! @create @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "add")
+}
+
+"""
+A remote command sent (or queued to send) to a device. parameters/response are opaque
+JSON-encoded strings, same convention as elsewhere. deviceId is a plain ID — Device has
+no GraphQL type yet (the same situation Vehicle was in before it got one).
+"""
+type DeviceCommand {
+    id: ID!
+    deviceId: ID! @rename(attribute: "device_id")
+    "engine_cutoff | reboot | set_interval | other"
+    commandType: String! @rename(attribute: "command_type")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    parameters: String
+    sentBy: ID @rename(attribute: "sent_by")
+    sentAt: String! @rename(attribute: "sent_at")
+    "pending | sent | acknowledged | failed"
+    status: String!
+    acknowledgedAt: String @rename(attribute: "acknowledged_at")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    response: String
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    deviceCommands: [DeviceCommand!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+    deviceCommand(id: ID! @eq): DeviceCommand @find @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+}
+
+extend type Mutation {
+    createDeviceCommand(
+        deviceId: ID! @rename(attribute: "device_id") @authorizeParent(model: "App\\Models\\Device")
+        commandType: String! @rename(attribute: "command_type")
+        parameters: String
+        sentBy: ID @rename(attribute: "sent_by")
+    ): DeviceCommand! @create @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "add")
+
+    "Update a command's status as it progresses (sent -> acknowledged/failed) and/or record its response."
+    updateDeviceCommand(
+        id: ID!
+        status: String
+        acknowledgedAt: String @rename(attribute: "acknowledged_at")
+        response: String
+    ): DeviceCommand! @update @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "edit")
+
+    deleteDeviceCommand(id: ID! @eq @authorizeParent(model: "App\\Models\\DeviceCommand")): DeviceCommand! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "delete")
+}
+
+"A company-issued API key, stored as a hash (generating/verifying the key itself is a separate concern from this plain CRUD)."
+type ApiKey {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    name: String!
+    keyHash: String! @rename(attribute: "key_hash")
+    lastUsedAt: String @rename(attribute: "last_used_at")
+    revokedAt: String @rename(attribute: "revoked_at")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    apiKeys: [ApiKey!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+    apiKey(id: ID! @eq): ApiKey @find @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+}
+
+extend type Mutation {
+    createApiKey(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        name: String!
+        keyHash: String! @rename(attribute: "key_hash")
+    ): ApiKey! @create @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "add")
+
+    "Update an API key — typically to record lastUsedAt, or set revokedAt to revoke it."
+    updateApiKey(
+        id: ID!
+        name: String
+        lastUsedAt: String @rename(attribute: "last_used_at")
+        revokedAt: String @rename(attribute: "revoked_at")
+    ): ApiKey! @update @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "edit")
+
+    deleteApiKey(id: ID! @eq @authorizeParent(model: "App\\Models\\ApiKey")): ApiKey! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "delete")
+}
+
+"A company-configured webhook endpoint. events is an opaque JSON-encoded string, same convention as elsewhere."
+type WebhookSubscription {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    url: String!
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    events: String
+    secret: String
+    isActive: Boolean! @rename(attribute: "is_active")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    webhookSubscriptions: [WebhookSubscription!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+    webhookSubscription(id: ID! @eq): WebhookSubscription @find @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+}
+
+extend type Mutation {
+    createWebhookSubscription(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        url: String!
+        events: String
+        secret: String
+        isActive: Boolean @rename(attribute: "is_active")
+    ): WebhookSubscription! @create @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "add")
+
+    updateWebhookSubscription(
+        id: ID!
+        url: String
+        events: String
+        secret: String
+        isActive: Boolean @rename(attribute: "is_active")
+    ): WebhookSubscription! @update @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "edit")
+
+    deleteWebhookSubscription(id: ID! @eq @authorizeParent(model: "App\\Models\\WebhookSubscription")): WebhookSubscription! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "delete")
+}
+
+"""
+One recorded login event for a user. Create + read only — no update, no delete, same
+reasoning as AuditLog. location is a raw PostGIS geography Point column, exposed as
+locationLat/locationLng.
+"""
+type UserLoginLog {
+    id: ID!
+    userId: ID! @rename(attribute: "user_id")
+    loggedInAt: String @rename(attribute: "logged_in_at")
+    ipAddress: String @rename(attribute: "ip_address")
+    userAgent: String @rename(attribute: "user_agent")
+    locationLat: Float @method(name: "locationLat")
+    locationLng: Float @method(name: "locationLng")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    userLoginLogs: [UserLoginLog!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+    userLoginLog(id: ID! @eq): UserLoginLog @find @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+}
+
+extend type Mutation {
+    "Resolved by App\\GraphQL\\Mutations\\CreateUserLoginLog — the generic @create directive can't write location."
+    createUserLoginLog(
+        userId: ID! @authorizeParent(model: "App\\Models\\User")
+        loggedInAt: String
+        ipAddress: String
+        userAgent: String
+        location: GeoPointInput
+    ): UserLoginLog! @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "add")
+}
+
+"""
+An append-only record of a single field changing on a vehicle. Create + read only — no
+update, no delete, same reasoning as AuditLog.
+"""
+type DeviceChangeLog {
+    id: ID!
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    fieldChanged: String! @rename(attribute: "field_changed")
+    oldValue: String @rename(attribute: "old_value")
+    newValue: String @rename(attribute: "new_value")
+    changedBy: ID @rename(attribute: "changed_by")
+    changedAt: String! @rename(attribute: "changed_at")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    deviceChangeLogs: [DeviceChangeLog!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+    deviceChangeLog(id: ID! @eq): DeviceChangeLog @find @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "view")
+}
+
+extend type Mutation {
+    createDeviceChangeLog(
+        vehicleId: ID! @rename(attribute: "vehicle_id") @authorizeParent(model: "App\\Models\\Vehicle")
+        fieldChanged: String! @rename(attribute: "field_changed")
+        oldValue: String @rename(attribute: "old_value")
+        newValue: String @rename(attribute: "new_value")
+        changedBy: ID @rename(attribute: "changed_by")
+        changedAt: String! @rename(attribute: "changed_at")
+    ): DeviceChangeLog! @create @guard(with: ["sanctum"]) @requiresPermission(module: "admin", action: "add")
+}
+
+# --- Other ------------------------------------------------------------------
+
+"""
+A polymorphic attachment (registration, insurance, licence, etc.) belonging to any
+documentable record. documentableType/documentableId are exposed as plain fields
+instead of a union/interface — no other polymorphic relation in this schema has needed
+one yet, and introducing one for a single table isn't warranted.
+"""
+type Document {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    documentableType: String! @rename(attribute: "documentable_type")
+    documentableId: ID! @rename(attribute: "documentable_id")
+    "registration | insurance | permit | national_permit | pollution | licence | visa | custom"
+    type: String!
+    customLabel: String @rename(attribute: "custom_label")
+    documentNo: String @rename(attribute: "document_no")
+    issuedAt: String @rename(attribute: "issued_at")
+    expiresAt: String @rename(attribute: "expires_at")
+    filePath: String @rename(attribute: "file_path")
+    reminderDaysBefore: Int @rename(attribute: "reminder_days_before")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    documents: [Document!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+    document(id: ID! @eq): Document @find @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+}
+
+extend type Mutation {
+    createDocument(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        documentableType: String! @rename(attribute: "documentable_type")
+        documentableId: ID! @rename(attribute: "documentable_id")
+        type: String!
+        customLabel: String @rename(attribute: "custom_label")
+        documentNo: String @rename(attribute: "document_no")
+        issuedAt: String @rename(attribute: "issued_at")
+        expiresAt: String @rename(attribute: "expires_at") @rules(apply: ["App\\Rules\\DocumentExpiresAfterIssued"])
+        filePath: String @rename(attribute: "file_path")
+        reminderDaysBefore: Int @rename(attribute: "reminder_days_before") @rules(apply: ["nullable", "integer", "min:0"])
+    ): Document! @create @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "add")
+
+    updateDocument(
+        id: ID!
+        customLabel: String @rename(attribute: "custom_label")
+        documentNo: String @rename(attribute: "document_no")
+        issuedAt: String @rename(attribute: "issued_at")
+        expiresAt: String @rename(attribute: "expires_at") @rules(apply: ["App\\Rules\\DocumentExpiresAfterIssued"])
+        filePath: String @rename(attribute: "file_path")
+        reminderDaysBefore: Int @rename(attribute: "reminder_days_before") @rules(apply: ["nullable", "integer", "min:0"])
+    ): Document! @update @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "edit")
+
+    deleteDocument(id: ID! @eq @authorizeParent(model: "App\\Models\\Document")): Document! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "delete")
+}
+
+"A company's single set of driver-scoring weights (one per company — companyId is unique on this table)."
+type DriverBehaviourSetting {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    minimumMileageKm: Float @rename(attribute: "minimum_mileage_km")
+    topScore: Int! @rename(attribute: "top_score")
+    displayAbsoluteValue: Boolean! @rename(attribute: "display_absolute_value")
+    "When false, the 5 weight fields below are ignored and system defaults are used."
+    userCustomizedScore: Boolean! @rename(attribute: "user_customized_score")
+    weightHarshAcceleration: Float @rename(attribute: "weight_harsh_acceleration")
+    weightHarshBraking: Float @rename(attribute: "weight_harsh_braking")
+    weightExcessiveIdling: Float @rename(attribute: "weight_excessive_idling")
+    weightSpeeding: Float @rename(attribute: "weight_speeding")
+    weightRpmExcess: Float @rename(attribute: "weight_rpm_excess")
+    weightSeatbelt: Float @rename(attribute: "weight_seatbelt")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    driverBehaviourSettings: [DriverBehaviourSetting!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+    driverBehaviourSetting(id: ID! @eq): DriverBehaviourSetting @find @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+}
+
+extend type Mutation {
+    createDriverBehaviourSetting(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        minimumMileageKm: Float @rename(attribute: "minimum_mileage_km")
+        topScore: Int @rename(attribute: "top_score")
+        displayAbsoluteValue: Boolean @rename(attribute: "display_absolute_value")
+        userCustomizedScore: Boolean @rename(attribute: "user_customized_score")
+        weightHarshAcceleration: Float @rename(attribute: "weight_harsh_acceleration")
+        weightHarshBraking: Float @rename(attribute: "weight_harsh_braking")
+        weightExcessiveIdling: Float @rename(attribute: "weight_excessive_idling")
+        weightSpeeding: Float @rename(attribute: "weight_speeding")
+        weightRpmExcess: Float @rename(attribute: "weight_rpm_excess")
+        weightSeatbelt: Float @rename(attribute: "weight_seatbelt")
+    ): DriverBehaviourSetting! @create @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "add")
+
+    updateDriverBehaviourSetting(
+        id: ID!
+        minimumMileageKm: Float @rename(attribute: "minimum_mileage_km")
+        topScore: Int @rename(attribute: "top_score")
+        displayAbsoluteValue: Boolean @rename(attribute: "display_absolute_value")
+        userCustomizedScore: Boolean @rename(attribute: "user_customized_score")
+        weightHarshAcceleration: Float @rename(attribute: "weight_harsh_acceleration")
+        weightHarshBraking: Float @rename(attribute: "weight_harsh_braking")
+        weightExcessiveIdling: Float @rename(attribute: "weight_excessive_idling")
+        weightSpeeding: Float @rename(attribute: "weight_speeding")
+        weightRpmExcess: Float @rename(attribute: "weight_rpm_excess")
+        weightSeatbelt: Float @rename(attribute: "weight_seatbelt")
+    ): DriverBehaviourSetting! @update @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "edit")
+
+    deleteDriverBehaviourSetting(id: ID! @eq @authorizeParent(model: "App\\Models\\DriverBehaviourSetting")): DriverBehaviourSetting! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "delete")
+}
+
+"One checkout/return cycle of a vehicle to a driver."
+type VehicleAllocation {
+    id: ID!
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    driverId: ID! @rename(attribute: "driver_id")
+    project: String
+    allocatedAt: String! @rename(attribute: "allocated_at")
+    dueAt: String @rename(attribute: "due_at")
+    vehicleConditionOut: String @rename(attribute: "vehicle_condition_out")
+    startOdometerKm: Float @rename(attribute: "start_odometer_km")
+    returnedAt: String @rename(attribute: "returned_at")
+    returnOdometerKm: Float @rename(attribute: "return_odometer_km")
+    "Vehicle's condition as noted on return — paired with vehicleConditionOut (condition when allocated)."
+    vehicleConditionIn: String @rename(attribute: "vehicle_condition_in")
+    salikUsedAmount: Float @rename(attribute: "salik_used_amount")
+    trafficFinesAmount: Float @rename(attribute: "traffic_fines_amount")
+    damageChargeAmount: Float @rename(attribute: "damage_charge_amount")
+    paymentMode: String @rename(attribute: "payment_mode")
+    amount: Float
+    "allocated | returned | overdue"
+    status: String!
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    vehicleAllocations: [VehicleAllocation!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+    vehicleAllocation(id: ID! @eq): VehicleAllocation @find @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+}
+
+extend type Mutation {
+    createVehicleAllocation(
+        vehicleId: ID! @rename(attribute: "vehicle_id") @authorizeParent(model: "App\\Models\\Vehicle") @rules(apply: ["App\\Rules\\VehicleNotCurrentlyAllocated"])
+        driverId: ID! @rename(attribute: "driver_id")
+        project: String
+        allocatedAt: String! @rename(attribute: "allocated_at")
+        dueAt: String @rename(attribute: "due_at") @rules(apply: ["nullable", "after:allocatedAt"])
+        vehicleConditionOut: String @rename(attribute: "vehicle_condition_out")
+        startOdometerKm: Float @rename(attribute: "start_odometer_km") @rules(apply: ["nullable", "numeric", "min:0"])
+        status: String
+    ): VehicleAllocation! @create @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "add")
+
+    "Update an allocation — typically to record its return: returnedAt, returnOdometerKm, charges, and status."
+    updateVehicleAllocation(
+        id: ID!
+        dueAt: String @rename(attribute: "due_at")
+        returnedAt: String @rename(attribute: "returned_at") @rules(apply: ["nullable", "before_or_equal:today"])
+        returnOdometerKm: Float @rename(attribute: "return_odometer_km") @rules(apply: ["nullable", "numeric", "min:0"])
+        vehicleConditionIn: String @rename(attribute: "vehicle_condition_in")
+        salikUsedAmount: Float @rename(attribute: "salik_used_amount") @rules(apply: ["nullable", "numeric", "min:0"])
+        trafficFinesAmount: Float @rename(attribute: "traffic_fines_amount") @rules(apply: ["nullable", "numeric", "min:0"])
+        damageChargeAmount: Float @rename(attribute: "damage_charge_amount") @rules(apply: ["nullable", "numeric", "min:0"])
+        paymentMode: String @rename(attribute: "payment_mode")
+        amount: Float @rules(apply: ["nullable", "numeric", "min:0"])
+        status: String
+    ): VehicleAllocation! @update @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "edit")
+
+    deleteVehicleAllocation(id: ID! @eq @authorizeParent(model: "App\\Models\\VehicleAllocation")): VehicleAllocation! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "delete")
+}
+
+"One day's start/stop odometer reading and computed distance for a vehicle."
+type VehicleDistanceLog {
+    id: ID!
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    "Plain date string (YYYY-MM-DD) — no date scalar in this schema."
+    logDate: String! @rename(attribute: "log_date")
+    startOdometerKm: Float @rename(attribute: "start_odometer_km")
+    stopOdometerKm: Float @rename(attribute: "stop_odometer_km")
+    distanceKm: Float @rename(attribute: "distance_km")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    vehicleDistanceLogs: [VehicleDistanceLog!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+    vehicleDistanceLog(id: ID! @eq): VehicleDistanceLog @find @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+}
+
+extend type Mutation {
+    createVehicleDistanceLog(
+        vehicleId: ID! @rename(attribute: "vehicle_id") @authorizeParent(model: "App\\Models\\Vehicle")
+        logDate: String! @rename(attribute: "log_date") @rules(apply: ["App\\Rules\\UniqueVehicleDistanceLogDate", "before_or_equal:today"])
+        startOdometerKm: Float @rename(attribute: "start_odometer_km") @rules(apply: ["nullable", "numeric", "min:0"])
+        stopOdometerKm: Float @rename(attribute: "stop_odometer_km") @rules(apply: ["nullable", "numeric", "min:0", "gte:startOdometerKm"])
+        distanceKm: Float @rename(attribute: "distance_km") @rules(apply: ["nullable", "numeric", "min:0", "App\\Rules\\VehicleDistanceMatchesOdometerDelta"])
+    ): VehicleDistanceLog! @create @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "add")
+
+    "Update an existing distance log. Only pass the fields that should change."
+    updateVehicleDistanceLog(
+        id: ID!
+        startOdometerKm: Float @rename(attribute: "start_odometer_km") @rules(apply: ["nullable", "numeric", "min:0"])
+        stopOdometerKm: Float @rename(attribute: "stop_odometer_km") @rules(apply: ["nullable", "numeric", "min:0"])
+        distanceKm: Float @rename(attribute: "distance_km") @rules(apply: ["nullable", "numeric", "min:0", "App\\Rules\\VehicleDistanceMatchesOdometerDelta"])
+    ): VehicleDistanceLog! @update @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "edit")
+
+    "Permanently delete a vehicle distance log entry."
+    deleteVehicleDistanceLog(id: ID! @eq @authorizeParent(model: "App\\Models\\VehicleDistanceLog")): VehicleDistanceLog! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "delete")
+}
+
+"One configured sensor input on a vehicle."
+type VehicleSensor {
+    id: ID!
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    "digital_input | analog_input | temperature | ble_temperature_humidity"
+    sensorType: String! @rename(attribute: "sensor_type")
+    label: String
+    ioIndex: Int @rename(attribute: "io_index")
+    maxVoltage: Float @rename(attribute: "max_voltage")
+    lowLimit: Float @rename(attribute: "low_limit")
+    highLimit: Float @rename(attribute: "high_limit")
+    externalSensorId: String @rename(attribute: "external_sensor_id")
+    sortOrder: Int! @rename(attribute: "sort_order")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    vehicleSensors: [VehicleSensor!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+    vehicleSensor(id: ID! @eq): VehicleSensor @find @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+}
+
+extend type Mutation {
+    createVehicleSensor(
+        vehicleId: ID! @rename(attribute: "vehicle_id") @authorizeParent(model: "App\\Models\\Vehicle")
+        sensorType: String! @rename(attribute: "sensor_type")
+        label: String
+        ioIndex: Int @rename(attribute: "io_index")
+        maxVoltage: Float @rename(attribute: "max_voltage") @rules(apply: ["nullable", "numeric", "gt:0"])
+        lowLimit: Float @rename(attribute: "low_limit") @rules(apply: ["App\\Rules\\SensorLowLimitBelowHigh"])
+        highLimit: Float @rename(attribute: "high_limit")
+        externalSensorId: String @rename(attribute: "external_sensor_id")
+        sortOrder: Int @rename(attribute: "sort_order")
+    ): VehicleSensor! @create @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "add")
+
+    updateVehicleSensor(
+        id: ID!
+        label: String
+        ioIndex: Int @rename(attribute: "io_index")
+        maxVoltage: Float @rename(attribute: "max_voltage") @rules(apply: ["nullable", "numeric", "gt:0"])
+        lowLimit: Float @rename(attribute: "low_limit") @rules(apply: ["App\\Rules\\SensorLowLimitBelowHigh"])
+        highLimit: Float @rename(attribute: "high_limit")
+        externalSensorId: String @rename(attribute: "external_sensor_id")
+        sortOrder: Int @rename(attribute: "sort_order")
+    ): VehicleSensor! @update @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "edit")
+
+    deleteVehicleSensor(id: ID! @eq @authorizeParent(model: "App\\Models\\VehicleSensor")): VehicleSensor! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "delete")
+}
+
+"A SIM card, optionally installed in a vehicle's tracking device."
+type Sim {
+    id: ID!
+    companyId: ID @rename(attribute: "company_id")
+    vehicleId: ID @rename(attribute: "vehicle_id")
+    simNumber: String @rename(attribute: "sim_number")
+    iccid: String!
+    provider: String
+    plan: String
+    "active | suspended | expired"
+    status: String!
+    expiresAt: String @rename(attribute: "expires_at")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    sims: [Sim!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+    sim(id: ID! @eq): Sim @find @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+}
+
+extend type Mutation {
+    createSim(
+        companyId: ID @rename(attribute: "company_id") @forceOwnCompany
+        vehicleId: ID @rename(attribute: "vehicle_id")
+        simNumber: String @rename(attribute: "sim_number")
+        iccid: String!
+        provider: String
+        plan: String
+        status: String
+        expiresAt: String @rename(attribute: "expires_at")
+    ): Sim! @create @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "add")
+
+    updateSim(
+        id: ID!
+        vehicleId: ID @rename(attribute: "vehicle_id")
+        simNumber: String @rename(attribute: "sim_number")
+        provider: String
+        plan: String
+        status: String
+        expiresAt: String @rename(attribute: "expires_at")
+    ): Sim! @update @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "edit")
+
+    deleteSim(id: ID! @eq @authorizeParent(model: "App\\Models\\Sim")): Sim! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "delete")
+}
+
+"One contact person listed for a company."
+type CompanyContact {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    name: String!
+    email: String!
+    phone: String!
+    isPrimary: Boolean! @rename(attribute: "is_primary")
+    sortOrder: Int! @rename(attribute: "sort_order")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    companyContacts: [CompanyContact!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+    companyContact(id: ID! @eq): CompanyContact @find @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+}
+
+extend type Mutation {
+    createCompanyContact(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        name: String!
+        email: String!
+        phone: String!
+        isPrimary: Boolean @rename(attribute: "is_primary")
+        sortOrder: Int @rename(attribute: "sort_order")
+    ): CompanyContact! @create @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "add")
+
+    updateCompanyContact(
+        id: ID!
+        name: String
+        email: String
+        phone: String
+        isPrimary: Boolean @rename(attribute: "is_primary")
+        sortOrder: Int @rename(attribute: "sort_order")
+    ): CompanyContact! @update @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "edit")
+
+    deleteCompanyContact(id: ID! @eq @authorizeParent(model: "App\\Models\\CompanyContact")): CompanyContact! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "delete")
+}
+
+"A recurring per-addon charge a company is billed."
+type CompanyAddonCharge {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    "rfid | fuel_sensor | temperature_sensor | driver_id | can_bus"
+    addonType: String! @rename(attribute: "addon_type")
+    monthlyCharge: Float @rename(attribute: "monthly_charge")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    companyAddonCharges: [CompanyAddonCharge!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+    companyAddonCharge(id: ID! @eq): CompanyAddonCharge @find @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+}
+
+extend type Mutation {
+    createCompanyAddonCharge(
+        companyId: ID! @rename(attribute: "company_id") @forceOwnCompany
+        addonType: String! @rename(attribute: "addon_type")
+        monthlyCharge: Float @rename(attribute: "monthly_charge")
+    ): CompanyAddonCharge! @create @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "add")
+
+    updateCompanyAddonCharge(id: ID!, monthlyCharge: Float @rename(attribute: "monthly_charge")): CompanyAddonCharge! @requiresPermission(module: "other", action: "edit")
+        @update @guard(with: ["sanctum"])
+
+    deleteCompanyAddonCharge(id: ID! @eq @authorizeParent(model: "App\\Models\\CompanyAddonCharge")): CompanyAddonCharge! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "delete")
+}
+
+"One Salik (UAE toll) transaction attributed to a vehicle/driver."
+type SalikToll {
+    id: ID!
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    driverId: ID @rename(attribute: "driver_id")
+    transactionId: String! @rename(attribute: "transaction_id")
+    tripAt: String! @rename(attribute: "trip_at")
+    tollGate: String @rename(attribute: "toll_gate")
+    direction: String
+    tagNumber: String @rename(attribute: "tag_number")
+    amount: Float!
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    salikTolls: [SalikToll!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+    salikToll(id: ID! @eq): SalikToll @find @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "view")
+}
+
+extend type Mutation {
+    createSalikToll(
+        vehicleId: ID! @rename(attribute: "vehicle_id") @authorizeParent(model: "App\\Models\\Vehicle")
+        driverId: ID @rename(attribute: "driver_id")
+        transactionId: String! @rename(attribute: "transaction_id")
+        tripAt: String! @rename(attribute: "trip_at")
+        tollGate: String @rename(attribute: "toll_gate")
+        direction: String
+        tagNumber: String @rename(attribute: "tag_number")
+        amount: Float!
+    ): SalikToll! @create @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "add")
+
+    updateSalikToll(
+        id: ID!
+        tollGate: String @rename(attribute: "toll_gate")
+        direction: String
+        tagNumber: String @rename(attribute: "tag_number")
+        amount: Float
+    ): SalikToll! @update @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "edit")
+
+    deleteSalikToll(id: ID! @eq @authorizeParent(model: "App\\Models\\SalikToll")): SalikToll! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "other", action: "delete")
+}
+
+# =============================================================================
+# Company, Role, User, Device: the four core models used throughout the device
+# pipeline since the very start of this project, which — until now — had never been
+# given a GraphQL type of their own (every other domain only ever referenced them by
+# plain ID). Cross-references between these four and everything else stay plain IDs,
+# not nested objects, consistent with every other cross-reference in this schema
+# (e.g. AlertRule.eventTypeId) — a type existing isn't itself a reason to nest it;
+# that's reserved for a record's own child collections (Route.points, VehicleGroup.vehicles,
+# etc.). Company's own ~20 HasMany relations (vehicles, devices, drivers, geofences, ...)
+# are deliberately NOT exposed as fields on `type Company` here, for the same reason they
+# were never exposed when each of those domains was built: they're reciprocal
+# convenience relations for backend code, not a promise of GraphQL surface area. A
+# client lists a company's vehicles via `vehicles`, not `company(id).vehicles`.
+# =============================================================================
+
+"""
+A tenant company. location is a raw PostGIS geography Point column, exposed as
+locationLat/locationLng (same pattern as Geofence/Poi). smtpPassword is write-only —
+deliberately absent from this type's readable fields, since it's a real credential for
+the company's own SMTP relay (not a one-way hash like ApiKey.keyHash), so exposing it
+would be a genuine secret leak. Company can self-reference via parentCompanyId (for
+reseller/sub-company hierarchies).
+"""
+type Company {
+    id: ID!
+    parentCompanyId: ID @rename(attribute: "parent_company_id")
+    isReseller: Boolean! @rename(attribute: "is_reseller")
+    "customer | distributor"
+    accountType: String! @rename(attribute: "account_type")
+    name: String!
+    address: String
+    city: String!
+    state: String!
+    country: String!
+    timezone: String!
+    website: String
+    industry: String
+    logoPath: String @rename(attribute: "logo_path")
+    "active | suspended | trial"
+    status: String!
+    isTrial: Boolean! @rename(attribute: "is_trial")
+    trialEndsAt: String @rename(attribute: "trial_ends_at")
+    accountExpiresAt: String @rename(attribute: "account_expires_at")
+    taxExpiresAt: String @rename(attribute: "tax_expires_at")
+    maxUsers: Int @rename(attribute: "max_users")
+    maxStaff: Int @rename(attribute: "max_staff")
+    maxDrivers: Int @rename(attribute: "max_drivers")
+    paymentMode: String @rename(attribute: "payment_mode")
+    monthlyRental: Float @rename(attribute: "monthly_rental")
+    deviceCharge: Float @rename(attribute: "device_charge")
+    simCharge: Float @rename(attribute: "sim_charge")
+    applicationCharge: Float @rename(attribute: "application_charge")
+    totalCharge: Float @rename(attribute: "total_charge")
+    "Uploaded via uploadFile(purpose: \"document\")."
+    invoicePath: String @rename(attribute: "invoice_path")
+    fatigueHours: Float @rename(attribute: "fatigue_hours")
+    tripCloseRule: String @rename(attribute: "trip_close_rule")
+    tripCloseOnBarcode: Boolean! @rename(attribute: "trip_close_on_barcode")
+    offlineAlertMinutes: Int @rename(attribute: "offline_alert_minutes")
+    offlineAlertsEnabled: Boolean! @rename(attribute: "offline_alerts_enabled")
+    smtpHost: String @rename(attribute: "smtp_host")
+    smtpPort: Int @rename(attribute: "smtp_port")
+    smtpEncryption: String @rename(attribute: "smtp_encryption")
+    smtpUsername: String @rename(attribute: "smtp_username")
+    createdBy: ID @rename(attribute: "created_by")
+    updatedBy: ID @rename(attribute: "updated_by")
+    lastIp: String @rename(attribute: "last_ip")
+    "Latitude of this company's registered location. Null if not set."
+    locationLat: Float @method(name: "locationLat")
+    "Longitude of this company's registered location. Null if not set."
+    locationLng: Float @method(name: "locationLng")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    companies: [Company!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "view")
+    company(id: ID! @eq): Company @find @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "view")
+}
+
+extend type Mutation {
+    """
+    Create a company (resolved by App\\GraphQL\\Mutations\\CreateCompany — it can't be
+    the generic @create directive, since that can't write a geography column).
+    """
+    createCompany(
+        parentCompanyId: ID
+        isReseller: Boolean
+        accountType: String
+        name: String!
+        address: String
+        city: String!
+        state: String!
+        country: String!
+        timezone: String
+        website: String
+        industry: String
+        logoPath: String
+        status: String
+        isTrial: Boolean
+        trialEndsAt: String
+        accountExpiresAt: String
+        taxExpiresAt: String
+        maxUsers: Int
+        maxStaff: Int
+        maxDrivers: Int
+        paymentMode: String
+        monthlyRental: Float
+        deviceCharge: Float
+        simCharge: Float
+        applicationCharge: Float
+        totalCharge: Float
+        invoicePath: String
+        fatigueHours: Float
+        tripCloseRule: String
+        tripCloseOnBarcode: Boolean
+        offlineAlertMinutes: Int
+        offlineAlertsEnabled: Boolean
+        smtpHost: String
+        smtpPort: Int
+        smtpEncryption: String
+        smtpUsername: String
+        smtpPassword: String
+        createdBy: ID
+        updatedBy: ID
+        location: GeoPointInput
+    ): Company! @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "add")
+
+    "Update a company (resolved by App\\GraphQL\\Mutations\\UpdateCompany, for the same reason as createCompany). Only pass the fields that should change."
+    updateCompany(
+        id: ID!
+        parentCompanyId: ID
+        isReseller: Boolean
+        accountType: String
+        name: String
+        address: String
+        city: String
+        state: String
+        country: String
+        timezone: String
+        website: String
+        industry: String
+        logoPath: String
+        status: String
+        isTrial: Boolean
+        trialEndsAt: String
+        accountExpiresAt: String
+        taxExpiresAt: String
+        maxUsers: Int
+        maxStaff: Int
+        maxDrivers: Int
+        paymentMode: String
+        monthlyRental: Float
+        deviceCharge: Float
+        simCharge: Float
+        applicationCharge: Float
+        totalCharge: Float
+        invoicePath: String
+        fatigueHours: Float
+        tripCloseRule: String
+        tripCloseOnBarcode: Boolean
+        offlineAlertMinutes: Int
+        offlineAlertsEnabled: Boolean
+        smtpHost: String
+        smtpPort: Int
+        smtpEncryption: String
+        smtpUsername: String
+        smtpPassword: String
+        updatedBy: ID
+        location: GeoPointInput
+    ): Company! @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "edit")
+
+    "Soft-delete a company (sets deleted_at — row is kept, not removed), same as deleteDriver/deleteVehicle."
+    deleteCompany(id: ID! @eq @authorizeParent(model: "App\\Models\\Company")): Company! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "delete")
+}
+
+"A permission role, optionally scoped to a company (null companyId = a system-wide role)."
+type Role {
+    id: ID!
+    companyId: ID @rename(attribute: "company_id")
+    name: String!
+    "active | inactive"
+    status: String!
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    roles: [Role!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "view")
+    role(id: ID! @eq): Role @find @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "view")
+}
+
+extend type Mutation {
+    createRole(companyId: ID @rename(attribute: "company_id") @forceOwnCompany, name: String!, status: String): Role! @requiresPermission(module: "core", action: "add")
+        @create @guard(with: ["sanctum"])
+
+    updateRole(id: ID!, name: String, status: String): Role! @update @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "edit")
+
+    "Permanently delete a role. Will fail if any users still reference it (restrict-on-delete FK)."
+    deleteRole(id: ID! @eq @authorizeParent(model: "App\\Models\\Role")): Role! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "delete")
+}
+
+"""
+An app user. password and twoFactorSecret are deliberately absent from this type
+entirely — password is write-only (hashed automatically on write by the model's own
+cast, same as Laravel's standard convention) and never readable; twoFactorSecret has no
+read or write path at all yet, since there's no 2FA enrollment flow in this codebase to
+generate/validate it safely — exposing a raw settable secret without that flow would be
+more dangerous than useful. notificationPreferences is an opaque JSON-encoded string,
+same convention as elsewhere.
+"""
+type User {
+    id: ID!
+    companyId: ID @rename(attribute: "company_id")
+    roleId: ID! @rename(attribute: "role_id")
+    departmentId: ID @rename(attribute: "department_id")
+    name: String!
+    username: String!
+    email: String!
+    mobile: String
+    address: String
+    photoPath: String @rename(attribute: "photo_path")
+    "active | inactive"
+    status: String!
+    isAdmin: Boolean! @rename(attribute: "is_admin")
+    isSuperAdmin: Boolean! @rename(attribute: "is_super_admin")
+    defaultLandingPage: String @rename(attribute: "default_landing_page")
+    muteAlerts: Boolean! @rename(attribute: "mute_alerts")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    notificationPreferences: String @rename(attribute: "notification_preferences")
+    twoFactorEnabled: Boolean! @rename(attribute: "two_factor_enabled")
+    lastLoginAt: String @rename(attribute: "last_login_at")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    users: [User!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "view")
+    user(id: ID! @eq): User @find @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "view")
+}
+
+extend type Mutation {
+    createUser(
+        companyId: ID @rename(attribute: "company_id") @forceOwnCompany @rules(apply: ["App\\Rules\\WithinUserLimit"])
+        roleId: ID! @rename(attribute: "role_id")
+        departmentId: ID @rename(attribute: "department_id")
+        name: String!
+        username: String! @rules(apply: ["App\\Rules\\UniqueUserUsername"])
+        email: String! @rules(apply: ["App\\Rules\\UniqueUserEmail"])
+        "Plain text — hashed automatically on write by the model's own cast. Never returned by any query."
+        password: String!
+        mobile: String
+        address: String
+        photoPath: String @rename(attribute: "photo_path")
+        status: String
+        isAdmin: Boolean @rename(attribute: "is_admin")
+        isSuperAdmin: Boolean @rename(attribute: "is_super_admin")
+        defaultLandingPage: String @rename(attribute: "default_landing_page")
+        muteAlerts: Boolean @rename(attribute: "mute_alerts")
+        notificationPreferences: String @rename(attribute: "notification_preferences")
+    ): User! @create @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "add")
+
+    "Update an existing user. Only pass the fields that should change; pass password only to reset it."
+    updateUser(
+        id: ID!
+        companyId: ID @rename(attribute: "company_id") @forceOwnCompany
+        roleId: ID @rename(attribute: "role_id") @rules(apply: ["App\\Rules\\CannotChangeOwnRole"])
+        departmentId: ID @rename(attribute: "department_id")
+        name: String
+        username: String @rules(apply: ["App\\Rules\\UniqueUserUsername"])
+        email: String @rules(apply: ["App\\Rules\\UniqueUserEmail"])
+        password: String
+        mobile: String
+        address: String
+        photoPath: String @rename(attribute: "photo_path")
+        status: String @rules(apply: ["App\\Rules\\CannotDeactivateSelf"])
+        isAdmin: Boolean @rename(attribute: "is_admin") @rules(apply: ["App\\Rules\\CannotRemoveOwnAdminFlag"])
+        isSuperAdmin: Boolean @rename(attribute: "is_super_admin")
+        defaultLandingPage: String @rename(attribute: "default_landing_page")
+        muteAlerts: Boolean @rename(attribute: "mute_alerts")
+        notificationPreferences: String @rename(attribute: "notification_preferences")
+    ): User! @update @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "edit")
+
+    "Soft-delete a user (sets deleted_at — row is kept, not removed), same as deleteDriver/deleteVehicle/deleteCompany."
+    deleteUser(id: ID! @eq @authorizeParent(model: "App\\Models\\User")): User! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "delete")
+}
+
+"A GPS tracking device (hardware unit), independent of whichever vehicle it's currently installed in (if any)."
+type Device {
+    id: ID!
+    companyId: ID @rename(attribute: "company_id")
+    vehicleId: ID @rename(attribute: "vehicle_id")
+    imei: String!
+    model: String
+    protocol: String
+    shipmentBatch: String @rename(attribute: "shipment_batch")
+    warrantyExpiresAt: String @rename(attribute: "warranty_expires_at")
+    "in_stock | installed | faulty | retired"
+    status: String!
+    lastSeenAt: String @rename(attribute: "last_seen_at")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    devices: [Device!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "view")
+    device(id: ID! @eq): Device @find @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "view")
+}
+
+extend type Mutation {
+    createDevice(
+        companyId: ID @rename(attribute: "company_id") @forceOwnCompany
+        vehicleId: ID @rename(attribute: "vehicle_id")
+        imei: String!
+        model: String
+        protocol: String
+        shipmentBatch: String @rename(attribute: "shipment_batch")
+        warrantyExpiresAt: String @rename(attribute: "warranty_expires_at")
+        status: String
+    ): Device! @create @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "add")
+
+    updateDevice(
+        id: ID!
+        companyId: ID @rename(attribute: "company_id") @forceOwnCompany
+        vehicleId: ID @rename(attribute: "vehicle_id")
+        model: String
+        protocol: String
+        shipmentBatch: String @rename(attribute: "shipment_batch")
+        warrantyExpiresAt: String @rename(attribute: "warranty_expires_at")
+        status: String
+        lastSeenAt: String @rename(attribute: "last_seen_at")
+    ): Device! @update @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "edit")
+
+    "Permanently delete a device. No soft-delete column exists for this table."
+    deleteDevice(id: ID! @eq @authorizeParent(model: "App\\Models\\Device")): Device! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "core", action: "delete")
+}
+
+# =============================================================================
+# Live position + raw ingestion log: READ ONLY. Both tables are already written to
+# internally by PositionIngestionService on every inbound device transmission — there
+# are deliberately no create/update/delete mutations here, since writing to them
+# through the API directly would bypass the decode pipeline entirely and could corrupt
+# the live-map state. This is the read side that was missing: until now, device data
+# could be ingested but never read back out through the API at all.
+# =============================================================================
+
+"""
+One device's most recent known position — the live-map table. Always holds exactly one
+row per device, overwritten on every new fix (never a history). For a device's full
+position history, see `positions` (not yet exposed in GraphQL — see CHANGELOG).
+location is a raw PostGIS geography Point column, exposed as locationLat/locationLng.
+attributes is the decoded Teltonika IO data (ignition, GSM signal, etc.) as an opaque
+JSON-encoded string — same convention as other jsonb fields in this schema.
+
+Note: this type's identifying field is deviceId, not id — device_last_positions has no
+separate `id` column; device_id is itself the primary key (one row per device).
+"""
+type DeviceLastPosition {
+    deviceId: ID! @rename(attribute: "device_id")
+    vehicleId: ID! @rename(attribute: "vehicle_id")
+    recordedAt: String! @rename(attribute: "recorded_at")
+    speed: Float
+    heading: Int
+    ignition: Boolean
+    "Latitude of this device's last known position."
+    locationLat: Float @method(name: "locationLat")
+    "Longitude of this device's last known position."
+    locationLng: Float @method(name: "locationLng")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    attributes: String @method(name: "attributesJson")
+    """
+    "moving" | "idle" | "stopped" | "offline" — computed from recordedAt's age against
+    this vehicle's company's offlineAlertMinutes (or a 30-minute default), ignition, and
+    speed, so every screen agrees on the same definition. Added 2026-11-02.
+    """
+    status: String! @method(name: "status")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    "The current/last-known position of every tracked device — the live fleet map."
+    deviceLastPositions: [DeviceLastPosition!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "live-position", action: "view")
+
+    "The current/last-known position of a single device, by its device id."
+    deviceLastPosition(deviceId: ID! @eq(key: "device_id")): DeviceLastPosition @find @guard(with: ["sanctum"]) @requiresPermission(module: "live-position", action: "view")
+
+    """
+    The current/last-known position for a specific set of vehicles — added 2026-11-02
+    for polling screens like Multi Tracking, where only the handful of currently-tiled
+    vehicles need refreshing each cycle rather than the whole fleet. Not paginated;
+    capped at 50 ids per call. A vehicle id outside the caller's company or vehicle
+    assignment is silently absent from the result, not an error.
+    """
+    deviceLastPositionsForVehicles(vehicleIds: [ID!]! @rulesForArray(apply: ["max:50"])): [DeviceLastPosition!]!
+        @field(resolver: "App\\GraphQL\\Queries\\DeviceLastPositionsForVehicles")
+        @guard(with: ["sanctum"])
+        @requiresPermission(module: "live-position", action: "view")
+}
+
+"""
+Durable capture of every inbound device transmission, decoded or not — nothing is ever
+lost here even if a device/protocol isn't recognized. Primarily a debugging/audit tool
+(e.g. "why isn't this device showing up," "what's failing to decode"), not something a
+normal fleet-tracking UI would show an end user. Supports filtering by imei and/or
+status directly on the list query, since those are the two realistic ways someone
+actually wants to search this table.
+"""
+type DeviceRawLog {
+    id: ID!
+    imei: String!
+    deviceId: ID @rename(attribute: "device_id")
+    sourceIp: String @rename(attribute: "source_ip")
+    deviceReportedAt: String @rename(attribute: "device_reported_at")
+    rawPayload: String! @rename(attribute: "raw_payload")
+    "pending | decoded | failed | unrecognized"
+    status: String!
+    protocol: String
+    "The device this entry decoded into — set only once status is \"decoded\". No FK constraint, see the model's docblock (positions' composite PK)."
+    decodedDeviceId: ID @rename(attribute: "decoded_device_id")
+    decodedRecordedAt: String @rename(attribute: "decoded_recorded_at")
+    errorMessage: String @rename(attribute: "error_message")
+    decodedAt: String @rename(attribute: "decoded_at")
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    "Paginated device ingestion history. Pass imei and/or status to filter (e.g. status: \"failed\" to find everything that didn't decode)."
+    deviceRawLogs(imei: String @eq, status: String @eq): [DeviceRawLog!]! @requiresPermission(module: "live-position", action: "view")
+        @paginate(defaultCount: 25) @guard(with: ["sanctum"])
+
+    deviceRawLog(id: ID! @eq): DeviceRawLog @find @guard(with: ["sanctum"]) @requiresPermission(module: "live-position", action: "view")
+}
+
+# =============================================================================
+# Department: a simple internal grouping within a company (e.g. "Sales",
+# "Logistics"). Part of the original 57-table schema design
+# (docs/GPS_Fleet_Tracking_Database_Schema.md) from the start — User.departmentId
+# already referenced it — it just never got its own GraphQL type until now.
+# No soft delete — this table has no deleted_at column.
+# =============================================================================
+
+"A department within a company (e.g. \"Sales\", \"Logistics\")."
+type Department {
+    id: ID!
+    companyId: ID! @rename(attribute: "company_id")
+    name: String!
+    createdAt: String! @rename(attribute: "created_at")
+    updatedAt: String! @rename(attribute: "updated_at")
+}
+
+extend type Query {
+    departments: [Department!]! @paginate(defaultCount: 25) @guard(with: ["sanctum"]) @requiresPermission(module: "department", action: "view")
+    department(id: ID! @eq): Department @find @guard(with: ["sanctum"]) @requiresPermission(module: "department", action: "view")
+}
+
+extend type Mutation {
+    createDepartment(companyId: ID! @rename(attribute: "company_id") @forceOwnCompany, name: String!): Department! @requiresPermission(module: "department", action: "add")
+        @create @guard(with: ["sanctum"])
+
+    updateDepartment(id: ID!, name: String): Department! @update @guard(with: ["sanctum"]) @requiresPermission(module: "department", action: "edit")
+
+    "Permanently delete a department. Users in it have their departmentId set null (nullOnDelete), not cascaded."
+    deleteDepartment(id: ID! @eq @authorizeParent(model: "App\\Models\\Department")): Department! @delete @guard(with: ["sanctum"]) @requiresPermission(module: "department", action: "delete")
+}
+
+# =============================================================================
+# Position history: READ ONLY, and the last remaining table without any GraphQL
+# access. `positions` is the full GPS fix history (every position ever recorded),
+# as opposed to DeviceLastPosition's single latest fix per device — the "everywhere
+# it's been" complement to DeviceLastPosition's "where is it right now."
+#
+# This table has no `id` column and a composite primary key (device_id, recorded_at)
+# by design (intended for an eventual TimescaleDB hypertable), so it can't use the
+# standard @paginate-on-a-model / @find pattern every other type in this schema uses.
+# Instead, Query.positionHistory uses @paginate's `builder` argument, pointing at a
+# hand-written resolver (App\GraphQL\Queries\PositionHistoryQuery) that builds the
+# filtered, ordered query itself — including the computed lat/lng columns, selected
+# directly in the same query instead of a separate lookup per row, since a history
+# query can realistically return thousands of rows.
+# =============================================================================
+
+"""
+One historical GPS fix. locationLat/locationLng follow the same pattern as every other
+PostGIS point in this schema, but are computed directly in the query behind this field
+(see PositionHistoryQuery) rather than via a per-row lookup, for performance on a
+table that can hold a very large number of rows. attributes is the decoded Teltonika
+IO data as an opaque JSON-encoded string, same convention as elsewhere.
+"""
+type PositionHistoryEntry {
+    deviceId: ID! @rename(attribute: "device_id")
+    recordedAt: String! @rename(attribute: "recorded_at")
+    speed: Float
+    heading: Int
+    ignition: Boolean
+    "Latitude of this fix."
+    locationLat: Float @rename(attribute: "lat")
+    "Longitude of this fix."
+    locationLng: Float @rename(attribute: "lng")
+    "Opaque JSON-encoded string — this API does not parse or validate it."
+    attributes: String
+}
+
+extend type Query {
+    """
+    A device's (or vehicle's) full GPS position history, newest first, optionally
+    narrowed to a time range. At least one of deviceId or vehicleId is required — an
+    unfiltered query over the entire history table is not supported, since it could
+    be an unbounded number of rows. Pass from/to to narrow by recordedAt
+    (e.g. "this vehicle, between 2pm and 4pm yesterday").
+    """
+    positionHistory(deviceId: ID, vehicleId: ID, from: String, to: String): [PositionHistoryEntry!]! @requiresPermission(module: "live-position", action: "view")
+        @paginate(builder: "App\\GraphQL\\Queries\\PositionHistoryQuery@builder", defaultCount: 50)
+        @guard(with: ["sanctum"])
+}
