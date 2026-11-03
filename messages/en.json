@@ -303,7 +303,9 @@
     },
     "stats": {
       "totalDistance": "Total Distance",
-      "duration": "Duration",
+      "drivingTime": "Driving time",
+      "stoppedTime": "Stopped time",
+      "timeSpan": "Total time, first to last GPS point: {value}",
       "maxSpeed": "Max Speed",
       "avgSpeed": "Avg Speed",
       "pointsCount": "GPS Points",

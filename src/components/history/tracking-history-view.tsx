@@ -48,7 +48,6 @@ import {
   type EventTypesResult,
   type AlertEventItem,
   type AlertEventsResult,
-  type PositionHistoryPoint,
 } from "@/lib/graphql/operations";
 import {
   buildTrackTargets,
@@ -58,6 +57,7 @@ import {
   type TrackTarget,
 } from "@/lib/history/selection";
 import { cleanTrack } from "@/lib/history/clean-track";
+import { calculateDistance, computeRouteLegs, formatDuration, tripTimes, type RouteLeg } from "@/lib/history/legs";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { fetchHistoryFixes, MAX_HISTORY_FIXES, TooManyFixesError, type HistoryFix } from "@/lib/history/fetch-history";
 import { cn } from "@/lib/utils";
@@ -70,156 +70,6 @@ const DEFAULT_RANGE_DAYS = 6;
  * Off unless NEXT_PUBLIC_GOOGLE_ROUTES_ENABLED=true, so a key without it isn't called at all.
  */
 const ROAD_SNAP_CONFIGURED = process.env.NEXT_PUBLIC_GOOGLE_ROUTES_ENABLED === "true";
-
-export type RouteLeg = {
-  id: string;
-  legNumber: number;
-  startIndex: number;
-  endIndex: number;
-  startTime: string;
-  endTime: string;
-  startLat: number;
-  startLng: number;
-  endLat: number;
-  endLng: number;
-  distanceKm: number;
-  durationMins: number;
-  maxSpeed: number;
-  avgSpeed: number;
-  pointsCount: number;
-};
-
-// Haversine calculation for route distance
-function calculateDistance(points: Array<{ locationLat?: number | null; locationLng?: number | null }>): number {
-  let dist = 0;
-  for (let i = 1; i < points.length; i++) {
-    const p1 = points[i - 1];
-    const p2 = points[i];
-    if (
-      p1?.locationLat &&
-      p1?.locationLng &&
-      p2?.locationLat &&
-      p2?.locationLng &&
-      p1.locationLat !== 0 &&
-      p2.locationLat !== 0
-    ) {
-      const R = 6371;
-      const dLat = (p2.locationLat - p1.locationLat) * (Math.PI / 180);
-      const dLon = (p2.locationLng - p1.locationLng) * (Math.PI / 180);
-      const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(p1.locationLat * (Math.PI / 180)) *
-          Math.cos(p2.locationLat * (Math.PI / 180)) *
-          Math.sin(dLon / 2) *
-          Math.sin(dLon / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      dist += R * c;
-    }
-  }
-  return dist;
-}
-
-// Compute individual route legs based on vehicle stops
-function computeRouteLegs(points: PositionHistoryPoint[]): RouteLeg[] {
-  if (points.length < 2) return [];
-
-  const legs: RouteLeg[] = [];
-  let currentStart = 0;
-
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const curr = points[i];
-
-    const prevTime = new Date(prev.recordedAt).getTime();
-    const currTime = new Date(curr.recordedAt).getTime();
-    const timeDiffMins = (currTime - prevTime) / (1000 * 60);
-
-    // Split if there is a stop of >= 5 minutes with low/zero speed or large time gap
-    const isStopSplit = timeDiffMins >= 5 && (prev.speed === 0 || curr.speed === 0);
-
-    if (isStopSplit && i - currentStart >= 2) {
-      const legPoints = points.slice(currentStart, i);
-      const legDist = calculateDistance(legPoints);
-      let legMax = 0;
-      let legSum = 0;
-      let legCount = 0;
-
-      legPoints.forEach((p) => {
-        const sp = p.speed ?? 0;
-        if (sp > legMax) legMax = sp;
-        if (sp > 0) {
-          legSum += sp;
-          legCount++;
-        }
-      });
-
-      legs.push({
-        id: `leg-${legs.length + 1}`,
-        legNumber: legs.length + 1,
-        startIndex: currentStart,
-        endIndex: i - 1,
-        startTime: points[currentStart].recordedAt,
-        endTime: points[i - 1].recordedAt,
-        startLat: points[currentStart].locationLat!,
-        startLng: points[currentStart].locationLng!,
-        endLat: points[i - 1].locationLat!,
-        endLng: points[i - 1].locationLng!,
-        distanceKm: Number(legDist.toFixed(1)),
-        durationMins: Math.round(
-          (new Date(points[i - 1].recordedAt).getTime() - new Date(points[currentStart].recordedAt).getTime()) /
-            (1000 * 60),
-        ),
-        maxSpeed: Math.round(legMax),
-        avgSpeed: legCount > 0 ? Math.round(legSum / legCount) : 0,
-        pointsCount: legPoints.length,
-      });
-
-      currentStart = i;
-    }
-  }
-
-  // Final leg
-  if (points.length - currentStart >= 2) {
-    const legPoints = points.slice(currentStart, points.length);
-    const legDist = calculateDistance(legPoints);
-    let legMax = 0;
-    let legSum = 0;
-    let legCount = 0;
-
-    legPoints.forEach((p) => {
-      const sp = p.speed ?? 0;
-      if (sp > legMax) legMax = sp;
-      if (sp > 0) {
-        legSum += sp;
-        legCount++;
-      }
-    });
-
-    legs.push({
-      id: `leg-${legs.length + 1}`,
-      legNumber: legs.length + 1,
-      startIndex: currentStart,
-      endIndex: points.length - 1,
-      startTime: points[currentStart].recordedAt,
-      endTime: points[points.length - 1].recordedAt,
-      startLat: points[currentStart].locationLat!,
-      startLng: points[currentStart].locationLng!,
-      endLat: points[points.length - 1].locationLat!,
-      endLng: points[points.length - 1].locationLng!,
-      distanceKm: Number(legDist.toFixed(1)),
-      durationMins: Math.round(
-        (new Date(points[points.length - 1].recordedAt).getTime() -
-          new Date(points[currentStart].recordedAt).getTime()) /
-          (1000 * 60),
-      ),
-      maxSpeed: Math.round(legMax),
-      avgSpeed: legCount > 0 ? Math.round(legSum / legCount) : 0,
-      pointsCount: legPoints.length,
-    });
-  }
-
-  return legs;
-}
 
 export function TrackingHistoryView() {
   const t = useTranslations("history");
@@ -466,7 +316,7 @@ export function TrackingHistoryView() {
   // Computed summary metrics
   const stats = useMemo(() => {
     if (validPoints.length === 0) {
-      return { totalDistance: 0, maxSpeed: 0, avgSpeed: 0, duration: "0m", pointsCount: 0 };
+      return { totalDistance: 0, maxSpeed: 0, avgSpeed: 0, spanMs: 0, drivingMs: 0, stoppedMs: 0, pointsCount: 0 };
     }
 
     const currentScopePoints = focusedLeg
@@ -488,23 +338,17 @@ export function TrackingHistoryView() {
     });
 
     const avgSpeed = speedCount > 0 ? Math.round(sumSpeed / speedCount) : 0;
-
-    const firstTime = new Date(currentScopePoints[0].recordedAt).getTime();
-    const lastTime = new Date(currentScopePoints[currentScopePoints.length - 1].recordedAt).getTime();
-    const diffMs = Math.max(0, lastTime - firstTime);
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const hours = Math.floor(diffMins / 60);
-    const mins = diffMins % 60;
-    const duration = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+    // Driving = the legs; stopped = the stops between them. A focused leg is all driving.
+    const times = tripTimes(currentScopePoints, focusedLeg ? [focusedLeg] : routeLegs);
 
     return {
       totalDistance: Number(totalDistance.toFixed(1)),
       maxSpeed: Math.round(maxSpeed),
       avgSpeed,
-      duration,
+      ...times,
       pointsCount: currentScopePoints.length,
     };
-  }, [validPoints, focusedLeg]);
+  }, [validPoints, focusedLeg, routeLegs]);
 
   const activePoint = validPoints[activeIndex] || validPoints[0] || null;
 
@@ -530,7 +374,8 @@ export function TrackingHistoryView() {
 
   const statItems = [
     { key: "totalDistance", value: stats.totalDistance, unit: t("stats.unitKm"), tone: "text-primary" },
-    { key: "duration", value: stats.duration, tone: "text-foreground" },
+    { key: "drivingTime", value: formatDuration(stats.drivingMs), tone: "text-foreground", title: t("stats.timeSpan", { value: formatDuration(stats.spanMs) }) },
+    { key: "stoppedTime", value: formatDuration(stats.stoppedMs), tone: "text-muted-foreground", title: t("stats.timeSpan", { value: formatDuration(stats.spanMs) }) },
     { key: "maxSpeed", value: stats.maxSpeed, unit: t("stats.unitKmh"), tone: "text-destructive" },
     { key: "avgSpeed", value: stats.avgSpeed, unit: t("stats.unitKmh"), tone: "text-moving" },
     { key: "pointsCount", value: stats.pointsCount, tone: "text-foreground" },
@@ -802,7 +647,7 @@ export function TrackingHistoryView() {
       <div className="absolute inset-x-3 bottom-[8.5rem] z-10 grid gap-2 sm:inset-x-4 lg:inset-x-auto lg:bottom-auto lg:end-4 lg:top-4 lg:justify-items-end">
         <dl className="glass-panel flex divide-x divide-border overflow-x-auto rounded-2xl rtl:divide-x-reverse">
           {statItems.map((item) => (
-            <div key={item.key} className="min-w-[84px] px-3 py-2 text-center">
+            <div key={item.key} className="min-w-[84px] px-3 py-2 text-center" title={"title" in item ? item.title : undefined}>
               <dt className="whitespace-nowrap text-[10px] font-medium text-muted-foreground">
                 {t(`stats.${item.key}`)}
               </dt>
@@ -911,7 +756,7 @@ export function TrackingHistoryView() {
                           <div className="flex items-center gap-1.5 text-muted-foreground">
                             <Clock className="size-3.5 text-subtle" />
                             <span>
-                              <span dir="ltr">{formatInCompanyTz(leg.startTime, displayZone, "HH:mm")} → {formatInCompanyTz(leg.endTime, displayZone, "HH:mm")}</span> ({leg.durationMins}m)
+                              <span dir="ltr">{formatInCompanyTz(leg.startTime, displayZone, "HH:mm")} → {formatInCompanyTz(leg.endTime, displayZone, "HH:mm")}</span> ({formatDuration(leg.durationMs)})
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5 text-muted-foreground">
