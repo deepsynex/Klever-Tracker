@@ -19,7 +19,6 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [ssoMessage, setSsoMessage] = useState<string | null>(null);
 
   const [state, formAction, pending] = useActionState(loginAction, initialState);
   const [, startTransition] = useTransition();
@@ -121,12 +120,6 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
       {bannerError ? (
         <div className="mb-4">
           <Alert tone="error">{te(bannerError)}</Alert>
-        </div>
-      ) : null}
-
-      {ssoMessage ? (
-        <div className="mb-4 rounded-lg bg-emerald-50 border border-emerald-200 p-2.5 text-xs font-medium text-emerald-800">
-          {ssoMessage}
         </div>
       ) : null}
 
@@ -288,7 +281,7 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
       </div>
 
       {/* SSO Buttons */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
+      <div className="grid gap-3 mb-6">
         {/* Google SSO */}
         <a
           href={`/api/auth/google?locale=${locale}&next=${encodeURIComponent(searchParams.get("next") || "/dashboard")}`}
@@ -314,21 +307,6 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
           </svg>
           <span>Google</span>
         </a>
-
-        {/* Microsoft SSO */}
-        <button
-          type="button"
-          onClick={() => setSsoMessage("Connecting to Microsoft Azure AD...")}
-          className="flex h-10.5 items-center justify-center gap-2.5 rounded-[9px] border border-slate-200 bg-white font-semibold text-slate-800 text-[13px] hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer"
-        >
-          <svg className="size-4 shrink-0" viewBox="0 0 21 21">
-            <rect x="1" y="1" width="9" height="9" fill="#F25022" />
-            <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
-            <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
-            <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
-          </svg>
-          <span>Microsoft</span>
-        </button>
       </div>
 
       {/* Security Callout Banner */}
