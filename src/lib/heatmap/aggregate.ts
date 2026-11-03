@@ -114,7 +114,8 @@ export function cleanTrack(track: RawPosition[]): { fixes: Fix[]; dropped: numbe
  *
  * - density: 1 per fix; a stop counts all of its fixes, at its median spot.
  * - dwell: seconds until the next fix, capped at DWELL_CAP_SECONDS (a silent device is offline,
- *   not parked). A stop counts its whole observed duration: fixes kept arriving all along.
+ *   not parked). A stop counts the gaps between its own fixes, each capped the same way, so a
+ *   tracker asleep at one spot for hours still adds at most 30 minutes per silent gap.
  * - idle: engine on while standing. A stop is idle when most of its fixes report the ignition on
  *   (this tracker sends stray "ignition off" fixes, and reports up to ~20 km/h while parked, so a
  *   per-fix speed test isn't reliable there). Outside stops: ignition on and under 3 km/h.
@@ -124,6 +125,17 @@ export function weighFixes(fixes: Fix[], mode: WeightMode): WeightedFix[] {
     fixes.map((f) => ({ ...f, locationLat: f.lat, locationLng: f.lng })),
   );
   const stopAt = new Map(stops.map((stop) => [stop.at, stop]));
+  /** Capped gaps between the raw fixes from `start` to `end` (a stop's whole time there). */
+  const stayedSeconds = (start: number, end: number) => {
+    let seconds = 0;
+    let prev: number | null = null;
+    for (const f of fixes) {
+      if (f.t < start || f.t > end) continue;
+      if (prev !== null) seconds += Math.min((f.t - prev) / 1000, DWELL_CAP_SECONDS);
+      prev = f.t;
+    }
+    return seconds;
+  };
   const gap = (i: number) => {
     const next = points[i + 1];
     return next ? Math.min((next.t - points[i].t) / 1000, DWELL_CAP_SECONDS) : 0;
@@ -134,7 +146,7 @@ export function weighFixes(fixes: Fix[], mode: WeightMode): WeightedFix[] {
     const stop = stopAt.get(i);
     if (stop) {
       // points[i] is the arrival and points[i + 1] the departure, both at the stop's median spot.
-      const seconds = (points[i + 1].t - points[i].t) / 1000;
+      const seconds = stayedSeconds(points[i].t, points[i + 1].t);
       const at = { lat: stop.lat, lng: stop.lng, n: stop.fixes };
       if (mode === "density") out.push({ ...at, weight: stop.fixes });
       else if (mode === "dwell") {
@@ -200,14 +212,17 @@ export function aggregateHeatmap(
       if (bbox && !inBbox(p.lat, p.lng, bbox)) continue;
 
       const key = `${Math.floor(p.lat / size)}:${Math.floor(p.lng / size)}`;
+      // The cell centre leans towards where most fixes were: a 31-fix stop pulls 31 times harder
+      // than one passing fix.
+      const w = Math.max(1, p.n);
       const cell = grid.get(key);
       if (cell) {
-        cell.sumLat += p.lat;
-        cell.sumLng += p.lng;
-        cell.n++;
+        cell.sumLat += p.lat * w;
+        cell.sumLng += p.lng * w;
+        cell.n += w;
         cell.weight += p.weight;
       } else {
-        grid.set(key, { sumLat: p.lat, sumLng: p.lng, n: 1, weight: p.weight });
+        grid.set(key, { sumLat: p.lat * w, sumLng: p.lng * w, n: w, weight: p.weight });
       }
     }
   }

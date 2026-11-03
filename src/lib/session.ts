@@ -28,6 +28,15 @@ export async function getSessionToken(): Promise<string | null> {
   return store.get(SESSION_COOKIE)?.value || devAuthToken(store.has(SIGNED_OUT_COOKIE)) || null;
 }
 
+/**
+ * The token from this browser's own sign-in only, never the shared DEV_AUTH_TOKEN fallback.
+ * Use it to revoke a session: revoking the fallback would sign out every developer using it.
+ */
+export async function getOwnSessionToken(): Promise<string | null> {
+  const store = await cookies();
+  return store.get(SESSION_COOKIE)?.value || null;
+}
+
 export async function getSessionUser(): Promise<SessionUser | null> {
   const store = await cookies();
   const raw = store.get(USER_COOKIE)?.value;
