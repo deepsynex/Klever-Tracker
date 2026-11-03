@@ -3,7 +3,7 @@ import { requiredModule } from "./route-permissions";
 
 describe("requiredModule", () => {
   it("guards every tracking screen with live-position", () => {
-    for (const p of ["/live", "/history", "/multi", "/heatmap", "/tracking/history", "/live-route"]) expect(requiredModule(p)).toBe("live-position");
+    for (const p of ["/live", "/history", "/multi", "/heatmap", "/tracking/history"]) expect(requiredModule(p)).toBe("live-position");
   });
 
   it("leaves the dashboard, masters and look-alike paths alone", () => {

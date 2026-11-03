@@ -450,12 +450,22 @@ export const VEHICLES_PAGE = /* GraphQL */ `
         vehicleId
       }
     }
+    maintenanceRecords(first: $first) {
+      data {
+        id
+        vehicleId
+        odometerKm
+        status
+      }
+    }
   }
 `;
 export type VehiclesPageResult = {
   vehicles: { data: Vehicle[] };
   devices: { data: Device[] };
   sims: { data: Sim[] };
+  /** For "Maintenance due": the odometer at each completed service. Empty when the role can't read maintenance. */
+  maintenanceRecords: { data: Pick<MaintenanceRecord, "id" | "vehicleId" | "odometerKm" | "status">[] };
 };
 
 /** A vehicle's child records, for the edit panel. Filtered to the vehicle on the client. */
