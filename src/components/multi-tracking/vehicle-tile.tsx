@@ -2,7 +2,7 @@
 
 import { Loader2, Lock, LockOpen, MapPinOff, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { memo, useCallback, useMemo, useRef } from "react";
+import { memo, useCallback, useMemo, useRef, type HTMLAttributes } from "react";
 import type { Track } from "@/lib/multi-tracking/core";
 import { cn } from "@/lib/utils";
 import { Age } from "./age";
@@ -24,6 +24,8 @@ type Props = {
   dark: boolean;
   /** No map can render on this page (key, billing, script): the window keeps its live header data. */
   mapsDown: boolean;
+  /** Floating-window title bar handlers (drag to move, double-click to maximize). */
+  titleBarProps?: HTMLAttributes<HTMLElement>;
 };
 
 /** One selected vehicle as a floating window: title bar (plate, status, speed, age, ✕) over its own live map with Lock. */
@@ -49,7 +51,13 @@ export const VehicleTile = memo(function VehicleTile(p: Props) {
       aria-label={p.plate}
     >
       {/* Window title bar (TouchTraks style): plate · status · speed · age, close. */}
-      <header className="flex h-9 shrink-0 items-center gap-2 bg-[#4a4f55] ps-2.5 pe-1 text-white dark:bg-[#2b3133]">
+      <header
+        {...p.titleBarProps}
+        className={cn(
+          "flex h-9 shrink-0 items-center gap-2 bg-[#4a4f55] ps-2.5 pe-1 text-white dark:bg-[#2b3133]",
+          p.titleBarProps?.className,
+        )}
+      >
         <VehicleTypeIcon typeName={p.typeName} className="size-4 shrink-0 opacity-90" />
         {/* The plate always fits; status is a coloured dot (named for screen readers and on hover). */}
         <span

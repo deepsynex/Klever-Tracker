@@ -63,6 +63,7 @@ import {
   type VehiclesPageResult,
 } from "@/lib/graphql/vehicle-management";
 import { DOCUMENT_TYPES } from "@/lib/vehicle-management/helpers";
+import { isMaintenanceDue, lastServiceOdometers } from "@/lib/vehicle-management/maintenance-due";
 import { useErrorText, useVmLookups, useVmMutations, useVmQuery } from "@/lib/vehicle-management/use-vm";
 import { validateDocumentRow, validateLookupName, validateSensorRow, validateTankRow } from "@/lib/vehicle-management/validation";
 import {
@@ -172,13 +173,15 @@ export function VehiclesScreen() {
     [page.data],
   );
 
+  // Km at each vehicle's last completed service, from the Maintenance records.
+  const lastService = useMemo(() => lastServiceOdometers(page.data?.maintenanceRecords?.data ?? []), [page.data]);
+  const isDue = (v: Vehicle) => isMaintenanceDue(v, lastService);
+
   // KPI stats
   const totalVehicles = vehicles.length;
   const activeVehicles = vehicles.filter((v) => v.status === "active").length;
   const inactiveVehicles = vehicles.filter((v) => v.status !== "active").length;
-  const maintenanceDue = vehicles.filter(
-    (v) => typeof v.serviceIntervalKm === "number" && typeof v.odometerKm === "number" && v.odometerKm >= v.serviceIntervalKm,
-  ).length;
+  const maintenanceDue = vehicles.filter(isDue).length;
 
   // Filtered
   const filteredVehicles = useMemo(() => {
@@ -679,7 +682,15 @@ export function VehiclesScreen() {
 
                       {/* Service every (km) */}
                       <td className="py-3.5 px-3 whitespace-nowrap text-foreground">
-                        {v.serviceIntervalKm ? v.serviceIntervalKm.toLocaleString() : <span className="text-muted-foreground">—</span>}
+                        <span className="inline-flex items-center gap-2">
+                          {v.serviceIntervalKm ? v.serviceIntervalKm.toLocaleString() : <span className="text-muted-foreground">—</span>}
+                          {isDue(v) ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/70 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
+                              <span className="size-1.5 rounded-full bg-amber-500" />
+                              {t("kpi.maintenanceDue")}
+                            </span>
+                          ) : null}
+                        </span>
                       </td>
 
                       {/* Status */}

@@ -4,7 +4,7 @@ import { PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Link } from "@/i18n/navigation";
 
 interface TrackingScreenProps {
-  translationKey: "live" | "detailed" | "sales" | "liveRoute" | "multi" | "liveTraversed" | "videoMonitoring";
+  translationKey: "live" | "detailed" | "sales" | "multi";
   icon: LucideIcon;
   phase?: number;
 }

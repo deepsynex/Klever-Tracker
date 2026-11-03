@@ -168,14 +168,11 @@
     "settings": "Settings",
     "track": "Tracking",
     "liveTracking": "Live Tracking",
-    "detailedTracking": "Detail Tracking",
+    "detailedTracking": "Tracking Detail",
     "historyTracking": "History Tracking",
-    "liveRoute": "Live Route",
     "multiTracking": "Multi Tracking",
     "tracking": "Tracking",
-    "detailTracking": "Detail Tracking",
-    "liveTraversed": "Live Traversed",
-    "videoMonitoring": "Video Monitoring"
+    "detailTracking": "Tracking Detail"
   },
   "shell": {
     "skipToContent": "Skip to content",
@@ -949,7 +946,6 @@
         "accounts": "Account",
         "users": "User",
         "drivers": "Driver",
-        "roles": "Menu setting",
         "changePassword": "Change password",
         "driverBehaviour": "Driver behaviour",
         "departments": "Departments",
@@ -960,7 +956,6 @@
         "accounts": "Company details, contacts, billing and limits.",
         "users": "Portal logins, their role, and the vehicles and drivers they see.",
         "drivers": "Driver records, licences, permits and driver-app logins. Import from Excel.",
-        "roles": "Roles and what each can view, add, edit and delete.",
         "changePassword": "Change your own password.",
         "driverBehaviour": "How driver scores are calculated for each company.",
         "departments": "Group users by department: add, rename or remove departments.",
@@ -1050,7 +1045,7 @@
         "assignVehicles": "Assign vehicles",
         "assignDrivers": "Assign drivers",
         "addDepartment": "Add department",
-        "noRoles": "No roles yet. Add one under Menu setting first.",
+        "noRoles": "No roles yet. Ask an administrator to add one.",
         "passwordKeepHint": "Leave the password empty to keep the current one.",
         "isAdminHint": "Admins see every vehicle in the company without assigning them.",
         "sections": {
@@ -1432,24 +1427,12 @@
       "description": "Real-time GPS fleet positions, live movement alerts, and active vehicle telemetry."
     },
     "detailed": {
-      "title": "Detail Tracking",
+      "title": "Tracking Detail",
       "description": "In-depth vehicle metrics, onboard sensor telemetry, and diagnostic logs."
-    },
-    "liveRoute": {
-      "title": "Live Route",
-      "description": "Active journey monitoring, transit corridors, and route progress tracking."
     },
     "multi": {
       "title": "Multi Tracking",
       "description": "Simultaneous fleet multi-view, split monitoring, and multi-vehicle map surveillance."
-    },
-    "liveTraversed": {
-      "title": "Live Traversed",
-      "description": "Real-time traversed route logs, trip playback, and path history."
-    },
-    "videoMonitoring": {
-      "title": "Video Monitoring",
-      "description": "Live onboard dashcam feeds, multi-camera streaming, and safety video surveillance."
     },
     "sales": {
       "title": "Sales Tracking",
@@ -1554,6 +1537,11 @@
       },
       "stillTracking": "Vehicle status, speed and update times in the list and window headers keep updating.",
       "unavailable": "Map unavailable"
+    },
+    "windows": {
+      "label": "Live map for {plate}",
+      "reset": "Reset layout",
+      "hint": "Drag a title bar to move · drag the corner to resize · double-click to maximize"
     }
   }
 }

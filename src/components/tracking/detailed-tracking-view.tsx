@@ -20,13 +20,11 @@ import {
   List,
   Map as MapIcon,
   MapPin,
-  Pencil,
   Radio,
   RefreshCw,
   RotateCcw,
   Search,
   Share2,
-  Trash2,
   Truck,
   User,
   X,
@@ -885,7 +883,6 @@ export function DetailedTrackingView() {
                 <th className="py-2.5 px-3 text-right min-w-[70px]">Temp3.</th>
                 <th className="py-2.5 px-3 text-center min-w-[55px]">Map</th>
                 <th className="py-2.5 px-3 text-center min-w-[55px]">Share</th>
-                <th className="py-2.5 px-3 text-center min-w-[80px]">Actions</th>
               </tr>
             </thead>
 
@@ -893,7 +890,7 @@ export function DetailedTrackingView() {
             <tbody className="divide-y divide-border/60">
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={18} className="py-12 text-center text-muted-foreground text-xs">
+                  <td colSpan={17} className="py-12 text-center text-muted-foreground text-xs">
                     {vehiclesQuery.isLoading ? (
                       <span className="inline-flex items-center gap-2">
                         <RefreshCw className="size-4 animate-spin text-primary" />
@@ -1076,26 +1073,6 @@ export function DetailedTrackingView() {
                         >
                           {copiedId === v.id ? <Check className="size-3.5 text-emerald-600" /> : <Share2 className="size-3.5" />}
                         </button>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3 px-3 text-center">
-                        <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                          <button
-                            type="button"
-                            title="Edit vehicle"
-                            className="hover:text-foreground transition-colors cursor-pointer"
-                          >
-                            <Pencil className="size-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            title="Delete vehicle"
-                            className="hover:text-rose-500 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="size-3.5 text-rose-400 hover:text-rose-600" />
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   );

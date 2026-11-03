@@ -5,7 +5,16 @@ import { APIProvider, Map as GoogleMap } from "@vis.gl/react-google-maps";
 import { History, LayoutGrid, Loader2, Map as MapIcon, Maximize2, RotateCw, Truck, X } from "lucide-react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 import { Alert } from "@/components/ui/alert";
 import { fetchVehiclePage, fetchVehiclesById, fetchVehicleTypes, type MultiVehicle } from "@/lib/multi-tracking/api";
 import {
@@ -13,13 +22,16 @@ import {
   MAX_SINGLE,
   PRELOAD_OPTIONS,
   trailColor,
-  windowSize,
+  defaultWindowRect,
+  parseLayout,
+  type WindowRect,
   type PreloadMinutes,
   type ViewMode,
 } from "@/lib/multi-tracking/core";
 import { cn } from "@/lib/utils";
 import { Age } from "./age";
 import { useMultiTrackFeed, type FeedPhase } from "./feed";
+import { FloatingWindow } from "./floating-window";
 import { blocksAllMaps, MapsProblemBanner, MapUnavailable, useMapElementFailed, useMapsProblem } from "./maps-health";
 import { STATUS_COLOR, TrackMap, type MapEntry } from "./track-map";
 import { VehicleList, type ListRow } from "./vehicle-list";
@@ -140,6 +152,7 @@ function Workspace({ userKey, apiKey }: { userKey: string; apiKey: string }) {
   const onClose = useCallback((id: string) => controller.toggle(id, null), [controller]);
 
   const [fitKey, setFitKey] = useState(0);
+  const windows = useWindowLayout(userKey, selected);
   const dark = mounted && prefersDark();
 
   const singleEntries = useMemo(
@@ -184,6 +197,7 @@ function Workspace({ userKey, apiKey }: { userKey: string; apiKey: string }) {
           errorText={feed.error ? te(feed.error) : null}
           onRetry={() => controller.retry()}
           onFit={view === "single" && selected.length > 1 ? () => setFitKey((k) => k + 1) : undefined}
+          onResetLayout={view === "grid" && windows.changed ? windows.reset : undefined}
         />
 
         <Notice notice={feed.notice} onDismiss={() => controller.dismissNotice()} />
@@ -195,55 +209,40 @@ function Workspace({ userKey, apiKey }: { userKey: string; apiKey: string }) {
           ) : !feed.restored || !mounted ? (
             <div className="h-full min-h-[300px] animate-pulse rounded-2xl bg-surface-2" />
           ) : view === "grid" ? (
-            // TouchTraks layout: a blurred map behind floating windows, each ¼ width × ⅓ height,
-            // filling from the bottom-right corner leftwards, then up (4 × 3 = 12).
+            // TouchTraks layout: a blurred map behind floating windows that can be moved and resized,
+            // placed by default from the bottom-right corner leftwards, then up.
             <div className="relative isolate overflow-hidden rounded-2xl lg:h-full lg:border lg:border-border/60">
               {mapsDown ? null : <BackgroundMap dark={dark} />}
               {selected.length === 0 ? (
                 <EmptyState overlay />
               ) : (
-                <div className="relative flex flex-col gap-3 lg:absolute lg:inset-0 lg:flex-row-reverse lg:flex-wrap-reverse lg:content-start lg:gap-0 lg:p-1.5">
-                  <AnimatePresence initial={false}>
-                    {selected.map((id) => {
-                      const v = known.get(id);
-                      const track = tracks.get(id);
-                      if (!track) return null;
-                      return (
-                        <motion.div
-                          key={id}
-                          className="h-[300px] min-h-0 lg:h-(--win-h) lg:w-(--win-w) lg:p-1.5"
-                          initial={{ opacity: 0, y: 18, rotateX: 10, scale: 0.97 }}
-                          animate={{ opacity: 1, y: 0, rotateX: 0, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.95 }}
-                          transition={{ type: "spring", stiffness: 220, damping: 24 }}
-                          // Bigger windows when fewer vehicles are tracked (windowSize).
-                          style={
-                            {
-                              transformOrigin: "50% 100%",
-                              "--win-w": `${windowSize(selected.length).width}%`,
-                              "--win-h": `${windowSize(selected.length).height}%`,
-                            } as React.CSSProperties
-                          }
-                        >
-                          <VehicleTile
-                            id={id}
-                            plate={v?.plateNo ?? `#${id}`}
-                            name={v?.vehicleName ?? null}
-                            typeName={typeName(v?.vehicleTypeId ?? null)}
-                            track={track}
-                            version={version}
-                            preloading={feed.preloading.has(id)}
-                            follow={!followOff[id]}
-                            onFollow={onFollow}
-                            onClose={onClose}
-                            dark={dark}
-                            mapsDown={mapsDown}
-                          />
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
-                </div>
+                <GridWindows
+                  selected={selected}
+                  windows={windows}
+                  render={(id, titleBarProps) => {
+                    const v = known.get(id);
+                    const track = tracks.get(id);
+                    if (!track) return null;
+                    return (
+                      <VehicleTile
+                        id={id}
+                        plate={v?.plateNo ?? `#${id}`}
+                        name={v?.vehicleName ?? null}
+                        typeName={typeName(v?.vehicleTypeId ?? null)}
+                        track={track}
+                        version={version}
+                        preloading={feed.preloading.has(id)}
+                        follow={!followOff[id]}
+                        onFollow={onFollow}
+                        onClose={onClose}
+                        dark={dark}
+                        mapsDown={mapsDown}
+                        titleBarProps={titleBarProps}
+                      />
+                    );
+                  }}
+                  labelOf={(id) => known.get(id)?.plateNo ?? `#${id}`}
+                />
               )}
             </div>
           ) : selected.length === 0 ? (
@@ -271,6 +270,7 @@ function Toolbar(props: {
   errorText: string | null;
   onRetry: () => void;
   onFit?: () => void;
+  onResetLayout?: () => void;
 }) {
   const t = useTranslations("multiTracking");
   return (
@@ -313,6 +313,17 @@ function Toolbar(props: {
           ))}
         </select>
       </label>
+
+      {props.onResetLayout ? (
+        <button
+          type="button"
+          onClick={props.onResetLayout}
+          className="glass-panel flex h-10 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold hover:text-primary"
+        >
+          <LayoutGrid className="size-4" aria-hidden />
+          {t("windows.reset")}
+        </button>
+      ) : null}
 
       {props.onFit ? (
         <button
@@ -535,6 +546,140 @@ function EmptyState({ overlay = false }: { overlay?: boolean }) {
         <h2 className="mt-3 text-base font-bold">{t("title")}</h2>
         <p className="mt-1 text-[13px] text-muted-foreground">{t("body", { grid: MAX_GRID, single: MAX_SINGLE })}</p>
       </motion.div>
+    </div>
+  );
+}
+
+const wideQuery = "(min-width: 1024px)";
+function subscribeWide(fn: () => void) {
+  const mq = window.matchMedia(wideQuery);
+  mq.addEventListener("change", fn);
+  return () => mq.removeEventListener("change", fn);
+}
+/** Floating windows need room (and a mouse); phones get the stacked list. */
+function useWide() {
+  return useSyncExternalStore(
+    subscribeWide,
+    () => window.matchMedia(wideQuery).matches,
+    () => true,
+  );
+}
+
+const layoutKey = (userKey: string) => `kt.multi-tracking.layout.${userKey}`;
+
+function readLayout(userKey: string): Record<string, WindowRect> {
+  try {
+    return parseLayout(window.localStorage.getItem(layoutKey(userKey)));
+  } catch {
+    return {};
+  }
+}
+
+function saveLayout(userKey: string, layout: Record<string, WindowRect>) {
+  try {
+    if (Object.keys(layout).length === 0) window.localStorage.removeItem(layoutKey(userKey));
+    else window.localStorage.setItem(layoutKey(userKey), JSON.stringify(layout));
+  } catch {
+    // Not remembered (storage blocked): the layout still applies until the page reloads.
+  }
+}
+
+/**
+ * Grid view windows. Wide screens: floating windows that can be dragged by their title bar,
+ * resized from the corner and maximized (double-click). A window the user moved or resized keeps
+ * that place (saved per user in this browser); the others follow the default bottom-right layout,
+ * sized by how many are open. Phones: a simple stacked list.
+ */
+/**
+ * Window layout for the grid view, owned by the page so the toolbar can offer "Reset layout":
+ * rects the user set (saved per user in this browser) and which window is maximized.
+ */
+function useWindowLayout(userKey: string, selected: string[]) {
+  const [layout, setLayout] = useState<Record<string, WindowRect>>(() =>
+    typeof window === "undefined" ? {} : readLayout(userKey),
+  );
+  const [maximized, setMaximized] = useState<string | null>(null);
+  const update = (next: Record<string, WindowRect>) => {
+    setLayout(next);
+    saveLayout(userKey, next);
+  };
+  return {
+    layout,
+    update,
+    maximized,
+    setMaximized,
+    /** Something differs from the automatic layout. */
+    changed: maximized !== null || selected.some((id) => layout[id]),
+    /** Back to the automatic layout for the open windows. */
+    reset: () => {
+      setMaximized(null);
+      update(Object.fromEntries(Object.entries(layout).filter(([id]) => !selected.includes(id))));
+    },
+  };
+}
+
+function GridWindows({
+  selected,
+  windows,
+  render,
+  labelOf,
+}: {
+  selected: string[];
+  windows: ReturnType<typeof useWindowLayout>;
+  render: (id: string, titleBarProps?: HTMLAttributes<HTMLElement>) => ReactNode;
+  labelOf: (id: string) => string;
+}) {
+  const t = useTranslations("multiTracking");
+  const wide = useWide();
+  const [order, setOrder] = useState<string[]>([]);
+  const { layout, update, maximized, setMaximized } = windows;
+  const rtl = typeof document !== "undefined" && document.documentElement.dir === "rtl";
+  const focus = (id: string) => setOrder((o) => (o.at(-1) === id ? o : [...o.filter((x) => x !== id), id]));
+
+  if (!wide) {
+    return (
+      <div className="grid gap-3">
+        {selected.map((id) => (
+          <div key={id} className="h-[300px]">
+            {render(id)}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div data-window-area className="absolute inset-1.5">
+      <AnimatePresence initial={false}>
+        {selected.map((id, index) => {
+          const content = (props: HTMLAttributes<HTMLElement>) => render(id, props);
+          return (
+            <motion.div
+              key={id}
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 240, damping: 26 }}
+              style={{ transformOrigin: "50% 100%" }}
+            >
+              <FloatingWindow
+                rect={layout[id] ?? defaultWindowRect(index, selected.length, rtl)}
+                maximized={maximized === id}
+                z={maximized === id ? 50 : 10 + Math.max(0, order.indexOf(id))}
+                onChange={(rect) => update({ ...layout, [id]: rect })}
+                onFocus={() => focus(id)}
+                onToggleMax={() => setMaximized((m) => (m === id ? null : id))}
+                label={t("windows.label", { plate: labelOf(id) })}
+              >
+                {content}
+              </FloatingWindow>
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+      <p className="pointer-events-none absolute bottom-2 start-2 z-[5] hidden rounded-full bg-surface/70 px-3 py-1 text-[11px] text-muted-foreground backdrop-blur xl:block">
+        {t("windows.hint")}
+      </p>
     </div>
   );
 }

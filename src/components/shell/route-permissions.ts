@@ -10,12 +10,9 @@ export const TRACKING_PERMISSION: PermissionModule = "live-position";
 const ROUTES: Array<[prefix: string, module: PermissionModule]> = [
   ["/live", TRACKING_PERMISSION],
   ["/detailed", TRACKING_PERMISSION],
-  ["/live-traversed", TRACKING_PERMISSION],
   ["/history", TRACKING_PERMISSION],
-  ["/live-route", TRACKING_PERMISSION],
   ["/multi", TRACKING_PERMISSION],
   ["/heatmap", TRACKING_PERMISSION],
-  ["/video-monitoring", TRACKING_PERMISSION],
   ["/sales", TRACKING_PERMISSION],
   ["/tracking", TRACKING_PERMISSION],
 ];

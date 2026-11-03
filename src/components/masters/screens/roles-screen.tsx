@@ -1,13 +1,10 @@
 "use client";
 
-import { Eye, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { ConfirmDelete } from "@/components/masters/confirm-delete";
-import { DataTable } from "@/components/masters/data-table";
 import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
-import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
+import { FormSection } from "@/components/masters/page-header";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -18,8 +15,6 @@ import { MAX_LENGTH, validateRole } from "@/lib/account-management/validation";
 import {
   CREATE_ROLE,
   CREATE_ROLE_PERMISSION,
-  DELETE_ROLE,
-  DELETE_ROLE_PERMISSION,
   ROLES,
   UPDATE_ROLE,
   UPDATE_ROLE_PERMISSION,
@@ -52,150 +47,9 @@ function effectiveFlags(modules: Module[], saved: RolePermission[]): Record<stri
   );
 }
 
-/** 4. Menu Setting: roles and what each can view, add, edit and delete per module. */
-export function RolesScreen() {
-  const t = useTranslations("masters.am.roles");
-  const tc = useTranslations("masters.common");
-  const lookups = useVmLookups();
-  const list = useVmQuery<RolesResult>("am-roles", ROLES);
-  const { run, refresh } = useVmMutations();
-  const errorText = useErrorText();
-  const [editing, setEditing] = useState<Role | "new" | null>(null);
-  const [deleting, setDeleting] = useState<Role | null>(null);
-
-  const data = list.data;
-  const modules = useMemo(() => [...(data?.modules.data ?? [])].sort((a, b) => Number(a.id) - Number(b.id)), [data]);
-  const permsByRole = useMemo(() => {
-    const map = new Map<string, RolePermission[]>();
-    for (const p of data?.rolePermissions.data ?? []) map.set(p.roleId, [...(map.get(p.roleId) ?? []), p]);
-    return map;
-  }, [data]);
-  // A company's roles, plus platform-wide roles (no company) when viewing all companies.
-  const rows = useMemo(
-    () =>
-      [...(data?.roles.data ?? [])]
-        .filter((r) => (r.companyId === null ? lookups.companyId === null : lookups.inScope(r.companyId)))
-        .sort((a, b) => Number(a.companyId === null) - Number(b.companyId === null) || a.name.localeCompare(b.name)),
-    [data, lookups],
-  );
-  // Platform-wide roles (no company) and other companies' roles are view only here.
-  const own = (r: Role) => r.companyId !== null && r.companyId === lookups.companyId;
-  const editable = (r: Role) => own(r) && lookups.allow("core", "edit");
-
-  const access = (r: Role) => {
-    const flags = Object.values(effectiveFlags(modules, permsByRole.get(r.id) ?? []));
-    const allowed = flags.reduce((n, f) => n + ACTIONS.filter((a) => f[a]).length, 0);
-    return allowed === flags.length * ACTIONS.length
-      ? t("fullAccess")
-      : t("partialAccess", { count: flags.filter((f) => f.canView).length, total: flags.length });
-  };
-
-  return (
-    <div className="grid gap-4">
-      <PageHeader
-        title={t("title")}
-        description={t("description")}
-        actions={
-          <Button onClick={() => setEditing("new")} disabled={!lookups.allow("core", "add") || !list.isSuccess}>
-            <Plus />
-            {t("add")}
-          </Button>
-        }
-      />
-      <DataTable
-        caption={t("title")}
-        rows={rows}
-        loading={list.isPending}
-        error={list.error ? errorText(list.error) : null}
-        emptyText={t("empty")}
-        searchText={(r) => r.name}
-        onEdit={lookups.allow("core", "edit") ? (r) => editable(r) && setEditing(r) : undefined}
-        onDelete={lookups.allow("core", "delete") ? (r) => own(r) && setDeleting(r) : undefined}
-        rowActions={(r) =>
-          editable(r) ? null : (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              onClick={() => setEditing(r)}
-              aria-label={t("view")}
-              title={t("view")}
-            >
-              <Eye />
-            </Button>
-          )
-        }
-        columns={[
-          {
-            key: "name",
-            header: t("f.name"),
-            cell: (r) => (
-              <span className="inline-flex items-center gap-1.5 font-medium">
-                {r.name}
-                {r.companyId === null ? <StatusBadge tone="info">{t("platformRole")}</StatusBadge> : null}
-              </span>
-            ),
-          },
-          ...(lookups.isPlatform
-            ? [
-                {
-                  key: "account",
-                  header: t("account"),
-                  cell: (r: Role) => (r.companyId ? lookups.companyName(r.companyId) : "—"),
-                },
-              ]
-            : []),
-          { key: "access", header: t("access"), cell: access },
-          {
-            key: "status",
-            header: tc("status"),
-            cell: (r) => (
-              <StatusBadge tone={r.status === "active" ? "ok" : "muted"}>
-                {r.status === "active" ? tc("statuses.active") : tc("statuses.inactive")}
-              </StatusBadge>
-            ),
-          },
-        ]}
-      />
-
-      {editing !== null && data ? (
-        <RoleSheet
-          role={editing === "new" ? null : editing}
-          readOnly={editing !== "new" && !editable(editing)}
-          modules={modules}
-          saved={editing === "new" ? [] : (permsByRole.get(editing.id) ?? [])}
-          siblings={data.roles.data.filter(
-            (r) => r.companyId === lookups.companyId && (editing === "new" || r.id !== editing.id),
-          )}
-          onClose={() => setEditing(null)}
-        />
-      ) : null}
-
-      <ConfirmDelete
-        open={deleting !== null}
-        onOpenChange={(open) => !open && setDeleting(null)}
-        name={deleting?.name ?? ""}
-        failHint={t("deleteInUse")}
-        onConfirm={async () => {
-          if (!deleting) return;
-          await run(DELETE_ROLE, { id: deleting.id });
-          // Its permission rows are only removed once the role itself is gone (a role in use stays intact).
-          await Promise.all(
-            (permsByRole.get(deleting.id) ?? []).map((p) =>
-              run(DELETE_ROLE_PERMISSION, { id: p.id }).catch(() => undefined),
-            ),
-          );
-          await refresh();
-          toast.success(tc("deleted"));
-        }}
-      />
-    </div>
-  );
-}
-
 /**
  * The permission drawer for one role, opened from elsewhere (the users list's role action).
- * Same data and the same "who may edit" rules as RolesScreen; `notice` explains the context.
+ * `notice` explains the context.
  */
 export function RolePermissionsSheet({
   roleId,
