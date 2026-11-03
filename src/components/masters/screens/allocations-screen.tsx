@@ -227,7 +227,8 @@ function AllocateSheet({ vehiclesOut, onClose }: { vehiclesOut: Set<string>; onC
       >
         <FormSection title={t("sections.who")}>
           <div className="flex gap-4 sm:col-span-2" role="radiogroup" aria-label={t("cols.allocateTo")}>
-            {(["driver", "project"] as const).map((k) => (
+            {/* "project" is commented out for now; add it back to show the Project option again. */}
+            {(["driver" /* , "project" */] as const).map((k) => (
               <label key={k} className="inline-flex items-center gap-2 text-sm">
                 <input type="radio" name="allocate-to" checked={to === k} onChange={() => setTo(k)} className="accent-primary" />
                 {t(`to.${k}`)}
