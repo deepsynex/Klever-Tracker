@@ -137,6 +137,22 @@ describe("aggregateHeatmap", () => {
     expect(engineOff.cell_count).toBe(0);
   });
 
+  it("dwell: a silent gap inside a stop is still capped (tracker asleep at one spot)", () => {
+    // Two fixes at the same spot 3 hours apart form a stop, but nothing was heard in between.
+    const asleep = [fix(0, ...STOP, { speed: 0, ignition: false }), fix(180, ...STOP, { speed: 0, ignition: false })];
+    const r = aggregateHeatmap([[...asleep, fix(190, ...OTHER)]], { mode: "dwell", zoom: 14 });
+    const atStop = r.cells.filter((c) => Math.abs(c.lat - STOP[0]) < 0.002).reduce((sum, c) => sum + c.weight, 0);
+    expect(atStop).toBe(DWELL_CAP_SECONDS + 10 * 60); // 30 min cap + the 10 min until the next fix
+  });
+
+  it("density: a cell's centre leans towards its stop, not halfway to one passing fix", () => {
+    const passing = fix(60, STOP[0] - 0.005, STOP[1], { speed: 40 }); // ~550 m away, same zoom-10 cell
+    const r = aggregateHeatmap([[...parked(0, 30, false), passing]], { mode: "density", zoom: 10 });
+    expect(r.cell_count).toBe(1);
+    expect(r.cells[0].weight).toBe(32);
+    expect(Math.abs(r.cells[0].lat - STOP[0])).toBeLessThan(0.0006); // unweighted: ~0.0025 off
+  });
+
   it("filters cells to the bbox but keeps data bounds for fitting the map", () => {
     const r = aggregateHeatmap([[fix(0, ...STOP), fix(10, ...OTHER)]], {
       mode: "density",

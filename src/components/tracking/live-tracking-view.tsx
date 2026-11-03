@@ -15,7 +15,11 @@ import {
 } from "@/lib/graphql/operations";
 import { DUBAI_CENTER } from "@/lib/heatmap/client";
 import { bearing, metres } from "@/lib/history/road-path";
+import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { cn } from "@/lib/utils";
+
+/** API times are UTC; show them in the user's / company's time zone like the rest of the app. */
+const TIME_PATTERN = "dd-MM-yyyy HH:mm";
 
 type LiveVehicle = {
   id: string;
@@ -50,6 +54,7 @@ function headingFor(fixes: PositionHistoryPoint[]): number | null {
 /** The /track page's navigation arrow, turned to the vehicle's heading, with its details on hover. */
 function VehicleArrow({ vehicle, selected, hovered }: { vehicle: LiveVehicle; selected: boolean; hovered: boolean }) {
   const t = useTranslations("tracking.marker");
+  const zone = useCompanyTimeZone();
   const status =
     vehicle.status === "moving" ? t("moving", { speed: vehicle.speed }) : vehicle.status === "stopped" ? t("stopped") : t("offline");
 
@@ -96,7 +101,7 @@ function VehicleArrow({ vehicle, selected, hovered }: { vehicle: LiveVehicle; se
           ) : null}
           {vehicle.recordedAt ? (
             <p className="mt-0.5 text-muted-foreground">
-              {t("updated")}: <span className="font-mono text-[10px]" dir="ltr">{vehicle.recordedAt.slice(0, 16)}</span>
+              {t("updated")}: <span className="font-mono text-[10px]" dir="ltr">{formatInCompanyTz(vehicle.recordedAt, zone, TIME_PATTERN)}</span>
             </p>
           ) : null}
           {!selected ? <p className="mt-1.5 text-[10px] text-subtle">{t("track")}</p> : null}
@@ -141,6 +146,7 @@ function MapController({ selected, vehicles }: { selected: LiveVehicle | null; v
 
 export function LiveTrackingView() {
   const tNav = useTranslations("nav");
+  const zone = useCompanyTimeZone();
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
   const [search, setSearch] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
@@ -357,7 +363,9 @@ export function LiveTrackingView() {
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
                     <span>{hasFix ? "GPS Connected" : "No recent GPS fix"}</span>
                     {v.recordedAt && (
-                      <span className="font-mono text-[10px]">{v.recordedAt.slice(0, 16)}</span>
+                      <span className="font-mono text-[10px]" dir="ltr">
+                        {formatInCompanyTz(v.recordedAt, zone, TIME_PATTERN)}
+                      </span>
                     )}
                   </div>
                 </div>

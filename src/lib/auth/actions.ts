@@ -15,7 +15,7 @@ import {
   type LogoutResult,
   type ResetPasswordResult,
 } from "@/lib/graphql/operations";
-import { clearSession, getSessionToken, setSession } from "@/lib/session";
+import { clearSession, getOwnSessionToken, setSession } from "@/lib/session";
 import { fieldErrors, forgotPasswordSchema, loginSchema, resetPasswordSchema } from "./schemas";
 
 export type FormState = {
@@ -88,10 +88,20 @@ export async function resetPasswordAction(_prev: FormState, formData: FormData):
 
 export async function logoutAction(formData: FormData): Promise<void> {
   const locale = localeFrom(formData);
-  // Revoke the token on the backend (B4), so a copied token stops working too. Sign-out still
-  // completes if that call fails (network, already-expired token): the cookie is cleared either way.
-  const token = await getSessionToken();
-  if (token) await kleverRequest<LogoutResult>(LOGOUT, {}, { token }).catch(() => undefined);
+  // Revoke the token on the backend (B4), so a copied token stops working too. Only this browser's
+  // own token: never the shared DEV_AUTH_TOKEN fallback. Sign-out still completes if the call fails
+  // (network, already-expired token): the cookie is cleared either way, and the failure is logged.
+  const token = await getOwnSessionToken();
+  if (token) {
+    const result = await kleverRequest<LogoutResult>(LOGOUT, {}, { token }).catch((err: unknown) => ({
+      ok: false as const,
+      error: { kind: "network", message: err instanceof Error ? err.message : String(err) },
+    }));
+    // An expired or already-revoked token can't be revoked again; anything else may leave it valid.
+    if (!result.ok && result.error.kind !== "unauthenticated") {
+      console.warn(`[logout] token revocation failed (${result.error.kind}): ${result.error.message}`);
+    }
+  }
   await clearSession();
   redirect(`/${locale}/login`);
 }
