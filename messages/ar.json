@@ -303,7 +303,9 @@
     },
     "stats": {
       "totalDistance": "إجمالي المسافة",
-      "duration": "المدة",
+      "drivingTime": "وقت القيادة",
+      "stoppedTime": "وقت التوقف",
+      "timeSpan": "الوقت الكلي من أول نقطة GPS إلى آخر نقطة: {value}",
       "maxSpeed": "أقصى سرعة",
       "avgSpeed": "متوسط السرعة",
       "pointsCount": "نقاط GPS",
