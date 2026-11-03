@@ -4,6 +4,7 @@ import { HeatmapLayer } from "@deck.gl/aggregation-layers";
 import { GoogleMapsOverlay } from "@deck.gl/google-maps";
 import { AdvancedMarker, APIProvider, InfoWindow, Map, useMap, type MapCameraChangedEvent } from "@vis.gl/react-google-maps";
 import { Bike, CarFront, Truck } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Bbox, HeatmapCell } from "@/lib/heatmap/aggregate";
 import { DUBAI_CENTER, type Rgb } from "@/lib/heatmap/client";
@@ -34,6 +35,7 @@ type Props = {
 
 /** Google base map with a deck.gl HeatmapLayer and vehicle position markers. */
 export default function HeatmapMap({ apiKey, cells, bounds, fitKey, style, onZoomChange, markers }: Props) {
+  const t = useTranslations("heatmap");
   const [activeMarker, setActiveMarker] = useState<VehicleMapMarker | null>(null);
 
   return (
@@ -97,7 +99,8 @@ export default function HeatmapMap({ apiKey, cells, bounds, fitKey, style, onZoo
                   <div><span className="font-semibold text-foreground">Speed:</span> {activeMarker.speed} km/h</div>
                 )}
                 {typeof activeMarker.totalPoints === "number" && (
-                  <div><span className="font-semibold text-foreground">Points in DB:</span> {activeMarker.totalPoints}</div>
+                  <div><span className="font-semibold text-foreground">{t("summary.pointsInPeriod")}:</span>{" "}
+                    {activeMarker.totalPoints.toLocaleString("en")}</div>
                 )}
                 <div className="mt-1.5 pt-1 border-t border-border/60 text-[10px] text-emerald-600 font-semibold">
                   ✓ Verified Live Database Telemetry

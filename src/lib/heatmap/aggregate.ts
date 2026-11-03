@@ -5,7 +5,14 @@
  * exposes only `positionHistory`, not SQL, so the grid is plain lat/lng flooring rather than
  * PostGIS ST_SnapToGrid. The dwell weight mirrors
  * `LEAD(recorded_at) OVER (PARTITION BY vehicle ORDER BY recorded_at) - recorded_at`.
+ *
+ * Parked GPS drift is collapsed first, with the same stop detection as the history screen
+ * (src/lib/history/clean-track.ts): a parked tracker scatters its fixes up to ~200 m around the
+ * real spot, which smeared parking places across several cells. Each stop is weighted at its
+ * median spot instead, by its real number of fixes (density) or its real duration (dwell, idle).
  */
+
+import { cleanTrack as findStops } from "@/lib/history/clean-track";
 
 export const WEIGHT_MODES = ["density", "dwell", "idle"] as const;
 export type WeightMode = (typeof WEIGHT_MODES)[number];
@@ -42,8 +49,9 @@ export const IDLE_MAX_SPEED_KMH = 3;
 export const MAX_PLAUSIBLE_SPEED_KMH = 300;
 export const MAX_CELLS = 5000;
 
-type Fix = { t: number; lat: number; lng: number; speed: number | null; ignition: boolean | null };
-type WeightedFix = { lat: number; lng: number; weight: number };
+type Fix = { t: number; lat: number; lng: number; speed: number | null; ignition: boolean | null; recordedAt: string };
+/** `n`: how many raw GPS fixes this weight stands for (a stop stands for all of its fixes). */
+type WeightedFix = { lat: number; lng: number; weight: number; n: number };
 
 /** Klever timestamps are UTC but may come without a zone suffix. */
 export function parseUtc(value: string): number {
@@ -74,7 +82,7 @@ function toFix(p: RawPosition): Fix | null {
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
   const t = parseUtc(p.recordedAt);
   if (!Number.isFinite(t)) return null;
-  return { t, lat, lng, speed: p.speed ?? null, ignition: p.ignition ?? null };
+  return { t, lat, lng, speed: p.speed ?? null, ignition: p.ignition ?? null, recordedAt: p.recordedAt };
 }
 
 /**
@@ -101,19 +109,50 @@ export function cleanTrack(track: RawPosition[]): { fixes: Fix[]; dropped: numbe
   return { fixes, dropped: track.length - fixes.length };
 }
 
-/** Weight per fix. Dwell = seconds until the vehicle's next fix, capped; the last fix gets 0. */
+/**
+ * Weights for one vehicle's clean fixes (oldest first).
+ *
+ * - density: 1 per fix; a stop counts all of its fixes, at its median spot.
+ * - dwell: seconds until the next fix, capped at DWELL_CAP_SECONDS (a silent device is offline,
+ *   not parked). A stop counts its whole observed duration: fixes kept arriving all along.
+ * - idle: engine on while standing. A stop is idle when most of its fixes report the ignition on
+ *   (this tracker sends stray "ignition off" fixes, and reports up to ~20 km/h while parked, so a
+ *   per-fix speed test isn't reliable there). Outside stops: ignition on and under 3 km/h.
+ */
 export function weighFixes(fixes: Fix[], mode: WeightMode): WeightedFix[] {
+  const { points, stops } = findStops(
+    fixes.map((f) => ({ ...f, locationLat: f.lat, locationLng: f.lng })),
+  );
+  const stopAt = new Map(stops.map((stop) => [stop.at, stop]));
+  const gap = (i: number) => {
+    const next = points[i + 1];
+    return next ? Math.min((next.t - points[i].t) / 1000, DWELL_CAP_SECONDS) : 0;
+  };
+
   const out: WeightedFix[] = [];
-  for (let i = 0; i < fixes.length; i++) {
-    const f = fixes[i];
+  for (let i = 0; i < points.length; i++) {
+    const stop = stopAt.get(i);
+    if (stop) {
+      // points[i] is the arrival and points[i + 1] the departure, both at the stop's median spot.
+      const seconds = (points[i + 1].t - points[i].t) / 1000;
+      const at = { lat: stop.lat, lng: stop.lng, n: stop.fixes };
+      if (mode === "density") out.push({ ...at, weight: stop.fixes });
+      else if (mode === "dwell") {
+        out.push({ ...at, weight: seconds });
+        // The departure fix is still at the spot until the next fix: counted like any other gap.
+        out.push({ lat: stop.lat, lng: stop.lng, n: 0, weight: gap(i + 1) });
+      } else if (stop.ignitionOn * 2 > stop.fixes) out.push({ ...at, weight: seconds });
+      i++; // skip the departure fix
+      continue;
+    }
+
+    const f = points[i];
     if (mode === "density") {
-      out.push({ lat: f.lat, lng: f.lng, weight: 1 });
+      out.push({ lat: f.lat, lng: f.lng, weight: 1, n: 1 });
       continue;
     }
     if (mode === "idle" && !(f.ignition === true && f.speed != null && f.speed < IDLE_MAX_SPEED_KMH)) continue;
-    const next = fixes[i + 1];
-    const seconds = next ? Math.min((next.t - f.t) / 1000, DWELL_CAP_SECONDS) : 0;
-    out.push({ lat: f.lat, lng: f.lng, weight: seconds });
+    out.push({ lat: f.lat, lng: f.lng, weight: gap(i), n: 1 });
   }
   return out;
 }
@@ -148,7 +187,7 @@ export function aggregateHeatmap(
     dropped += cleaned.dropped;
     // Weigh before the bbox filter so a fix just inside the view still knows its next fix.
     for (const p of weighFixes(cleaned.fixes, mode)) {
-      totalPoints++;
+      totalPoints += p.n;
       if (p.weight <= 0) continue;
       bounds = bounds
         ? {

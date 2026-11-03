@@ -5,7 +5,7 @@ import { Globe, KeyRound } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
 import { toast } from "sonner";
-import { AM_BASE, CHANGE_PASSWORD_HREF } from "@/components/masters/am-modules";
+import { CHANGE_PASSWORD_HREF } from "@/components/masters/am-modules";
 import { FormSection, PageHeader } from "@/components/masters/page-header";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -277,7 +277,7 @@ function TimeZoneSetting() {
             {isCompanyAdmin ? (
               <>
                 {" "}
-                <Link href={`${AM_BASE}/accounts`} className="font-semibold text-primary hover:underline">
+                <Link href="/accounts" className="font-semibold text-primary hover:underline">
                   {t("timeZoneCompanyLink")}
                 </Link>
               </>

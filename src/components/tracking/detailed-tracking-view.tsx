@@ -9,7 +9,6 @@ import {
   Calendar,
   Car,
   CarFront,
-  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -24,7 +23,6 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
-  Share2,
   Truck,
   User,
   X,
@@ -135,7 +133,6 @@ export function DetailedTrackingView() {
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [mapModalVehicle, setMapModalVehicle] = useState<DetailedVehicleRow | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // 2. Fetch real DB vehicles with live GPS positions (scoped company-wise)
   const scopedVehicles = lookups.vehicles;
@@ -360,15 +357,6 @@ export function DetailedTrackingView() {
       v.temp3,
     ]);
     await downloadSheet([headers, ...rows], "detailed-tracking.xlsx");
-  };
-
-  // Copy share link
-  const handleShare = (vehicle: DetailedVehicleRow) => {
-    const url = `${window.location.origin}/live?vehicle=${encodeURIComponent(vehicle.vehicleNo)}`;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopiedId(vehicle.id);
-      setTimeout(() => setCopiedId(null), 2000);
-    });
   };
 
   const allSelected = filteredRows.length > 0 && filteredRows.every((v) => selectedIds.has(v.id));
@@ -882,7 +870,6 @@ export function DetailedTrackingView() {
                 <th className="py-2.5 px-3 text-right min-w-[70px]">Temp2.</th>
                 <th className="py-2.5 px-3 text-right min-w-[70px]">Temp3.</th>
                 <th className="py-2.5 px-3 text-center min-w-[55px]">Map</th>
-                <th className="py-2.5 px-3 text-center min-w-[55px]">Share</th>
               </tr>
             </thead>
 
@@ -890,7 +877,7 @@ export function DetailedTrackingView() {
             <tbody className="divide-y divide-border/60">
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={17} className="py-12 text-center text-muted-foreground text-xs">
+                  <td colSpan={16} className="py-12 text-center text-muted-foreground text-xs">
                     {vehiclesQuery.isLoading ? (
                       <span className="inline-flex items-center gap-2">
                         <RefreshCw className="size-4 animate-spin text-primary" />
@@ -1060,18 +1047,6 @@ export function DetailedTrackingView() {
                           className="inline-flex size-6 items-center justify-center text-emerald-700 hover:text-emerald-800 transition-colors cursor-pointer"
                         >
                           <MapIcon className="size-4" />
-                        </button>
-                      </td>
-
-                      {/* Share Button */}
-                      <td className="py-3 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleShare(v)}
-                          title="Copy share link"
-                          className="inline-flex size-6 items-center justify-center text-sky-600 hover:text-sky-700 transition-colors cursor-pointer"
-                        >
-                          {copiedId === v.id ? <Check className="size-3.5 text-emerald-600" /> : <Share2 className="size-3.5" />}
                         </button>
                       </td>
                     </tr>

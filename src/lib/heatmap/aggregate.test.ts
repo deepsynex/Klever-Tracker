@@ -99,6 +99,44 @@ describe("aggregateHeatmap", () => {
     expect(r.cells).toEqual([expect.objectContaining({ weight: 600 })]);
   });
 
+  /**
+   * A standing vehicle: one fix a minute for `minutes`, scattered up to ~80 m around STOP, with
+   * speed noise up to `maxNoiseKmh` (VERIFY-1 reports up to ~15 km/h while parked).
+   */
+  function parked(startMin: number, minutes: number, ignition: boolean | null, maxNoiseKmh = 15): RawPosition[] {
+    return Array.from({ length: minutes + 1 }, (_, k) =>
+      fix(startMin + k, STOP[0] + ((k * 37) % 13) * 0.00006 - 0.0004, STOP[1] + ((k * 53) % 11) * 0.00007 - 0.0004, {
+        speed: (k * 7) % (maxNoiseKmh + 1),
+        ignition,
+      }),
+    );
+  }
+
+  it("density: parked drift collapses into one spot instead of smearing across cells", () => {
+    const r = aggregateHeatmap([parked(0, 30, false)], { mode: "density", zoom: 18 });
+    expect(r.cell_count).toBe(1);
+    expect(r.cells[0].weight).toBe(31); // every fix still counts
+    expect(r.total_points).toBe(31);
+  });
+
+  it("dwell: a 2-hour observed stop counts in full; only silent gaps are capped", () => {
+    const r = aggregateHeatmap([[...parked(0, 120, false), fix(130, ...OTHER)]], { mode: "dwell", zoom: 14 });
+    const atStop = r.cells.filter((c) => Math.abs(c.lat - STOP[0]) < 0.002).reduce((sum, c) => sum + c.weight, 0);
+    expect(atStop).toBe(130 * 60); // 120 min parked in full + the 10 min until the next fix
+  });
+
+  it("idle: a stop counts when most of its fixes report the ignition on, despite speed noise", () => {
+    // 0–4 km/h of noise: fixes at 3–4 km/h failed the old per-fix "under 3 km/h" test.
+    const idling = parked(0, 20, true, 4);
+    idling[5] = { ...idling[5], ignition: false }; // a stray "ignition off" fix
+    const r = aggregateHeatmap([[...idling, fix(30, ...OTHER)]], { mode: "idle", zoom: 14 });
+    expect(r.cells).toEqual([expect.objectContaining({ weight: 20 * 60 })]);
+    expect(r.total_points).toBe(21);
+
+    const engineOff = aggregateHeatmap([[...parked(0, 20, false), fix(30, ...OTHER)]], { mode: "idle", zoom: 14 });
+    expect(engineOff.cell_count).toBe(0);
+  });
+
   it("filters cells to the bbox but keeps data bounds for fitting the map", () => {
     const r = aggregateHeatmap([[fix(0, ...STOP), fix(10, ...OTHER)]], {
       mode: "density",

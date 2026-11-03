@@ -46,7 +46,13 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
     startTransition(() => formAction(data));
   });
 
-  const fieldError = (name: keyof LoginInput) => errors[name]?.message ?? state.fields?.[name];
+  const tv = useTranslations("validation");
+  // Errors are `validation.*` keys, or a server message prefixed with "server:" (shown as-is), as in <Field>.
+  const fieldError = (name: keyof LoginInput) => {
+    const key = errors[name]?.message ?? state.fields?.[name];
+    if (!key) return undefined;
+    return key.startsWith("server:") ? key.slice(7) : tv(key);
+  };
   const bannerError = state.status === "error" && state.error && state.error !== "invalid_input" ? state.error : null;
 
   const tg = useTranslations("auth.login.google");
@@ -89,8 +95,8 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
 
       {/* Welcome Heading */}
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-extrabold text-[#111827] tracking-tight">Welcome Back</h2>
-        <p className="mt-1 text-[13.5px] text-slate-500">Sign in to access your fleet tracking dashboard</p>
+        <h1 className="text-2xl font-extrabold text-[#111827] tracking-tight">{t("heading")}</h1>
+        <p className="mt-1 text-[13.5px] text-slate-500">{t("tagline")}</p>
       </div>
 
       {/* Feedback Banners */}
@@ -187,7 +193,7 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 p-1 text-slate-400 hover:text-slate-700 transition-colors"
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-label={showPassword ? t("hidePassword") : t("showPassword")}
             >
               {showPassword ? (
                 /* Eye Open */

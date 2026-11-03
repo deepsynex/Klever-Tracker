@@ -8,7 +8,8 @@ describe("requiredModule", () => {
 
   it("leaves the dashboard, masters and look-alike paths alone", () => {
     expect(requiredModule("/dashboard")).toBeNull();
-    expect(requiredModule("/masters/account-management/profile")).toBeNull();
+    expect(requiredModule("/profile")).toBeNull();
+    expect(requiredModule("/users")).toBeNull();
     expect(requiredModule("/livestock")).toBeNull();
   });
 });
