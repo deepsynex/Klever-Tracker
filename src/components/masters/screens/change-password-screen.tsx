@@ -65,10 +65,10 @@ export function ChangePasswordScreen() {
   );
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader title={t("title")} description={t("description")} />
       <form
-        className="grid max-w-md gap-4 rounded-card border border-border bg-surface p-5"
+        className="grid max-w-md gap-4 rounded-2xl border border-border/70 bg-surface shadow-sm p-6"
         noValidate
         onSubmit={(e) => {
           e.preventDefault();

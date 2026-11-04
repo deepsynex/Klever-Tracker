@@ -1,13 +1,13 @@
 "use client";
 
-import { Eye, Plus } from "lucide-react";
+import { CircleCheck, Eye, KeyRound, Plus, RotateCcw, ShieldCheck, ShieldHalf } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
-import { DataTable } from "@/components/masters/data-table";
+import { DataTable, RowAction } from "@/components/masters/data-table";
 import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
-import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
+import { FilterSelect, FormSection, KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -62,6 +62,7 @@ export function RolesScreen() {
   const errorText = useErrorText();
   const [editing, setEditing] = useState<Role | "new" | null>(null);
   const [deleting, setDeleting] = useState<Role | null>(null);
+  const [statusFilter, setStatusFilter] = useState("");
 
   const data = list.data;
   const modules = useMemo(() => [...(data?.modules.data ?? [])].sort((a, b) => Number(a.id) - Number(b.id)), [data]);
@@ -71,27 +72,31 @@ export function RolesScreen() {
     return map;
   }, [data]);
   // A company's roles, plus platform-wide roles (no company) when viewing all companies.
-  const rows = useMemo(
+  const allRows = useMemo(
     () =>
       [...(data?.roles.data ?? [])]
         .filter((r) => (r.companyId === null ? lookups.companyId === null : lookups.inScope(r.companyId)))
         .sort((a, b) => Number(a.companyId === null) - Number(b.companyId === null) || a.name.localeCompare(b.name)),
     [data, lookups],
   );
+  const rows = useMemo(() => allRows.filter((r) => !statusFilter || r.status === statusFilter), [allRows, statusFilter]);
   // Platform-wide roles (no company) and other companies' roles are view only here.
   const own = (r: Role) => r.companyId !== null && r.companyId === lookups.companyId;
   const editable = (r: Role) => own(r) && lookups.allow("core", "edit");
 
+  const isFull = (r: Role) => {
+    const flags = Object.values(effectiveFlags(modules, permsByRole.get(r.id) ?? []));
+    return flags.reduce((n, f) => n + ACTIONS.filter((a) => f[a]).length, 0) === flags.length * ACTIONS.length;
+  };
   const access = (r: Role) => {
     const flags = Object.values(effectiveFlags(modules, permsByRole.get(r.id) ?? []));
-    const allowed = flags.reduce((n, f) => n + ACTIONS.filter((a) => f[a]).length, 0);
-    return allowed === flags.length * ACTIONS.length
+    return isFull(r)
       ? t("fullAccess")
       : t("partialAccess", { count: flags.filter((f) => f.canView).length, total: flags.length });
   };
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -102,9 +107,31 @@ export function RolesScreen() {
           </Button>
         }
       />
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "total", label: t("kpi.total"), value: allRows.length, icon: <KeyRound />, tone: "primary" },
+          { key: "active", label: tc("statuses.active"), value: allRows.filter((r) => r.status === "active").length, icon: <CircleCheck />, tone: "ok" },
+          { key: "full", label: t("fullAccess"), value: allRows.filter(isFull).length, icon: <ShieldCheck />, tone: "warn" },
+          { key: "limited", label: t("kpi.limited"), value: allRows.filter((r) => !isFull(r)).length, icon: <ShieldHalf />, tone: "muted" },
+        ]}
+      />
       <DataTable
         caption={t("title")}
         rows={rows}
+        filters={
+          <>
+            <FilterSelect label={tc("status")} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">{tc("all")}</option>
+              <option value="active">{tc("statuses.active")}</option>
+              <option value="inactive">{tc("statuses.inactive")}</option>
+            </FilterSelect>
+            <Button variant="secondary" disabled={!statusFilter} onClick={() => setStatusFilter("")}>
+              <RotateCcw />
+              {tc("reset")}
+            </Button>
+          </>
+        }
         loading={list.isPending}
         error={list.error ? errorText(list.error) : null}
         emptyText={t("empty")}
@@ -113,22 +140,16 @@ export function RolesScreen() {
         onDelete={lookups.allow("core", "delete") ? (r) => own(r) && setDeleting(r) : undefined}
         rowActions={(r) =>
           editable(r) ? null : (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              onClick={() => setEditing(r)}
-              aria-label={t("view")}
-              title={t("view")}
-            >
+            <RowAction label={t("view")} onClick={() => setEditing(r)}>
               <Eye />
-            </Button>
+            </RowAction>
           )
         }
         columns={[
           {
             key: "name",
             header: t("f.name"),
+            sortValue: (r) => r.name,
             cell: (r) => (
               <span className="inline-flex items-center gap-1.5 font-medium">
                 {r.name}
@@ -141,6 +162,7 @@ export function RolesScreen() {
                 {
                   key: "account",
                   header: t("account"),
+                  sortValue: (r: Role) => (r.companyId ? lookups.companyName(r.companyId) : null),
                   cell: (r: Role) => (r.companyId ? lookups.companyName(r.companyId) : "—"),
                 },
               ]
@@ -149,6 +171,7 @@ export function RolesScreen() {
           {
             key: "status",
             header: tc("status"),
+            sortValue: (r) => r.status,
             cell: (r) => (
               <StatusBadge tone={r.status === "active" ? "ok" : "muted"}>
                 {r.status === "active" ? tc("statuses.active") : tc("statuses.inactive")}

@@ -1,13 +1,13 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { CalendarClock, CheckCircle2, Plus, RotateCcw, Trash2, Wallet, Wrench } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
 import { DriverSelect } from "@/components/masters/driver-select";
-import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
+import { FilterInput, FilterSelect, FormSection, KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { SelectWithAdd } from "@/components/masters/pickers";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -88,7 +88,7 @@ export function MaintenanceScreen() {
   const total = roundMoney(rows.reduce((sum, r) => sum + (r.total ?? 0), 0));
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -100,49 +100,21 @@ export function MaintenanceScreen() {
         }
       />
 
-      <div className="grid gap-3 rounded-card border border-border bg-surface p-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Field id="mf-from" label={t("filters.from")}>
-          <Input id="mf-from" type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} />
-        </Field>
-        <Field id="mf-to" label={t("filters.to")}>
-          <Input id="mf-to" type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} />
-        </Field>
-        <Field id="mf-garage" label={t("cols.garage")}>
-          <Select id="mf-garage" value={filters.garage} onChange={(e) => setFilters({ ...filters, garage: e.target.value })}>
-            <option value="">{tc("all")}</option>
-            {garages.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field id="mf-service" label={t("cols.serviceType")}>
-          <Select id="mf-service" value={filters.serviceTypeId} onChange={(e) => setFilters({ ...filters, serviceTypeId: e.target.value })}>
-            <option value="">{tc("all")}</option>
-            {scopedServiceTypes.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field id="mf-vehicle" label={t("cols.vehicle")}>
-          <Select id="mf-vehicle" value={filters.vehicleId} onChange={(e) => setFilters({ ...filters, vehicleId: e.target.value })}>
-            <option value="">{tc("all")}</option>
-            {lookups.vehicles.map((v) => (
-              <option key={v.id} value={v.id}>
-                {lookups.vehicleLabel(v.id)}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <div className="flex items-end">
-          <Button variant="ghost" size="sm" disabled={!filtered} onClick={() => setFilters({ from: "", to: "", garage: "", serviceTypeId: "", vehicleId: "" })}>
-            {tc("clearFilters")}
-          </Button>
-        </div>
-      </div>
+      <KpiCards
+        loading={page.isPending}
+        items={[
+          { key: "records", label: t("kpi.records"), value: rows.length, icon: <Wrench />, tone: "primary" },
+          { key: "completed", label: t("statuses.completed"), value: rows.filter((r) => r.status === "completed").length, icon: <CheckCircle2 />, tone: "ok" },
+          {
+            key: "open",
+            label: t("kpi.open"),
+            value: rows.filter((r) => r.status !== "completed").length,
+            icon: <CalendarClock />,
+            tone: "warn",
+          },
+          { key: "total", label: t("kpi.totalCost"), value: total.toFixed(2), icon: <Wallet />, tone: "muted" },
+        ]}
+      />
 
       <DataTable
         caption={t("title")}
@@ -151,21 +123,55 @@ export function MaintenanceScreen() {
         error={page.error ? errorText(page.error) : null}
         emptyText={lookups.vehicles.length === 0 ? t("needVehicles") : t("empty")}
         searchText={(r) => [lookups.vehicleLabel(r.vehicleId), lookups.driverName(r.driverId), r.garageName, r.billNumber].join(" ")}
-        toolbar={<span className="text-xs text-muted-foreground">{t("totalShown", { total: total.toFixed(2) })}</span>}
+        filters={
+          <>
+            <FilterInput label={t("filters.from")} type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} />
+            <FilterInput label={t("filters.to")} type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} />
+            <FilterSelect label={t("cols.garage")} value={filters.garage} onChange={(e) => setFilters({ ...filters, garage: e.target.value })}>
+              <option value="">{tc("all")}</option>
+              {garages.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </FilterSelect>
+            <FilterSelect label={t("cols.serviceType")} value={filters.serviceTypeId} onChange={(e) => setFilters({ ...filters, serviceTypeId: e.target.value })}>
+              <option value="">{tc("all")}</option>
+              {scopedServiceTypes.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
+            </FilterSelect>
+            <FilterSelect label={t("cols.vehicle")} value={filters.vehicleId} onChange={(e) => setFilters({ ...filters, vehicleId: e.target.value })}>
+              <option value="">{tc("all")}</option>
+              {lookups.vehicles.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {lookups.vehicleLabel(v.id)}
+                </option>
+              ))}
+            </FilterSelect>
+            <Button variant="secondary" disabled={!filtered} onClick={() => setFilters({ from: "", to: "", garage: "", serviceTypeId: "", vehicleId: "" })}>
+              <RotateCcw />
+              {tc("reset")}
+            </Button>
+          </>
+        }
         onEdit={lookups.allow("maintenance", "edit") ? setEditing : undefined}
         onDelete={lookups.allow("maintenance", "delete") ? setDeleting : undefined}
         columns={[
-          { key: "vehicle", header: t("cols.vehicle"), cell: (r) => <span dir="ltr">{lookups.vehicleLabel(r.vehicleId)}</span> },
+          { key: "vehicle", header: t("cols.vehicle"), sortValue: (r) => lookups.vehicleLabel(r.vehicleId), cell: (r) => <span dir="ltr">{lookups.vehicleLabel(r.vehicleId)}</span> },
           { key: "driver", header: t("cols.driver"), cell: (r) => lookups.driverName(r.driverId) },
-          { key: "odo", header: t("cols.odometer"), numeric: true, cell: (r) => r.odometerKm ?? "—" },
+          { key: "odo", header: t("cols.odometer"), numeric: true, sortValue: (r) => r.odometerKm, cell: (r) => r.odometerKm ?? "—" },
           { key: "garage", header: t("cols.garage"), cell: (r) => r.garageName ?? "—" },
-          { key: "date", header: t("cols.serviceDate"), cell: (r) => formatDate(r.serviceDate) },
+          { key: "date", header: t("cols.serviceDate"), sortValue: (r) => r.serviceDate, cell: (r) => formatDate(r.serviceDate) },
           { key: "service", header: t("cols.serviceType"), cell: (r) => (r.serviceTypeId ? (sTypes.get(r.serviceTypeId) ?? "—") : "—") },
           { key: "mtype", header: t("cols.maintenanceType"), cell: (r) => (r.maintenanceTypeId ? (mTypes.get(r.maintenanceTypeId) ?? "—") : "—") },
-          { key: "amount", header: t("cols.amount"), numeric: true, cell: (r) => (r.total != null ? r.total.toFixed(2) : "—") },
+          { key: "amount", header: t("cols.amount"), numeric: true, sortValue: (r) => r.total, cell: (r) => (r.total != null ? r.total.toFixed(2) : "—") },
           {
             key: "status",
             header: tc("status"),
+            sortValue: (r) => r.status,
             cell: (r) => (
               <StatusBadge tone={r.status === "completed" ? "ok" : r.status === "in_progress" ? "info" : "warn"}>{t(`statuses.${r.status}`)}</StatusBadge>
             ),

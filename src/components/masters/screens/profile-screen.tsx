@@ -55,7 +55,7 @@ export function ProfileScreen() {
   const errorText = useErrorText();
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -71,7 +71,7 @@ export function ProfileScreen() {
       {profile.error ? (
         <Alert tone="error">{errorText(profile.error)}</Alert>
       ) : !profile.data ? (
-        <div className="h-64 animate-pulse rounded-card bg-surface-2" aria-busy="true" aria-label={tc("saving")} />
+        <div className="h-64 animate-pulse rounded-2xl bg-surface-2" aria-busy="true" aria-label={tc("saving")} />
       ) : (
         <>
           <ProfileForm key={profile.data.id} profile={profile.data} />
@@ -136,7 +136,7 @@ function ProfileForm({ profile }: { profile: MyProfile }) {
 
   return (
     <form onSubmit={submit} className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" noValidate>
-      <div className="rounded-card border border-border bg-surface p-5">
+      <div className="rounded-2xl border border-border/70 bg-surface shadow-sm p-6">
         <FormSection title={t("editable")} columns={1}>
           <div className="grid gap-4">
             <Field id="p-name" label={`${t("name")} *`} error={errors.name}>
@@ -184,7 +184,7 @@ function ProfileForm({ profile }: { profile: MyProfile }) {
           </div>
         </FormSection>
       </div>
-      <div className="rounded-card border border-border bg-surface p-5">
+      <div className="rounded-2xl border border-border/70 bg-surface shadow-sm p-6">
         <FormSection title={t("account")} columns={1}>
           <dl className="grid gap-3 text-[13px] sm:grid-cols-[minmax(120px,auto)_1fr]">
             {readOnly.map(([label, value]) => (
@@ -229,7 +229,7 @@ function TimeZoneSetting() {
   };
 
   return (
-    <section className="rounded-card border border-border bg-surface p-5" aria-labelledby="tz-title">
+    <section className="rounded-2xl border border-border/70 bg-surface shadow-sm p-6" aria-labelledby="tz-title">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="grid content-start gap-1.5">
           <h2 id="tz-title" className="flex items-center gap-2 text-sm font-semibold">

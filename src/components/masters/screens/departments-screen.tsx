@@ -1,12 +1,12 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Building, FolderOpen, Plus, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
-import { PageHeader } from "@/components/masters/page-header";
+import { KpiCards, PageHeader } from "@/components/masters/page-header";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -87,7 +87,7 @@ export function DepartmentsScreen() {
   };
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -98,6 +98,14 @@ export function DepartmentsScreen() {
           </Button>
         }
       />
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "total", label: t("kpi.total"), value: rows.length, icon: <Building />, tone: "primary" },
+          { key: "users", label: t("kpi.users"), value: rows.reduce((n, r) => n + r.users, 0), icon: <Users />, tone: "ok" },
+          { key: "empty", label: t("kpi.empty"), value: rows.filter((r) => r.users === 0).length, icon: <FolderOpen />, tone: "warn" },
+        ]}
+      />
       <DataTable
         caption={t("title")}
         rows={rows}
@@ -106,14 +114,15 @@ export function DepartmentsScreen() {
         emptyText={t("empty")}
         searchText={(r) => r.name}
         columns={[
-          { key: "name", header: tc("name"), cell: (r) => <span className="font-medium">{r.name}</span> },
-          { key: "users", header: t("users"), cell: (r) => <span dir="ltr">{r.users}</span> },
+          { key: "name", header: tc("name"), sortValue: (r) => r.name, cell: (r) => <span className="font-medium">{r.name}</span> },
+          { key: "users", header: t("users"), sortValue: (r) => r.users, cell: (r) => <span dir="ltr">{r.users}</span> },
           ...(lookups.isPlatform
-            ? [{ key: "company", header: t("company"), cell: (r: Row) => lookups.companyName(r.companyId) }]
+            ? [{ key: "company", header: t("company"), sortValue: (r: Row) => lookups.companyName(r.companyId), cell: (r: Row) => lookups.companyName(r.companyId) }]
             : []),
           {
             key: "created",
             header: t("created"),
+            sortValue: (r) => r.createdAt,
             cell: (r) => (
               <span dir="ltr" className="whitespace-nowrap">
                 {formatInCompanyTz(r.createdAt, zone, "dd-MM-yyyy")}

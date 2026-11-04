@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Building2, CircleCheck, Contact, FlaskConical, Plus, RotateCcw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -10,7 +10,7 @@ import { DataTable } from "@/components/masters/data-table";
 import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
 import { FileUpload } from "@/components/masters/file-upload";
 import { LocationPicker } from "@/components/masters/location-picker";
-import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
+import { FilterSelect, FormSection, KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
@@ -71,6 +71,8 @@ export function AccountsScreen() {
   const errorText = useErrorText();
   const [editing, setEditing] = useState<Company | "new" | null>(null);
   const [deleting, setDeleting] = useState<Company | null>(null);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
 
   const users = useMemo(() => new Map((list.data?.users.data ?? []).map((u) => [u.id, u])), [list.data]);
   const contactsByCompany = useMemo(() => {
@@ -78,16 +80,22 @@ export function AccountsScreen() {
     for (const c of list.data?.companyContacts.data ?? []) map.set(c.companyId, [...(map.get(c.companyId) ?? []), c]);
     return map;
   }, [list.data]);
-  const rows = useMemo(
+  const allRows = useMemo(
     () => [...(list.data?.companies.data ?? [])].filter((c) => lookups.inScope(c.id)).sort((a, b) => a.name.localeCompare(b.name)),
     [list.data, lookups],
   );
+  const accountType = (c: Company) => (c.accountType === "distributor" ? "distributor" : "customer");
+  const rows = useMemo(
+    () => allRows.filter((c) => (!statusFilter || c.status === statusFilter) && (!typeFilter || accountType(c) === typeFilter)),
+    [allRows, statusFilter, typeFilter],
+  );
+  const contactCount = allRows.reduce((n, c) => n + (contactsByCompany.get(c.id)?.length ?? 0), 0);
   // Company users need isAdmin to change their own company; platform staff can change any.
   const canEditAccounts = lookups.can("core", "edit") && (lookups.isPlatform || Boolean(lookups.meId && users.get(lookups.meId)?.isAdmin));
   const statusLabel = (s: string) => (t.has(`statuses.${s}`) ? t(`statuses.${s}`) : s);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={lookups.isPlatform ? t("description") : canEditAccounts ? t("descriptionCompany") : t("descriptionReadOnly")}
@@ -100,9 +108,49 @@ export function AccountsScreen() {
           ) : null
         }
       />
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "total", label: t("kpi.total"), value: allRows.length, icon: <Building2 />, tone: "primary" },
+          { key: "active", label: statusLabel("active"), value: allRows.filter((c) => c.status === "active").length, icon: <CircleCheck />, tone: "ok" },
+          { key: "trial", label: statusLabel("trial"), value: allRows.filter((c) => c.status === "trial" || c.isTrial).length, icon: <FlaskConical />, tone: "warn" },
+          { key: "contacts", label: t("kpi.contacts"), value: contactCount, icon: <Contact />, tone: "muted" },
+        ]}
+      />
       <DataTable
         caption={t("title")}
         rows={rows}
+        filters={
+          <>
+            <FilterSelect label={t("f.accountType")} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              <option value="">{tc("all")}</option>
+              {ACCOUNT_TYPES.map((x) => (
+                <option key={x} value={x}>
+                  {t(`accountTypes.${x}`)}
+                </option>
+              ))}
+            </FilterSelect>
+            <FilterSelect label={tc("status")} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">{tc("all")}</option>
+              {COMPANY_STATUSES.map((x) => (
+                <option key={x} value={x}>
+                  {statusLabel(x)}
+                </option>
+              ))}
+            </FilterSelect>
+            <Button
+              variant="secondary"
+              disabled={!statusFilter && !typeFilter}
+              onClick={() => {
+                setStatusFilter("");
+                setTypeFilter("");
+              }}
+            >
+              <RotateCcw />
+              {tc("reset")}
+            </Button>
+          </>
+        }
         loading={list.isPending}
         error={list.error ? errorText(list.error) : null}
         emptyText={t("empty")}
@@ -113,20 +161,21 @@ export function AccountsScreen() {
         onEdit={canEditAccounts && list.isSuccess ? setEditing : undefined}
         onDelete={lookups.isPlatform && lookups.can("core", "delete") ? setDeleting : undefined}
         columns={[
-          { key: "name", header: t("f.name"), cell: (c) => <span className="font-medium">{c.name}</span> },
-          { key: "contactName", header: t("contactName"), cell: (c) => mainContact(contactsByCompany.get(c.id) ?? [])?.name ?? "—" },
+          { key: "name", header: t("f.name"), sortValue: (c) => c.name, cell: (c) => <span className="font-medium">{c.name}</span> },
+          { key: "contactName", header: t("contactName"), sortValue: (c) => mainContact(contactsByCompany.get(c.id) ?? [])?.name, cell: (c) => mainContact(contactsByCompany.get(c.id) ?? [])?.name ?? "—" },
           {
             key: "contactPhone",
             header: t("contactPhone"),
             cell: (c) => <span dir="ltr">{mainContact(contactsByCompany.get(c.id) ?? [])?.phone ?? "—"}</span>,
           },
           { key: "contactEmail", header: t("contactEmail"), cell: (c) => mainContact(contactsByCompany.get(c.id) ?? [])?.email ?? "—" },
-          { key: "city", header: t("f.city"), cell: (c) => c.city },
+          { key: "city", header: t("f.city"), sortValue: (c) => c.city, cell: (c) => c.city },
           { key: "createdBy", header: t("createdBy"), cell: (c) => (c.createdBy ? (users.get(c.createdBy)?.name ?? `#${c.createdBy}`) : "—") },
-          { key: "type", header: t("f.accountType"), cell: (c) => t(`accountTypes.${c.accountType === "distributor" ? "distributor" : "customer"}`) },
+          { key: "type", header: t("f.accountType"), sortValue: accountType, cell: (c) => t(`accountTypes.${accountType(c)}`) },
           {
             key: "status",
             header: tc("status"),
+            sortValue: (c) => c.status,
             cell: (c) => (
               <span className="inline-flex flex-wrap gap-1">
                 <StatusBadge tone={STATUS_TONES[c.status] ?? "muted"}>{statusLabel(c.status)}</StatusBadge>

@@ -1,12 +1,12 @@
 "use client";
 
-import { Copy, Plus, Share2 } from "lucide-react";
+import { CalendarClock, Copy, Link2, Plus, Radio, Share2, TimerOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
-import { DataTable } from "@/components/masters/data-table";
-import { PageHeader, StatusBadge } from "@/components/masters/page-header";
+import { DataTable, RowAction } from "@/components/masters/data-table";
+import { KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,12 @@ export function LiveLocationScreen() {
     [list.data, lookups],
   );
 
+  const counts = useMemo(() => {
+    const c = { active: 0, scheduled: 0, expired: 0 };
+    for (const l of rows) c[shareLinkState(l.startsAt, l.expiresAt)]++;
+    return c;
+  }, [rows]);
+
   const copy = async (link: SharedLiveLocation) => {
     try {
       await navigator.clipboard.writeText(shareUrl(origin(), link.shareToken));
@@ -75,16 +81,34 @@ export function LiveLocationScreen() {
   };
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
         actions={
-          <Button onClick={() => setEditing("new")} disabled={!lookups.allow("sharing", "add") || lookups.vehicles.length === 0}>
+          <Button
+            onClick={() => setEditing("new")}
+            disabled={!lookups.allow("sharing", "add") || lookups.vehicles.length === 0}
+          >
             <Plus />
             {t("add")}
           </Button>
         }
+      />
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "total", label: t("kpi.total"), value: rows.length, icon: <Link2 />, tone: "primary" },
+          { key: "active", label: t("states.active"), value: counts.active, icon: <Radio />, tone: "ok" },
+          {
+            key: "scheduled",
+            label: t("states.scheduled"),
+            value: counts.scheduled,
+            icon: <CalendarClock />,
+            tone: "warn",
+          },
+          { key: "expired", label: t("states.expired"), value: counts.expired, icon: <TimerOff />, tone: "muted" },
+        ]}
       />
       <DataTable
         caption={t("title")}
@@ -95,34 +119,58 @@ export function LiveLocationScreen() {
         searchText={(l) => lookups.vehicleLabel(l.vehicleId)}
         rowActions={(l) => (
           <>
-            <Button variant="ghost" size="icon" className="size-8" onClick={() => copy(l)} aria-label={t("copy")} title={t("copy")}>
+            <RowAction label={t("copy")} onClick={() => copy(l)}>
               <Copy />
-            </Button>
-            <Button variant="ghost" size="icon" className="size-8" onClick={() => share(l)} aria-label={t("share")} title={t("share")}>
+            </RowAction>
+            <RowAction label={t("share")} onClick={() => share(l)}>
               <Share2 />
-            </Button>
+            </RowAction>
           </>
         )}
         onEdit={lookups.allow("sharing", "edit") ? setEditing : undefined}
         onDelete={lookups.allow("sharing", "delete") ? setDeleting : undefined}
         columns={[
-          { key: "company", header: t("company"), cell: (l) => lookups.companyName(lookups.vehicleCompanyId(l.vehicleId)) },
-          { key: "vehicle", header: t("vehicle"), cell: (l) => <span dir="ltr">{lookups.vehicleLabel(l.vehicleId)}</span> },
-          { key: "starts", header: t("starts"), cell: (l) => formatDateTime(l.startsAt) },
-          { key: "expires", header: t("expires"), cell: (l) => formatDateTime(l.expiresAt) },
+          {
+            key: "company",
+            header: t("company"),
+            sortValue: (l) => lookups.companyName(lookups.vehicleCompanyId(l.vehicleId)),
+            cell: (l) => lookups.companyName(lookups.vehicleCompanyId(l.vehicleId)),
+          },
+          {
+            key: "vehicle",
+            header: t("vehicle"),
+            sortValue: (l) => lookups.vehicleLabel(l.vehicleId),
+            cell: (l) => <span dir="ltr">{lookups.vehicleLabel(l.vehicleId)}</span>,
+          },
+          { key: "starts", header: t("starts"), sortValue: (l) => l.startsAt, cell: (l) => formatDateTime(l.startsAt) },
+          {
+            key: "expires",
+            header: t("expires"),
+            sortValue: (l) => l.expiresAt,
+            cell: (l) => formatDateTime(l.expiresAt),
+          },
           {
             key: "state",
             header: tc("status"),
+            sortValue: (l) => shareLinkState(l.startsAt, l.expiresAt),
             cell: (l) => {
               const state = shareLinkState(l.startsAt, l.expiresAt);
-              return <StatusBadge tone={state === "active" ? "ok" : state === "scheduled" ? "info" : "muted"}>{t(`states.${state}`)}</StatusBadge>;
+              return (
+                <StatusBadge tone={state === "active" ? "ok" : state === "scheduled" ? "info" : "muted"}>
+                  {t(`states.${state}`)}
+                </StatusBadge>
+              );
             },
           },
           {
             key: "url",
             header: t("url"),
             cell: (l) => (
-              <code className="block max-w-72 truncate font-mono text-xs text-muted-foreground" dir="ltr" title={shareUrl(origin(), l.shareToken)}>
+              <code
+                className="block max-w-72 truncate font-mono text-xs text-muted-foreground"
+                dir="ltr"
+                title={shareUrl(origin(), l.shareToken)}
+              >
                 {shareUrl(origin(), l.shareToken)}
               </code>
             ),
@@ -130,7 +178,9 @@ export function LiveLocationScreen() {
         ]}
       />
 
-      {editing !== null ? <ShareSheet link={editing === "new" ? null : editing} onClose={() => setEditing(null)} /> : null}
+      {editing !== null ? (
+        <ShareSheet link={editing === "new" ? null : editing} onClose={() => setEditing(null)} />
+      ) : null}
 
       <ConfirmDelete
         open={deleting !== null}
@@ -217,7 +267,12 @@ function ShareSheet({ link, onClose }: { link: SharedLiveLocation | null; onClos
         }}
       >
         <Field id="sl-vehicle" label={`${t("vehicle")} *`} error={errors.vehicleId}>
-          <Select id="sl-vehicle" value={vehicleId} disabled={Boolean(link)} onChange={(e) => setVehicleId(e.target.value)}>
+          <Select
+            id="sl-vehicle"
+            value={vehicleId}
+            disabled={Boolean(link)}
+            onChange={(e) => setVehicleId(e.target.value)}
+          >
             <option value="">{tc("choose")}</option>
             {lookups.vehicles.map((v) => (
               <option key={v.id} value={v.id}>
@@ -228,10 +283,22 @@ function ShareSheet({ link, onClose }: { link: SharedLiveLocation | null; onClos
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field id="sl-start" label={t("startDate")}>
-            <Input id="sl-start" type="date" value={startDate} disabled={Boolean(link)} onChange={(e) => setStartDate(e.target.value)} />
+            <Input
+              id="sl-start"
+              type="date"
+              value={startDate}
+              disabled={Boolean(link)}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
           </Field>
           <Field id="sl-start-time" label={t("startTime")}>
-            <Input id="sl-start-time" type="time" value={startTime} disabled={Boolean(link)} onChange={(e) => setStartTime(e.target.value)} />
+            <Input
+              id="sl-start-time"
+              type="time"
+              value={startTime}
+              disabled={Boolean(link)}
+              onChange={(e) => setStartTime(e.target.value)}
+            />
           </Field>
           <Field id="sl-end" label={`${t("expiryDate")} *`} error={errors.endDate}>
             <Input id="sl-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />

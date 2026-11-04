@@ -1,13 +1,13 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Gauge, Plus, Route, SlidersHorizontal } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
 import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
-import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
+import { FormSection, KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
@@ -39,13 +39,15 @@ export function DriverBehaviourScreen() {
   const all = list.data?.driverBehaviourSettings.data;
   const rows = useMemo(() => (all ?? []).filter((s) => lookups.inScope(s.companyId)), [all, lookups]);
   const hasOwn = (all ?? []).some((s) => s.companyId === lookups.companyId);
+  // The figures shown on the cards: this company's setup (or the only one in view).
+  const current = rows.find((s) => s.companyId === lookups.companyId) ?? (rows.length === 1 ? rows[0] : undefined);
 
   const onOff = (on: boolean) => <StatusBadge tone={on ? "ok" : "muted"}>{on ? t("on") : t("off")}</StatusBadge>;
   const weight = (s: DriverBehaviourSetting, w: (typeof BEHAVIOUR_WEIGHTS)[number]) =>
     s.userCustomizedScore ? `${numText(s[w]) || "0"}%` : <span className="text-subtle">{t("default")}</span>;
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -56,6 +58,26 @@ export function DriverBehaviourScreen() {
           </Button>
         }
       />
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "top", label: t("f.topScore"), value: current ? current.topScore : "—", icon: <Gauge />, tone: "primary" },
+          {
+            key: "mileage",
+            label: t("f.minimumMileageKm"),
+            value: current ? numText(current.minimumMileageKm) || "—" : "—",
+            icon: <Route />,
+            tone: "ok",
+          },
+          {
+            key: "custom",
+            label: t("f.userCustomizedScore"),
+            value: current ? (current.userCustomizedScore ? t("on") : t("off")) : "—",
+            icon: <SlidersHorizontal />,
+            tone: "muted",
+          },
+        ]}
+      />
       <DataTable
         caption={t("title")}
         rows={rows}
@@ -65,9 +87,9 @@ export function DriverBehaviourScreen() {
         onEdit={lookups.allow("other", "edit") ? setEditing : undefined}
         onDelete={lookups.allow("other", "delete") ? setDeleting : undefined}
         columns={[
-          { key: "account", header: t("account"), cell: (s) => <span className="font-medium">{lookups.companyName(s.companyId)}</span> },
-          { key: "minMileage", header: t("f.minimumMileageKm"), numeric: true, cell: (s) => numText(s.minimumMileageKm) || "—" },
-          { key: "topScore", header: t("f.topScore"), numeric: true, cell: (s) => s.topScore },
+          { key: "account", header: t("account"), sortValue: (s) => lookups.companyName(s.companyId), cell: (s) => <span className="font-medium">{lookups.companyName(s.companyId)}</span> },
+          { key: "minMileage", header: t("f.minimumMileageKm"), numeric: true, sortValue: (s) => s.minimumMileageKm, cell: (s) => numText(s.minimumMileageKm) || "—" },
+          { key: "topScore", header: t("f.topScore"), numeric: true, sortValue: (s) => s.topScore, cell: (s) => s.topScore },
           { key: "absolute", header: t("f.displayAbsoluteValue"), cell: (s) => onOff(s.displayAbsoluteValue) },
           { key: "custom", header: t("f.userCustomizedScore"), cell: (s) => onOff(s.userCustomizedScore) },
           ...BEHAVIOUR_WEIGHTS.map((w) => ({ key: w, header: t(`weights.${w}`), numeric: true, cell: (s: DriverBehaviourSetting) => weight(s, w) })),
