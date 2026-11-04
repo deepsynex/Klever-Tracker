@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 interface VehicleData {
   id: string;
   plate: string;
@@ -117,6 +119,7 @@ const cardBorderStyles: Record<"cyan" | "green" | "red", string> = {
 };
 
 function VehicleMarker({ vehicle }: { vehicle: VehicleData }) {
+  const t = useTranslations("auth.showcase");
   const halo = haloStyles[vehicle.haloColor];
   const cardBorder = cardBorderStyles[vehicle.haloColor];
   const isStopped = vehicle.status === "stopped";
@@ -153,13 +156,13 @@ function VehicleMarker({ vehicle }: { vehicle: VehicleData }) {
         {isStopped ? (
           <div className="mt-1 flex items-center gap-1.5 text-xs text-red-400 font-semibold">
             <span className="size-2 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]" />
-            <span>Stopped</span>
+            <span>{t("stopped")}</span>
           </div>
         ) : (
           <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-300">
             <span className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
             <span>
-              Moving <strong className="text-white font-bold">{vehicle.speed}</strong>
+              {t("moving")} <strong className="text-white font-bold" dir="ltr">{vehicle.speed}</strong>
             </span>
           </div>
         )}
@@ -185,6 +188,7 @@ function VehicleMarker({ vehicle }: { vehicle: VehicleData }) {
 }
 
 export function FleetMapMotion() {
+  const t = useTranslations("auth.showcase");
   return (
     <div className="relative size-full overflow-hidden bg-[#06121c] select-none">
       {/* 1. Vector Map Layer (Ahmedabad Dark Satellite / Road Grid) */}
@@ -417,17 +421,17 @@ export function FleetMapMotion() {
       {/* 3. BOTTOM-LEFT GLASSMORPHIC FEATURE SHOWCASE CARD — STATIC */}
       <aside className="absolute bottom-7 left-7 z-30 max-w-[420px] rounded-[24px] border border-white/10 bg-[#091924]/80 p-7 text-white backdrop-blur-xl shadow-[0_25px_60px_rgba(0,0,0,0.65)]">
         <div className="text-[10.5px] font-extrabold tracking-[2.5px] text-sky-400 uppercase">
-          REAL-TIME TRACKING
+          {t("eyebrow")}
         </div>
         <h1 className="mt-3 text-3xl sm:text-4xl font-extrabold leading-[1.12] tracking-tight">
-          <span className="block text-white">Track Your</span>
-          <span className="block text-white">Vehicles</span>
+          <span className="block text-white">{t("headline1")}</span>
+          <span className="block text-white">{t("headline2")}</span>
           <span className="block bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">
-            Anywhere
+            {t("headline3")}
           </span>
         </h1>
         <p className="mt-3 text-[13.5px] leading-relaxed text-slate-300">
-          Live location, smart alerts and detailed reports for complete fleet management.
+          {t("intro")}
         </p>
 
         {/* 4 Feature Badges Grid */}
@@ -439,8 +443,8 @@ export function FleetMapMotion() {
                 <polygon points="3 11 22 2 13 21 11 13 3 11" />
               </svg>
             </div>
-            <span className="text-[11px] font-semibold leading-tight text-slate-200">
-              Live<br />Tracking
+            <span className="whitespace-pre-line text-[11px] font-semibold leading-tight text-slate-200">
+              {t("liveTracking")}
             </span>
           </div>
 
@@ -452,8 +456,8 @@ export function FleetMapMotion() {
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
             </div>
-            <span className="text-[11px] font-semibold leading-tight text-slate-200">
-              Instant<br />Alerts
+            <span className="whitespace-pre-line text-[11px] font-semibold leading-tight text-slate-200">
+              {t("alerts")}
             </span>
           </div>
 
@@ -466,8 +470,8 @@ export function FleetMapMotion() {
                 <line x1="6" y1="20" x2="6" y2="14" />
               </svg>
             </div>
-            <span className="text-[11px] font-semibold leading-tight text-slate-200">
-              Detailed<br />Reports
+            <span className="whitespace-pre-line text-[11px] font-semibold leading-tight text-slate-200">
+              {t("reports")}
             </span>
           </div>
 
@@ -479,8 +483,8 @@ export function FleetMapMotion() {
                 <polyline points="9 12 11 14 15 10" />
               </svg>
             </div>
-            <span className="text-[11px] font-semibold leading-tight text-slate-200">
-              Safe &amp;<br />Secure
+            <span className="whitespace-pre-line text-[11px] font-semibold leading-tight text-slate-200">
+              {t("secure")}
             </span>
           </div>
         </div>
