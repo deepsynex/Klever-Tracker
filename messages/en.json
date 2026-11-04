@@ -356,7 +356,19 @@
       "type": "Event Type",
       "occurredAt": "Time",
       "details": "Details",
-      "jumpTo": "Jump to event"
+      "jumpTo": "Jump to event",
+      "titleCount": "Trip Events ({count})",
+      "ignitionOn": "Ignition on",
+      "ignitionOff": "Ignition off",
+      "location": "Location",
+      "speed": "Speed",
+      "voltage": "Battery",
+      "source": "Source",
+      "recorded": "Recorded",
+      "acknowledged": "Acknowledged",
+      "resolved": "Resolved",
+      "fromTrack": "From track",
+      "fromTrackHint": "Worked out from this window's GPS data: the ignition held its new state for at least 45 seconds."
     },
     "map": {
       "missingKeyTitle": "Google Maps API Key",
@@ -480,7 +492,10 @@
         "description": "You changed this form but didn’t save it. If you close it now, your changes are lost.",
         "keep": "Keep editing",
         "discard": "Discard changes"
-      }
+      },
+      "show": "Show",
+      "entries": "entries",
+      "reset": "Reset"
     },
     "vm": {
       "title": "Vehicle management",
@@ -742,7 +757,10 @@
           "totalAmount": "Total amount chargeable",
           "totalHint": "Filled in from the charges above. You can change it."
         },
-        "outSuffix": "(out)"
+        "outSuffix": "(out)",
+        "kpi": {
+          "total": "Allocations"
+        }
       },
       "maintenance": {
         "title": "Maintenance",
@@ -801,6 +819,11 @@
           "scheduled": "Scheduled",
           "in_progress": "In progress",
           "completed": "Completed"
+        },
+        "kpi": {
+          "records": "Records",
+          "open": "Scheduled or in progress",
+          "totalCost": "Total cost"
         }
       },
       "tempSensors": {
@@ -837,6 +860,11 @@
         "vehicles": "Vehicles",
         "sections": {
           "details": "Details"
+        },
+        "kpi": {
+          "groups": "Groups",
+          "subGroups": "Sub groups",
+          "vehiclesAssigned": "Vehicles in a group"
         }
       },
       "workingHours": {
@@ -857,6 +885,11 @@
         "assign": "Assign vehicles",
         "sections": {
           "shift": "Shift"
+        },
+        "kpi": {
+          "shifts": "Shifts",
+          "covered": "Vehicles with a shift",
+          "uncovered": "Vehicles without a shift"
         }
       },
       "distance": {
@@ -877,7 +910,13 @@
         "distance": "Distance travelled (km)",
         "autoHint": "Worked out from the readings. You can change it.",
         "fixedOnEdit": "The vehicle and date can't be changed after saving.",
-        "totalShown": "Total: {km} km"
+        "totalShown": "Total: {km} km",
+        "kpi": {
+          "logs": "Log entries",
+          "totalKm": "Total distance (km)",
+          "vehicles": "Vehicles logged",
+          "avgKm": "Average per entry (km)"
+        }
       },
       "liveLocation": {
         "title": "Live location",
@@ -909,6 +948,9 @@
           "active": "Active",
           "scheduled": "Not started",
           "expired": "Expired"
+        },
+        "kpi": {
+          "total": "Shared links"
         }
       },
       "fuelCalibration": {
@@ -933,6 +975,11 @@
         "sections": {
           "tank": "Tank",
           "points": "Voltage to litres"
+        },
+        "kpi": {
+          "tables": "Calibration tables",
+          "points": "Calibration points",
+          "incomplete": "Need 2+ points"
         }
       },
       "types": {
@@ -1059,6 +1106,10 @@
           "active": "Active",
           "trial": "Trial",
           "suspended": "Suspended"
+        },
+        "kpi": {
+          "total": "Accounts",
+          "contacts": "Contacts"
         }
       },
       "users": {
@@ -1121,7 +1172,11 @@
         "loginDevice": "Device / browser",
         "rolePermissions": "Role permissions",
         "rolePermissionsOf": "Permissions of the role {role}",
-        "rolePermissionsNotice": "{name} has the role “{role}”. Permissions belong to the role, so changes here apply to {n, plural, one {this user} other {all # users with this role}}. To give {name} different permissions, assign another role with Edit."
+        "rolePermissionsNotice": "{name} has the role “{role}”. Permissions belong to the role, so changes here apply to {n, plural, one {this user} other {all # users with this role}}. To give {name} different permissions, assign another role with Edit.",
+        "kpi": {
+          "total": "Total users",
+          "admins": "Admins"
+        }
       },
       "drivers": {
         "title": "Drivers",
@@ -1192,7 +1247,13 @@
           "tooBig": "This file is too big. The limit is {max} MB.",
           "tooManyRows": "This file has {count} driver rows. Upload at most {max} at a time."
         },
-        "limitReached": "This company has reached its limit of {max} drivers. Raise the limit on the Account, or remove a driver first."
+        "limitReached": "This company has reached its limit of {max} drivers. Raise the limit on the Account, or remove a driver first.",
+        "kpi": {
+          "total": "Total drivers",
+          "licence": "Licence",
+          "licenceSoon": "Licence expires within 30 days",
+          "licenceExpired": "Licence expired"
+        }
       },
       "roles": {
         "title": "Menu setting",
@@ -1249,6 +1310,10 @@
         },
         "moduleHints": {
           "core": "Accounts, users, roles and devices"
+        },
+        "kpi": {
+          "total": "Total roles",
+          "limited": "Limited access"
         }
       },
       "changePassword": {
@@ -1304,7 +1369,12 @@
         "users": "Users",
         "company": "Company",
         "created": "Created",
-        "usersKept": "{n, plural, one {# user is} other {# users are}} in this department. They are kept; only their department is cleared."
+        "usersKept": "{n, plural, one {# user is} other {# users are}} in this department. They are kept; only their department is cleared.",
+        "kpi": {
+          "total": "Departments",
+          "users": "Users in a department",
+          "empty": "Departments with no users"
+        }
       },
       "audit": {
         "title": "Audit log",
@@ -1323,7 +1393,13 @@
         "system": "System",
         "newer": "Newer",
         "older": "Older",
-        "pageOf": "Page {page} of {last}"
+        "pageOf": "Page {page} of {last}",
+        "kpi": {
+          "total": "Total entries",
+          "created": "Created (this page)",
+          "updated": "Updated (this page)",
+          "deleted": "Deleted (this page)"
+        }
       },
       "profile": {
         "title": "My profile",

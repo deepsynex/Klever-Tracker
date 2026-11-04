@@ -1,13 +1,13 @@
 "use client";
 
-import { Plus, Undo2 } from "lucide-react";
+import { AlarmClock, ArrowRightLeft, CircleCheck, KeyRound, Plus, RotateCcw, Undo2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
 import { DriverSelect } from "@/components/masters/driver-select";
-import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
+import { FilterSelect, FormSection, KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -65,17 +65,23 @@ export function AllocationsScreen() {
     () => new Set((list.data?.vehicleAllocations.data ?? []).filter((a) => !a.returnedAt).map((a) => a.vehicleId)),
     [list.data],
   );
+  const all = useMemo(
+    () =>
+      [...(list.data?.vehicleAllocations.data ?? [])]
+        .filter((a) => lookups.inScope(lookups.vehicleCompanyId(a.vehicleId)))
+        .sort((a, b) => b.allocatedAt.localeCompare(a.allocatedAt)),
+    [list.data, lookups],
+  );
   const rows = useMemo(() => {
-    const all = [...(list.data?.vehicleAllocations.data ?? [])]
-      .filter((a) => lookups.inScope(lookups.vehicleCompanyId(a.vehicleId)))
-      .sort((a, b) => b.allocatedAt.localeCompare(a.allocatedAt));
     if (filter === "out") return all.filter((a) => !a.returnedAt);
     if (filter === "returned") return all.filter((a) => a.returnedAt);
     return all;
-  }, [list.data, filter, lookups]);
+  }, [all, filter]);
+  const outCount = all.filter((a) => !a.returnedAt).length;
+  const overdueCount = all.filter((a) => isOverdue(a) || (!a.returnedAt && a.status === "overdue")).length;
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -86,6 +92,15 @@ export function AllocationsScreen() {
           </Button>
         }
       />
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "total", label: t("kpi.total"), value: all.length, icon: <ArrowRightLeft />, tone: "primary" },
+          { key: "out", label: t("filters.out"), value: outCount, icon: <KeyRound />, tone: "warn" },
+          { key: "returned", label: t("filters.returned"), value: all.length - outCount, icon: <CircleCheck />, tone: "ok" },
+          { key: "overdue", label: t("status.overdue"), value: overdueCount, icon: <AlarmClock />, tone: "bad", highlight: overdueCount > 0 },
+        ]}
+      />
       <DataTable
         caption={t("title")}
         rows={rows}
@@ -93,12 +108,18 @@ export function AllocationsScreen() {
         error={list.error ? errorText(list.error) : null}
         emptyText={lookups.vehicles.length === 0 ? t("needVehicles") : t("empty")}
         searchText={(a) => [lookups.vehicleLabel(a.vehicleId), lookups.driverName(a.driverId), a.project].join(" ")}
-        toolbar={
-          <Select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="h-8 w-auto" aria-label={t("filter")}>
-            <option value="all">{t("filters.all")}</option>
-            <option value="out">{t("filters.out")}</option>
-            <option value="returned">{t("filters.returned")}</option>
-          </Select>
+        filters={
+          <>
+            <FilterSelect label={tc("status")} value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>
+              <option value="all">{t("filters.all")}</option>
+              <option value="out">{t("filters.out")}</option>
+              <option value="returned">{t("filters.returned")}</option>
+            </FilterSelect>
+            <Button variant="secondary" disabled={filter === "all"} onClick={() => setFilter("all")}>
+              <RotateCcw />
+              {tc("reset")}
+            </Button>
+          </>
         }
         rowActions={(a) =>
           lookups.allow("other", "edit") && !a.returnedAt ? (
@@ -111,18 +132,19 @@ export function AllocationsScreen() {
         onEdit={lookups.allow("other", "edit") ? (a) => setSheet({ mode: "return", row: a }) : undefined}
         onDelete={lookups.allow("other", "delete") ? setDeleting : undefined}
         columns={[
-          { key: "driver", header: t("cols.driver"), cell: (a) => lookups.driverName(a.driverId) },
-          { key: "vehicle", header: t("cols.vehicle"), cell: (a) => <span dir="ltr">{lookups.vehicleLabel(a.vehicleId)}</span> },
-          { key: "allocated", header: t("cols.allocatedAt"), cell: (a) => formatDateTime(a.allocatedAt) },
-          { key: "returned", header: t("cols.returnedAt"), cell: (a) => formatDateTime(a.returnedAt) },
-          { key: "days", header: t("cols.daysUsed"), numeric: true, cell: (a) => daysUsed(a.allocatedAt, a.returnedAt) ?? "—" },
-          { key: "km", header: t("cols.totalKm"), numeric: true, cell: (a) => kmDriven(a.startOdometerKm, a.returnOdometerKm) ?? "—" },
-          { key: "amount", header: t("cols.amount"), numeric: true, cell: (a) => (a.amount != null ? a.amount.toFixed(2) : "—") },
+          { key: "driver", header: t("cols.driver"), sortValue: (a) => lookups.driverName(a.driverId), cell: (a) => lookups.driverName(a.driverId) },
+          { key: "vehicle", header: t("cols.vehicle"), sortValue: (a) => lookups.vehicleLabel(a.vehicleId), cell: (a) => <span dir="ltr">{lookups.vehicleLabel(a.vehicleId)}</span> },
+          { key: "allocated", header: t("cols.allocatedAt"), sortValue: (a) => a.allocatedAt, cell: (a) => formatDateTime(a.allocatedAt) },
+          { key: "returned", header: t("cols.returnedAt"), sortValue: (a) => a.returnedAt, cell: (a) => formatDateTime(a.returnedAt) },
+          { key: "days", header: t("cols.daysUsed"), numeric: true, sortValue: (a) => daysUsed(a.allocatedAt, a.returnedAt), cell: (a) => daysUsed(a.allocatedAt, a.returnedAt) ?? "—" },
+          { key: "km", header: t("cols.totalKm"), numeric: true, sortValue: (a) => kmDriven(a.startOdometerKm, a.returnOdometerKm), cell: (a) => kmDriven(a.startOdometerKm, a.returnOdometerKm) ?? "—" },
+          { key: "amount", header: t("cols.amount"), numeric: true, sortValue: (a) => a.amount, cell: (a) => (a.amount != null ? a.amount.toFixed(2) : "—") },
           { key: "project", header: t("cols.project"), cell: (a) => a.project ?? "—" },
           { key: "to", header: t("cols.allocateTo"), cell: (a) => (a.project ? t("to.project") : t("to.driver")) },
           {
             key: "status",
             header: tc("status"),
+            sortValue: (a) => (a.returnedAt || a.status === "returned" ? 2 : isOverdue(a) || a.status === "overdue" ? 0 : 1),
             cell: (a) =>
               a.returnedAt || a.status === "returned" ? (
                 <StatusBadge tone="muted">{t("status.returned")}</StatusBadge>

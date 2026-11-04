@@ -1,12 +1,12 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { Fuel, ListOrdered, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
-import { FormSection, PageHeader } from "@/components/masters/page-header";
+import { FormSection, KpiCards, PageHeader } from "@/components/masters/page-header";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -42,8 +42,12 @@ export function FuelCalibrationScreen() {
     [list.data, lookups],
   );
 
+  const pointCount = rows.reduce((sum, c) => sum + c.points.length, 0);
+  // A table needs at least two points to interpolate a reading.
+  const incomplete = rows.filter((c) => c.points.length < 2).length;
+
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -53,6 +57,14 @@ export function FuelCalibrationScreen() {
             {t("add")}
           </Button>
         }
+      />
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "tables", label: t("kpi.tables"), value: rows.length, icon: <Fuel />, tone: "primary" },
+          { key: "points", label: t("kpi.points"), value: pointCount, icon: <ListOrdered />, tone: "ok" },
+          { key: "incomplete", label: t("kpi.incomplete"), value: incomplete, icon: <TriangleAlert />, tone: "warn", highlight: incomplete > 0 },
+        ]}
       />
       <DataTable
         caption={t("title")}
@@ -64,11 +76,11 @@ export function FuelCalibrationScreen() {
         onEdit={lookups.allow("fuel", "edit") ? setEditing : undefined}
         onDelete={lookups.allow("fuel", "delete") ? setDeleting : undefined}
         columns={[
-          { key: "name", header: t("name"), cell: (c) => <span className="font-medium">{c.name}</span> },
-          { key: "capacity", header: t("capacity"), numeric: true, cell: (c) => c.tankCapacityLitres ?? "—" },
-          { key: "min", header: t("minVoltage"), numeric: true, cell: (c) => c.minVoltage ?? "—" },
-          { key: "max", header: t("maxVoltage"), numeric: true, cell: (c) => c.maxVoltage ?? "—" },
-          { key: "points", header: t("points"), numeric: true, cell: (c) => c.points.length },
+          { key: "name", header: t("name"), sortValue: (c) => c.name, cell: (c) => <span className="font-medium">{c.name}</span> },
+          { key: "capacity", header: t("capacity"), numeric: true, sortValue: (c) => c.tankCapacityLitres, cell: (c) => c.tankCapacityLitres ?? "—" },
+          { key: "min", header: t("minVoltage"), numeric: true, sortValue: (c) => c.minVoltage, cell: (c) => c.minVoltage ?? "—" },
+          { key: "max", header: t("maxVoltage"), numeric: true, sortValue: (c) => c.maxVoltage, cell: (c) => c.maxVoltage ?? "—" },
+          { key: "points", header: t("points"), numeric: true, sortValue: (c) => c.points.length, cell: (c) => c.points.length },
         ]}
       />
 

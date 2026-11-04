@@ -1,12 +1,12 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { CircleCheck, CircleOff, List, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
-import { PageHeader, StatusBadge } from "@/components/masters/page-header";
+import { KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,7 @@ export function TypesScreen() {
   const [kind, setKind] = useState<LookupKind>("vehicleType");
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader title={t("title")} description={t("description")} />
       <div role="tablist" aria-label={t("title")} className="flex flex-wrap gap-1 border-b border-border">
         {KINDS.map((k) => (
@@ -96,8 +96,18 @@ function LookupList({ kind }: { kind: LookupKind }) {
     }
   };
 
+  const activeCount = rows.filter((r) => r.status === "active").length;
+
   return (
     <>
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "total", label: t(`kinds.${kind}`), value: rows.length, icon: <List />, tone: "primary" },
+          { key: "active", label: tc("statuses.active"), value: activeCount, icon: <CircleCheck />, tone: "ok" },
+          { key: "inactive", label: tc("statuses.inactive"), value: rows.length - activeCount, icon: <CircleOff />, tone: "muted" },
+        ]}
+      />
       <DataTable
         caption={t(`kinds.${kind}`)}
         rows={rows}
@@ -105,16 +115,17 @@ function LookupList({ kind }: { kind: LookupKind }) {
         error={list.error ? errorText(list.error) : null}
         searchText={(r) => r.name}
         toolbar={
-          <Button size="sm" onClick={() => openForm("new")} disabled={!lookups.allow(perm, "add")}>
+          <Button onClick={() => openForm("new")} disabled={!lookups.allow(perm, "add")}>
             <Plus />
             {t(`add.${kind}`)}
           </Button>
         }
         columns={[
-          { key: "name", header: tc("name"), cell: (r) => <span className="font-medium">{r.name}</span> },
+          { key: "name", header: tc("name"), sortValue: (r) => r.name, cell: (r) => <span className="font-medium">{r.name}</span> },
           {
             key: "status",
             header: tc("status"),
+            sortValue: (r) => r.status,
             cell: (r) => <StatusBadge tone={r.status === "active" ? "ok" : "muted"}>{tc(`statuses.${r.status}`)}</StatusBadge>,
           },
         ]}

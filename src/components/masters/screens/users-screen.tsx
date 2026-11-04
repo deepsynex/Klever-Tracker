@@ -1,16 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Car, Download, History, IdCard, Layers, Plus, Search, ShieldCheck, X } from "lucide-react";
+import { Car, CircleCheck, CircleSlash, Download, History, IdCard, Layers, Plus, RotateCcw, Search, ShieldCheck, Users, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
-import { DataTable } from "@/components/masters/data-table";
+import { DataTable, RowAction } from "@/components/masters/data-table";
 import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
 import { downloadSheet } from "@/components/masters/excel";
 import { FileUpload } from "@/components/masters/file-upload";
-import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
+import { FilterSelect, FormSection, KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { SelectWithAdd, VehicleChecklist } from "@/components/masters/pickers";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -85,16 +85,22 @@ export function UsersScreen() {
   const [assigning, setAssigning] = useState<{ user: User; kind: "vehicles" | "drivers" | "groups" } | null>(null);
   const [history, setHistory] = useState<User | null>(null);
   const [permissionsOf, setPermissionsOf] = useState<User | null>(null);
+  const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
   const data = list.data;
   const roleName = useMemo(() => new Map((data?.roles.data ?? []).map((r) => [r.id, r.name])), [data]);
   const deptName = useMemo(() => new Map((data?.departments.data ?? []).map((d) => [d.id, d.name])), [data]);
-  const rows = useMemo(
+  const allRows = useMemo(
     () =>
       [...(data?.users.data ?? [])]
         .filter((u) => lookups.inScope(u.companyId))
         .sort((a, b) => a.name.localeCompare(b.name)),
     [data, lookups],
+  );
+  const rows = useMemo(
+    () => allRows.filter((u) => (!roleFilter || u.roleId === roleFilter) && (!statusFilter || u.status === statusFilter)),
+    [allRows, roleFilter, statusFilter],
   );
 
   const exportRows = async () => {
@@ -132,7 +138,7 @@ export function UsersScreen() {
   };
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -143,15 +149,52 @@ export function UsersScreen() {
           </Button>
         }
       />
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "total", label: t("kpi.total"), value: allRows.length, icon: <Users />, tone: "primary" },
+          { key: "active", label: tc("statuses.active"), value: allRows.filter((u) => u.status === "active").length, icon: <CircleCheck />, tone: "ok" },
+          { key: "inactive", label: tc("statuses.inactive"), value: allRows.filter((u) => u.status !== "active").length, icon: <CircleSlash />, tone: "warn" },
+          { key: "admins", label: t("kpi.admins"), value: allRows.filter((u) => u.isAdmin).length, icon: <ShieldCheck />, tone: "muted" },
+        ]}
+      />
       <DataTable
         caption={t("title")}
         rows={rows}
+        filters={
+          <>
+            <FilterSelect label={t("f.role")} value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+              <option value="">{tc("all")}</option>
+              {(data?.roles.data ?? []).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </FilterSelect>
+            <FilterSelect label={tc("status")} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">{tc("all")}</option>
+              <option value="active">{tc("statuses.active")}</option>
+              <option value="inactive">{tc("statuses.inactive")}</option>
+            </FilterSelect>
+            <Button
+              variant="secondary"
+              disabled={!roleFilter && !statusFilter}
+              onClick={() => {
+                setRoleFilter("");
+                setStatusFilter("");
+              }}
+            >
+              <RotateCcw />
+              {tc("reset")}
+            </Button>
+          </>
+        }
         loading={list.isPending}
         error={list.error ? errorText(list.error) : null}
         emptyText={t("empty")}
         searchText={(u) => `${u.name} ${u.username} ${u.email}`}
         toolbar={
-          <Button variant="secondary" size="sm" onClick={exportRows} disabled={rows.length === 0}>
+          <Button variant="secondary" onClick={exportRows} disabled={rows.length === 0}>
             <Download />
             {tc("exportExcel")}
           </Button>
@@ -165,63 +208,28 @@ export function UsersScreen() {
         rowActions={(u) => (
           <>
             {lookups.can("core") && roleName.has(u.roleId) ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8"
-                onClick={() => setPermissionsOf(u)}
-                aria-label={t("rolePermissions")}
-                title={t("rolePermissionsOf", { role: roleName.get(u.roleId) ?? "" })}
-              >
+              <RowAction label={t("rolePermissionsOf", { role: roleName.get(u.roleId) ?? "" })} onClick={() => setPermissionsOf(u)}>
                 <ShieldCheck />
-              </Button>
+              </RowAction>
             ) : null}
             {lookups.can("admin") ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8"
-                onClick={() => setHistory(u)}
-                aria-label={t("loginHistory")}
-                title={t("loginHistory")}
-              >
+              <RowAction label={t("loginHistory")} onClick={() => setHistory(u)}>
                 <History />
-              </Button>
+              </RowAction>
             ) : null}
             {lookups.allow("core", "edit") ? (
               <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  onClick={() => setAssigning({ user: u, kind: "vehicles" })}
-                  aria-label={t("assignVehicles")}
-                  title={t("assignVehicles")}
-                >
+                <RowAction label={t("assignVehicles")} onClick={() => setAssigning({ user: u, kind: "vehicles" })}>
                   <Car />
-                </Button>
+                </RowAction>
                 {lookups.can("vehicle-groups") ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8"
-                    onClick={() => setAssigning({ user: u, kind: "groups" })}
-                    aria-label={t("assignGroups")}
-                    title={t("assignGroups")}
-                  >
+                  <RowAction label={t("assignGroups")} onClick={() => setAssigning({ user: u, kind: "groups" })}>
                     <Layers />
-                  </Button>
+                  </RowAction>
                 ) : null}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  onClick={() => setAssigning({ user: u, kind: "drivers" })}
-                  aria-label={t("assignDrivers")}
-                  title={t("assignDrivers")}
-                >
+                <RowAction label={t("assignDrivers")} onClick={() => setAssigning({ user: u, kind: "drivers" })}>
                   <IdCard />
-                </Button>
+                </RowAction>
               </>
             ) : null}
           </>
@@ -230,6 +238,7 @@ export function UsersScreen() {
           {
             key: "name",
             header: t("f.name"),
+            sortValue: (u) => u.name,
             cell: (u) => (
               <span className="inline-flex items-center gap-1.5 font-medium">
                 {u.name}
@@ -239,17 +248,19 @@ export function UsersScreen() {
           },
           { key: "address", header: t("f.address"), cell: (u) => u.address ?? "—", className: "max-w-56 truncate" },
           { key: "mobile", header: t("f.mobile"), cell: (u) => <span dir="ltr">{u.mobile ?? "—"}</span> },
-          { key: "email", header: t("f.email"), cell: (u) => u.email },
-          { key: "role", header: t("f.role"), cell: (u) => roleName.get(u.roleId) ?? `#${u.roleId}` },
+          { key: "email", header: t("f.email"), sortValue: (u) => u.email, cell: (u) => u.email },
+          { key: "role", header: t("f.role"), sortValue: (u) => roleName.get(u.roleId), cell: (u) => roleName.get(u.roleId) ?? `#${u.roleId}` },
           {
             key: "department",
             header: t("f.department"),
+            sortValue: (u) => (u.departmentId ? deptName.get(u.departmentId) : null),
             cell: (u) => (u.departmentId ? (deptName.get(u.departmentId) ?? "—") : "—"),
           },
-          { key: "username", header: t("f.username"), cell: (u) => <span dir="ltr">{u.username}</span> },
+          { key: "username", header: t("f.username"), sortValue: (u) => u.username, cell: (u) => <span dir="ltr">{u.username}</span> },
           {
             key: "status",
             header: tc("status"),
+            sortValue: (u) => u.status,
             cell: (u) => (
               <StatusBadge tone={u.status === "active" ? "ok" : "muted"}>
                 {u.status === "active" ? tc("statuses.active") : tc("statuses.inactive")}

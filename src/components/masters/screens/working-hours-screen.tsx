@@ -1,12 +1,12 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { CarFront, Clock, Plus, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
-import { FormSection, PageHeader } from "@/components/masters/page-header";
+import { FormSection, KpiCards, PageHeader } from "@/components/masters/page-header";
 import { DayCheckboxes, VehicleChecklist } from "@/components/masters/pickers";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -45,9 +45,19 @@ export function WorkingHoursScreen() {
   const [editing, setEditing] = useState<Shift | "new" | null>(null);
   const [deleting, setDeleting] = useState<Shift | null>(null);
   const rows = useMemo(
-    () => [...(list.data?.shifts.data ?? [])].filter((s) => lookups.inScope(s.companyId)).sort((a, b) => a.name.localeCompare(b.name)),
+    () =>
+      [...(list.data?.shifts.data ?? [])]
+        .filter((s) => lookups.inScope(s.companyId))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [list.data, lookups],
   );
+
+  // Vehicles in scope that at least one shift covers.
+  const covered = useMemo(
+    () => new Set(rows.flatMap((s) => s.vehicleAssignments.map((a) => a.vehicleId))).size,
+    [rows],
+  );
+  const uncovered = Math.max(0, lookups.vehicles.length - covered);
 
   const days = (json: string | null) => {
     const d = parseWorkingDays(json);
@@ -55,7 +65,7 @@ export function WorkingHoursScreen() {
   };
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -65,6 +75,21 @@ export function WorkingHoursScreen() {
             {t("add")}
           </Button>
         }
+      />
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "shifts", label: t("kpi.shifts"), value: rows.length, icon: <Clock />, tone: "primary" },
+          { key: "covered", label: t("kpi.covered"), value: covered, icon: <CarFront />, tone: "ok" },
+          {
+            key: "uncovered",
+            label: t("kpi.uncovered"),
+            value: uncovered,
+            icon: <TriangleAlert />,
+            tone: "warn",
+            highlight: uncovered > 0,
+          },
+        ]}
       />
       <DataTable
         caption={t("title")}
@@ -76,22 +101,49 @@ export function WorkingHoursScreen() {
         onEdit={lookups.allow("scheduling", "edit") ? setEditing : undefined}
         onDelete={lookups.allow("scheduling", "delete") ? setDeleting : undefined}
         columns={[
-          { key: "account", header: t("account"), cell: (s) => lookups.companyName(s.companyId) },
+          {
+            key: "account",
+            header: t("account"),
+            sortValue: (s) => lookups.companyName(s.companyId),
+            cell: (s) => lookups.companyName(s.companyId),
+          },
           { key: "days", header: t("days"), cell: (s) => days(s.workingDays) },
-          { key: "from", header: t("from"), numeric: true, cell: (s) => timeInputValue(s.fromTime) },
-          { key: "to", header: t("to"), numeric: true, cell: (s) => timeInputValue(s.toTime) },
-          { key: "name", header: t("name"), cell: (s) => <span className="font-medium">{s.name}</span> },
+          {
+            key: "from",
+            header: t("from"),
+            numeric: true,
+            sortValue: (s) => timeInputValue(s.fromTime),
+            cell: (s) => timeInputValue(s.fromTime),
+          },
+          {
+            key: "to",
+            header: t("to"),
+            numeric: true,
+            sortValue: (s) => timeInputValue(s.toTime),
+            cell: (s) => timeInputValue(s.toTime),
+          },
+          {
+            key: "name",
+            header: t("name"),
+            sortValue: (s) => s.name,
+            cell: (s) => <span className="font-medium">{s.name}</span>,
+          },
           {
             key: "vehicles",
             header: t("vehicles"),
             numeric: true,
+            sortValue: (s) => s.vehicleAssignments.length,
             cell: (s) =>
-              lookups.vehicles.length > 0 && s.vehicleAssignments.length === lookups.vehicles.length ? t("all") : s.vehicleAssignments.length,
+              lookups.vehicles.length > 0 && s.vehicleAssignments.length === lookups.vehicles.length
+                ? t("all")
+                : s.vehicleAssignments.length,
           },
         ]}
       />
 
-      {editing !== null ? <ShiftSheet shift={editing === "new" ? null : editing} shifts={rows} onClose={() => setEditing(null)} /> : null}
+      {editing !== null ? (
+        <ShiftSheet shift={editing === "new" ? null : editing} shifts={rows} onClose={() => setEditing(null)} />
+      ) : null}
 
       <ConfirmDelete
         open={deleting !== null}
@@ -118,7 +170,9 @@ function ShiftSheet({ shift, shifts, onClose }: { shift: Shift | null; shifts: S
   const [name, setName] = useState(shift?.name ?? "");
   const [from, setFrom] = useState(timeInputValue(shift?.fromTime) || "08:00");
   const [to, setTo] = useState(timeInputValue(shift?.toTime) || "18:00");
-  const [days, setDays] = useState<WeekDay[]>(() => (shift ? parseWorkingDays(shift.workingDays) : ["sun", "mon", "tue", "wed", "thu"]));
+  const [days, setDays] = useState<WeekDay[]>(() =>
+    shift ? parseWorkingDays(shift.workingDays) : ["sun", "mon", "tue", "wed", "thu"],
+  );
   const [vehicles, setVehicles] = useState(() => new Set(shift?.vehicleAssignments.map((a) => a.vehicleId) ?? []));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
@@ -129,10 +183,17 @@ function ShiftSheet({ shift, shifts, onClose }: { shift: Shift | null; shifts: S
     if (Object.keys(found).length) return;
     setPending(true);
     try {
-      const vars = { name: name.trim(), fromTime: apiTime(from), toTime: apiTime(to), workingDays: serializeWorkingDays(days) };
+      const vars = {
+        name: name.trim(),
+        fromTime: apiTime(from),
+        toTime: apiTime(to),
+        workingDays: serializeWorkingDays(days),
+      };
       let id = shift?.id;
       if (id) await run(UPDATE_SHIFT, { id, ...vars });
-      else id = (await run<{ createShift: { id: string } }>(CREATE_SHIFT, { companyId: lookups.companyId, ...vars })).createShift.id;
+      else
+        id = (await run<{ createShift: { id: string } }>(CREATE_SHIFT, { companyId: lookups.companyId, ...vars }))
+          .createShift.id;
       const diff = diffMemberships(vehicles, shift?.vehicleAssignments ?? []);
       await Promise.all([
         ...diff.add.map((vehicleId) => run(CREATE_SHIFT_VEHICLE, { shiftId: id, vehicleId })),

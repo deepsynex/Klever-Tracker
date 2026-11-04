@@ -1,12 +1,12 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Car, Gauge, NotebookText, Plus, RotateCcw, Route } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
-import { PageHeader } from "@/components/masters/page-header";
+import { FilterInput, FilterSelect, KpiCards, PageHeader } from "@/components/masters/page-header";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -50,9 +50,11 @@ export function DistanceScreen() {
     [list.data, vehicleFilter, from, to, lookups],
   );
   const totalKm = roundMoney(rows.reduce((sum, l) => sum + (l.distanceKm ?? 0), 0));
+  const vehicleCount = new Set(rows.map((l) => l.vehicleId)).size;
+  const filtered = Boolean(vehicleFilter || from || to);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -63,36 +65,62 @@ export function DistanceScreen() {
           </Button>
         }
       />
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "logs", label: t("kpi.logs"), value: rows.length, icon: <NotebookText />, tone: "primary" },
+          { key: "km", label: t("kpi.totalKm"), value: totalKm.toLocaleString("en"), icon: <Route />, tone: "ok" },
+          { key: "vehicles", label: t("kpi.vehicles"), value: vehicleCount, icon: <Car />, tone: "muted" },
+          {
+            key: "avg",
+            label: t("kpi.avgKm"),
+            value: rows.length ? roundMoney(totalKm / rows.length).toLocaleString("en") : 0,
+            icon: <Gauge />,
+            tone: "warn",
+          },
+        ]}
+      />
       <DataTable
         caption={t("title")}
         rows={rows}
         loading={list.isPending}
         error={list.error ? errorText(list.error) : null}
         emptyText={lookups.vehicles.length === 0 ? t("needVehicles") : t("empty")}
-        toolbar={
+        filters={
           <>
-            <Select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} className="h-8 w-auto" aria-label={t("vehicle")}>
+            <FilterSelect label={t("vehicle")} value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)}>
               <option value="">{t("allVehicles")}</option>
               {lookups.vehicles.map((v) => (
                 <option key={v.id} value={v.id}>
                   {lookups.vehicleLabel(v.id)}
                 </option>
               ))}
-            </Select>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 w-auto" aria-label={t("from")} />
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 w-auto" aria-label={t("to")} />
-            <span className="text-xs text-muted-foreground">{t("totalShown", { km: totalKm })}</span>
+            </FilterSelect>
+            <FilterInput label={t("from")} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <FilterInput label={t("to")} type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <Button
+              variant="secondary"
+              disabled={!filtered}
+              onClick={() => {
+                setVehicleFilter("");
+                setFrom("");
+                setTo("");
+              }}
+            >
+              <RotateCcw />
+              {tc("reset")}
+            </Button>
           </>
         }
         onEdit={lookups.allow("other", "edit") ? setEditing : undefined}
         onDelete={lookups.allow("other", "delete") ? setDeleting : undefined}
         columns={[
-          { key: "account", header: t("account"), cell: (l) => lookups.companyName(lookups.vehicleCompanyId(l.vehicleId)) },
-          { key: "vehicle", header: t("vehicle"), cell: (l) => <span dir="ltr">{lookups.vehicleLabel(l.vehicleId)}</span> },
-          { key: "start", header: t("start"), numeric: true, cell: (l) => l.startOdometerKm ?? "—" },
-          { key: "stop", header: t("stop"), numeric: true, cell: (l) => l.stopOdometerKm ?? "—" },
-          { key: "distance", header: t("distance"), numeric: true, cell: (l) => l.distanceKm ?? "—" },
-          { key: "date", header: t("date"), cell: (l) => formatDate(l.logDate) },
+          { key: "account", header: t("account"), sortValue: (l) => lookups.companyName(lookups.vehicleCompanyId(l.vehicleId)), cell: (l) => lookups.companyName(lookups.vehicleCompanyId(l.vehicleId)) },
+          { key: "vehicle", header: t("vehicle"), sortValue: (l) => lookups.vehicleLabel(l.vehicleId), cell: (l) => <span dir="ltr">{lookups.vehicleLabel(l.vehicleId)}</span> },
+          { key: "start", header: t("start"), numeric: true, sortValue: (l) => l.startOdometerKm, cell: (l) => l.startOdometerKm ?? "—" },
+          { key: "stop", header: t("stop"), numeric: true, sortValue: (l) => l.stopOdometerKm, cell: (l) => l.stopOdometerKm ?? "—" },
+          { key: "distance", header: t("distance"), numeric: true, sortValue: (l) => l.distanceKm, cell: (l) => l.distanceKm ?? "—" },
+          { key: "date", header: t("date"), sortValue: (l) => l.logDate, cell: (l) => formatDate(l.logDate) },
         ]}
       />
 

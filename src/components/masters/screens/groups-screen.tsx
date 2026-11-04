@@ -1,12 +1,12 @@
 "use client";
 
-import { CornerDownRight, Plus } from "lucide-react";
+import { Car, CornerDownRight, FolderTree, Layers, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { DataTable } from "@/components/masters/data-table";
-import { FormSection, PageHeader } from "@/components/masters/page-header";
+import { FormSection, KpiCards, PageHeader } from "@/components/masters/page-header";
 import { VehicleChecklist } from "@/components/masters/pickers";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -76,8 +76,11 @@ export function GroupsScreen() {
   const rows = useMemo(() => treeOrder(groups), [groups]);
   const nameOf = (id: string | null) => (id ? (groups.find((g) => g.id === id)?.name ?? "—") : "—");
 
+  const subCount = groups.filter((g) => g.parentId).length;
+  const assigned = new Set(groups.flatMap((g) => g.members.map((m) => m.vehicleId))).size;
+
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -94,6 +97,14 @@ export function GroupsScreen() {
           </>
         }
       />
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "groups", label: t("kpi.groups"), value: groups.length - subCount, icon: <Layers />, tone: "primary" },
+          { key: "subs", label: t("kpi.subGroups"), value: subCount, icon: <FolderTree />, tone: "muted" },
+          { key: "vehicles", label: t("kpi.vehiclesAssigned"), value: assigned, icon: <Car />, tone: "ok" },
+        ]}
+      />
       <DataTable
         caption={t("title")}
         rows={rows}
@@ -107,6 +118,7 @@ export function GroupsScreen() {
           {
             key: "name",
             header: tc("name"),
+            sortValue: (g) => g.name,
             cell: (g) => (
               <span className="inline-flex items-center gap-1.5 font-medium" style={{ paddingInlineStart: `${g.depth * 1.25}rem` }}>
                 {g.depth > 0 ? <CornerDownRight className="size-3.5 text-subtle rtl:-scale-x-100" aria-hidden /> : null}
@@ -114,10 +126,10 @@ export function GroupsScreen() {
               </span>
             ),
           },
-          { key: "parent", header: t("parent"), cell: (g) => nameOf(g.parentId) },
-          { key: "incharge", header: t("incharge"), cell: (g) => g.inchargeName ?? "—" },
+          { key: "parent", header: t("parent"), sortValue: (g) => (g.parentId ? nameOf(g.parentId) : null), cell: (g) => nameOf(g.parentId) },
+          { key: "incharge", header: t("incharge"), sortValue: (g) => g.inchargeName, cell: (g) => g.inchargeName ?? "—" },
           { key: "email", header: t("email"), cell: (g) => <span dir="ltr">{g.inchargeEmail ?? "—"}</span> },
-          { key: "vehicles", header: t("vehicles"), numeric: true, cell: (g) => g.members.length },
+          { key: "vehicles", header: t("vehicles"), numeric: true, sortValue: (g) => g.members.length, cell: (g) => g.members.length },
         ]}
       />
 

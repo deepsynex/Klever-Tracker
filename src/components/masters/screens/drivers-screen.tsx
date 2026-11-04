@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileSpreadsheet, Plus, Upload } from "lucide-react";
+import { AlertTriangle, CalendarClock, CircleCheck, Download, FileSpreadsheet, IdCard, Plus, RotateCcw, Upload } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -9,7 +9,7 @@ import { DataTable } from "@/components/masters/data-table";
 import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
 import { downloadSheet, readSheetFile } from "@/components/masters/excel";
 import { FileUpload } from "@/components/masters/file-upload";
-import { FormSection, PageHeader, StatusBadge } from "@/components/masters/page-header";
+import { FilterSelect, FormSection, KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -52,10 +52,23 @@ export function DriversScreen() {
   const [editing, setEditing] = useState<AmDriver | "new" | null>(null);
   const [deleting, setDeleting] = useState<AmDriver | null>(null);
   const [importing, setImporting] = useState(false);
-  const rows = useMemo(
+  const [statusFilter, setStatusFilter] = useState("");
+  const [licenceFilter, setLicenceFilter] = useState("");
+  const allRows = useMemo(
     () => [...(list.data?.drivers.data ?? [])].filter((d) => lookups.inScope(d.companyId)).sort((a, b) => a.name.localeCompare(b.name)),
     [list.data, lookups],
   );
+  const rows = useMemo(
+    () =>
+      allRows.filter(
+        (d) =>
+          (!statusFilter || (statusFilter === "active") === (d.status === "active")) &&
+          (!licenceFilter || expiryState(d.licenceExpiryDate) === licenceFilter),
+      ),
+    [allRows, statusFilter, licenceFilter],
+  );
+  const licenceCount = (state: string) => allRows.filter((d) => expiryState(d.licenceExpiryDate) === state).length;
+  const expiredCount = licenceCount("expired");
 
   const expiryCell = (value: string | null) => {
     const state = expiryState(value);
@@ -79,7 +92,7 @@ export function DriversScreen() {
   };
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -90,24 +103,59 @@ export function DriversScreen() {
           </Button>
         }
       />
+      <KpiCards
+        loading={list.isPending}
+        items={[
+          { key: "total", label: t("kpi.total"), value: allRows.length, icon: <IdCard />, tone: "primary" },
+          { key: "active", label: tc("statuses.active"), value: allRows.filter((d) => d.status === "active").length, icon: <CircleCheck />, tone: "ok" },
+          { key: "soon", label: t("kpi.licenceSoon"), value: licenceCount("soon"), icon: <CalendarClock />, tone: "warn" },
+          { key: "expired", label: t("kpi.licenceExpired"), value: expiredCount, icon: <AlertTriangle />, tone: "bad", highlight: expiredCount > 0 },
+        ]}
+      />
       <DataTable
         caption={t("title")}
         rows={rows}
+        filters={
+          <>
+            <FilterSelect label={tc("status")} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">{tc("all")}</option>
+              <option value="active">{tc("statuses.active")}</option>
+              <option value="inactive">{tc("statuses.inactive")}</option>
+            </FilterSelect>
+            <FilterSelect label={t("kpi.licence")} value={licenceFilter} onChange={(e) => setLicenceFilter(e.target.value)}>
+              <option value="">{tc("all")}</option>
+              <option value="ok">{tc("expiry.ok")}</option>
+              <option value="soon">{tc("expiry.soon")}</option>
+              <option value="expired">{tc("expiry.expired")}</option>
+            </FilterSelect>
+            <Button
+              variant="secondary"
+              disabled={!statusFilter && !licenceFilter}
+              onClick={() => {
+                setStatusFilter("");
+                setLicenceFilter("");
+              }}
+            >
+              <RotateCcw />
+              {tc("reset")}
+            </Button>
+          </>
+        }
         loading={list.isPending}
         error={list.error ? errorText(list.error) : null}
         emptyText={t("empty")}
         searchText={(d) => `${d.name} ${d.employeeId ?? ""} ${d.mobile} ${d.licenceNo ?? ""} ${d.rfidTagId ?? ""}`}
         toolbar={
           <>
-            <Button variant="secondary" size="sm" onClick={() => download(driverExportSheet(rows), "drivers.xlsx")} disabled={rows.length === 0}>
+            <Button variant="secondary" onClick={() => download(driverExportSheet(rows), "drivers.xlsx")} disabled={rows.length === 0}>
               <Download />
               {tc("exportExcel")}
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => download(driverSampleSheet(), "drivers-sample.xlsx")}>
+            <Button variant="secondary" onClick={() => download(driverSampleSheet(), "drivers-sample.xlsx")}>
               <FileSpreadsheet />
               {t("sample")}
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setImporting(true)} disabled={!lookups.allow("drivers", "add")}>
+            <Button variant="secondary" onClick={() => setImporting(true)} disabled={!lookups.allow("drivers", "add")}>
               <Upload />
               {t("upload")}
             </Button>
@@ -116,10 +164,11 @@ export function DriversScreen() {
         onEdit={lookups.allow("drivers", "edit") ? setEditing : undefined}
         onDelete={lookups.allow("drivers", "delete") ? setDeleting : undefined}
         columns={[
-          { key: "employeeId", header: t("f.employeeId"), cell: (d) => <span dir="ltr">{d.employeeId ?? "—"}</span> },
+          { key: "employeeId", header: t("f.employeeId"), sortValue: (d) => d.employeeId, cell: (d) => <span dir="ltr">{d.employeeId ?? "—"}</span> },
           {
             key: "name",
             header: t("f.name"),
+            sortValue: (d) => d.name,
             cell: (d) => (
               <span className="inline-flex items-center gap-1.5 font-medium">
                 {d.name}
@@ -127,15 +176,15 @@ export function DriversScreen() {
               </span>
             ),
           },
-          { key: "licenceNo", header: t("f.licenceNo"), cell: (d) => <span dir="ltr">{d.licenceNo ?? "—"}</span> },
+          { key: "licenceNo", header: t("f.licenceNo"), sortValue: (d) => d.licenceNo, cell: (d) => <span dir="ltr">{d.licenceNo ?? "—"}</span> },
           { key: "mobile", header: t("f.mobile"), cell: (d) => <span dir="ltr">{d.mobile}</span> },
           { key: "tag", header: t("f.rfidTagId"), cell: (d) => <span dir="ltr">{d.rfidTagId ?? "—"}</span> },
-          { key: "licenceExpiry", header: t("f.licenceExpiryDate"), cell: (d) => expiryCell(d.licenceExpiryDate) },
+          { key: "licenceExpiry", header: t("f.licenceExpiryDate"), sortValue: (d) => d.licenceExpiryDate, cell: (d) => expiryCell(d.licenceExpiryDate) },
         ]}
       />
 
       {editing !== null ? <DriverSheet driver={editing === "new" ? null : editing} all={list.data?.drivers.data ?? []} onClose={() => setEditing(null)} /> : null}
-      {importing ? <ImportDialog companyDrivers={rows} onClose={() => setImporting(false)} /> : null}
+      {importing ? <ImportDialog companyDrivers={allRows} onClose={() => setImporting(false)} /> : null}
 
       <ConfirmDelete
         open={deleting !== null}
