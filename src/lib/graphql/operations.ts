@@ -197,16 +197,21 @@ export type EventTypesResult = {
 /**
  * Alert events query
  */
+/** One vehicle's alert events in a window (UTC "YYYY-MM-DD HH:MM:SS"), newest first. */
 export const GET_ALERT_EVENTS = /* GraphQL */ `
-  query AlertEvents {
-    alertEvents {
+  query AlertEvents($vehicleId: ID, $from: String, $to: String, $first: Int, $page: Int) {
+    alertEvents(vehicleId: $vehicleId, from: $from, to: $to, first: $first, page: $page) {
       data {
         id
         eventTypeId
         vehicleId
         occurredAt
+        parameters
         acknowledgedAt
         resolvedAt
+      }
+      paginatorInfo {
+        lastPage
       }
     }
   }
@@ -216,11 +221,14 @@ export type AlertEventItem = {
   eventTypeId: string;
   vehicleId: string;
   occurredAt: string;
+  /** JSON string: {lat, lng, speed, odometer_m, external_voltage_mv}. */
+  parameters?: string | null;
   acknowledgedAt?: string | null;
   resolvedAt?: string | null;
 };
 export type AlertEventsResult = {
   alertEvents: {
+    paginatorInfo?: { lastPage?: number };
     data: AlertEventItem[];
   };
 };

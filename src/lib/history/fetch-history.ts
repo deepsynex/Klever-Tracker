@@ -1,5 +1,5 @@
 import { gqlRequest } from "@/lib/graphql/client";
-import type { PositionHistoryPoint } from "@/lib/graphql/operations";
+import { GET_ALERT_EVENTS, type AlertEventItem, type AlertEventsResult, type PositionHistoryPoint } from "@/lib/graphql/operations";
 import { parseApiDateTime } from "@/lib/vehicle-management/helpers";
 
 /**
@@ -67,4 +67,35 @@ export async function fetchHistoryFixes(
   rows.sort((a, b) => time(a) - time(b));
   // One fix per device and time, even if a page boundary repeated a row.
   return rows.filter((p, k) => k === 0 || p.recordedAt !== rows[k - 1].recordedAt || p.deviceId !== rows[k - 1].deviceId);
+}
+
+const EVENT_PAGE_SIZE = 500;
+const MAX_EVENT_PAGES = 10;
+
+/**
+ * A vehicle's alert events in a History window (UTC bounds), every page up to 5,000 events.
+ * Uses the backend's alertEvents(vehicleId, from, to) filter.
+ */
+export async function fetchAlertEvents(vehicleId: string, from: string, to: string): Promise<AlertEventItem[]> {
+  const rows: AlertEventItem[] = [];
+  for (let page = 1; page <= MAX_EVENT_PAGES; page++) {
+    const res = await gqlRequest<AlertEventsResult>(GET_ALERT_EVENTS, { vehicleId, from, to, first: EVENT_PAGE_SIZE, page });
+    rows.push(...res.alertEvents.data);
+    if (page >= (res.alertEvents.paginatorInfo?.lastPage ?? 1)) break;
+  }
+  return rows;
+}
+
+/**
+ * fetchAlertEvents for History: no vehicle (a bare device) means no events, and a failure only
+ * loses the stored events (track-based ignition events still show), never the history itself.
+ */
+export async function fetchVehicleEventsSafely(vehicleId: string | null | undefined, from: string, to: string): Promise<AlertEventItem[]> {
+  if (!vehicleId) return [];
+  try {
+    return await fetchAlertEvents(vehicleId, from, to);
+  } catch (err: unknown) {
+    console.error("Failed to load trip events:", err);
+    return [];
+  }
 }

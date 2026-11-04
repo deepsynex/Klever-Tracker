@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Navigation, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { PositionHistoryPoint, RoutePoint, AlertEventItem, EventTypeItem } from "@/lib/graphql/operations";
+import type { PositionHistoryPoint, RoutePoint } from "@/lib/graphql/operations";
+import { formatInCompanyTz } from "@/lib/company-time";
+import { IGNITION_OFF, IGNITION_ON, nearestFixIndex, type TripEvent } from "@/lib/history/trip-events";
 import {
   bearing,
   buildPlaybackTrack,
@@ -88,8 +90,11 @@ export type MapProps = {
   activeIndex: number;
   onSelectPoint?: (index: number) => void;
   routePoints?: RoutePoint[];
-  events?: AlertEventItem[];
-  eventTypes?: EventTypeItem[];
+  events?: TripEvent[];
+  /** Display name for an event (translated for ignition events). Keep it stable (useCallback). */
+  eventLabel?: (code: string, eventTypeId: string | null) => string;
+  /** Company time zone for event times. */
+  timeZone?: string;
   followVehicle?: boolean;
   snapToRoads?: boolean;
   /** Called when Google refuses road snapping, so the page can hide the option. */
@@ -123,7 +128,8 @@ export function GoogleMapView({
   onSelectPoint,
   routePoints = [],
   events = [],
-  eventTypes = [],
+  eventLabel,
+  timeZone = "Asia/Dubai",
   followVehicle = true,
   snapToRoads = false,
   onRoadSnapUnavailable,
@@ -392,39 +398,52 @@ export function GoogleMapView({
 
     // Event Markers along the track
     if (events.length > 0) {
-      const eventTypeMap = new Map(eventTypes.map((et) => [et.id, et]));
       events.forEach((ev) => {
-        const matchedPoint =
-          displayPoints.find((p) => p.recordedAt.substring(0, 16) === ev.occurredAt.substring(0, 16)) ||
-          displayPoints[0];
+        // The event's own location (backend parameters / the fix it came from); otherwise the
+        // fix closest in time.
+        const near = ev.lat == null || ev.lng == null ? displayPoints[nearestFixIndex(displayPoints, ev.occurredAt)] : null;
+        const lat = ev.lat ?? near?.locationLat;
+        const lng = ev.lng ?? near?.locationLng;
+        if (!lat || !lng) return;
 
-        if (!matchedPoint?.locationLat || !matchedPoint?.locationLng) return;
-
-        const et = eventTypeMap.get(ev.eventTypeId);
-        const eventName = et?.name || "Trip Event";
-        const isOverspeed = et?.code === "overspeed";
+        const eventName = eventLabel?.(ev.code, ev.eventTypeId) ?? ev.code;
+        const color =
+          ev.code === IGNITION_ON ? "#16A34A" : ev.code === IGNITION_OFF ? "#6B7280" : ev.code === "overspeed" ? "#DC2626" : "#D97706";
+        const time = formatInCompanyTz(ev.occurredAt, timeZone, "dd-MM-yyyy HH:mm:ss");
+        const speed = ev.speed ?? near?.speed;
 
         const evMarker = new window.google!.maps.Marker({
-          position: { lat: matchedPoint.locationLat, lng: matchedPoint.locationLng },
+          position: { lat, lng },
           map: mapRef.current,
-          title: `${eventName} @ ${ev.occurredAt}`,
+          title: `${eventName} · ${time}`,
+          zIndex: 500,
           icon: {
-            path: window.google!.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-            scale: 5,
-            fillColor: isOverspeed ? "#DC2626" : "#D97706",
+            path: window.google!.maps.SymbolPath.CIRCLE,
+            scale: 6,
+            fillColor: color,
             fillOpacity: 1,
             strokeColor: "#ffffff",
-            strokeWeight: 1.5,
+            strokeWeight: 2,
           },
         });
 
-        const infoWindow = new window.google!.maps.InfoWindow({
-          content: `<div style="font-family:sans-serif;font-size:12px;padding:4px">
-            <strong>${eventName}</strong><br/>
-            Time: ${ev.occurredAt}<br/>
-            Speed: ${matchedPoint.speed ?? 0} km/h
-          </div>`,
-        });
+        // Built as DOM text, not HTML: event names come from the API.
+        const box = document.createElement("div");
+        box.style.cssText = "font-family:sans-serif;font-size:12px;padding:4px;line-height:1.5";
+        const title = document.createElement("strong");
+        title.textContent = eventName;
+        box.append(title);
+        for (const line of [
+          time,
+          speed != null ? `${Math.round(speed)} km/h` : null,
+          ev.externalVoltageMv != null ? `${(ev.externalVoltageMv / 1000).toFixed(1)} V` : null,
+        ]) {
+          if (!line) continue;
+          const row = document.createElement("div");
+          row.textContent = line;
+          box.append(row);
+        }
+        const infoWindow = new window.google!.maps.InfoWindow({ content: box });
 
         evMarker.addListener("click", () => {
           infoWindow.open(mapRef.current, evMarker);
@@ -445,7 +464,7 @@ export function GoogleMapView({
 
     mapRef.current.fitBounds(bounds);
     return () => controller?.abort();
-  }, [mapsLoaded, displayPoints, routePoints, events, eventTypes, snapToRoads, onRoadSnapUnavailable, apiKey]);
+  }, [mapsLoaded, displayPoints, routePoints, events, eventLabel, timeZone, snapToRoads, onRoadSnapUnavailable, apiKey]);
 
   // What the playback marker moves along: the road path when it's shown, else the GPS track.
   const markerTrack = useMemo<PlaybackTrack>(() => {

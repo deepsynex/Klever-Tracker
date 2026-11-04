@@ -37,7 +37,6 @@ import {
   GET_ROUTES,
   GET_ROUTE_DETAIL,
   GET_EVENT_TYPES,
-  GET_ALERT_EVENTS,
   type VehiclesResult,
   type DevicesResult,
   type RouteItem,
@@ -47,7 +46,6 @@ import {
   type EventTypeItem,
   type EventTypesResult,
   type AlertEventItem,
-  type AlertEventsResult,
 } from "@/lib/graphql/operations";
 import {
   buildTrackTargets,
@@ -59,7 +57,9 @@ import {
 import { cleanTrack } from "@/lib/history/clean-track";
 import { calculateDistance, computeRouteLegs, formatDuration, tripTimes, type RouteLeg } from "@/lib/history/legs";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
-import { fetchHistoryFixes, MAX_HISTORY_FIXES, TooManyFixesError, type HistoryFix } from "@/lib/history/fetch-history";
+import { fetchHistoryFixes, fetchVehicleEventsSafely, MAX_HISTORY_FIXES, TooManyFixesError, type HistoryFix } from "@/lib/history/fetch-history";
+import { IGNITION_OFF, IGNITION_ON, nearestFixIndex } from "@/lib/history/trip-events";
+import { useEventLabel, useTripEvents } from "@/lib/history/use-trip-events";
 import { cn } from "@/lib/utils";
 
 /** Default window: the last 7 days in the company time zone. */
@@ -89,11 +89,12 @@ export function TrackingHistoryView() {
   const [targets, setTargets] = useState<TrackTarget[]>([]);
   /** null while loading; then whether the company has anything to track. */
   const [hasTargets, setHasTargets] = useState<boolean | null>(null);
-  const selectedTarget = targets.find((x) => x.key === selectedKey) ?? null;
+  const selectedTarget = useMemo(() => targets.find((x) => x.key === selectedKey) ?? null, [targets, selectedKey]);
   const [routes, setRoutes] = useState<RouteItem[]>([]);
   const [routeDetail, setRouteDetail] = useState<RoutePoint[]>([]);
   const [eventTypes, setEventTypes] = useState<EventTypeItem[]>([]);
-  const [allAlertEvents, setAllAlertEvents] = useState<AlertEventItem[]>([]);
+  /** The window's stored alert events (alertEvents filtered by vehicle and time). */
+  const [apiEvents, setApiEvents] = useState<AlertEventItem[]>([]);
 
   // Telemetry Position History
   const [positions, setPositions] = useState<HistoryFix[]>([]);
@@ -141,21 +142,24 @@ export function TrackingHistoryView() {
       setFocusedLeg(null);
 
       try {
+        const from = companyTimeToUtcIso(fDate, fTime);
+        const to = companyTimeToUtcIso(tDate, tTime, 59);
         // Every page of the window, oldest first (one `first: 1000` call dropped the start of busy windows).
-        const sorted = await fetchHistoryFixes(
-          historyFilter(target),
-          companyTimeToUtcIso(fDate, fTime),
-          companyTimeToUtcIso(tDate, tTime, 59),
-        );
+        const [sorted, events] = await Promise.all([
+          fetchHistoryFixes(historyFilter(target), from, to),
+          fetchVehicleEventsSafely(target.vehicleId, from, to),
+        ]);
 
         if (request !== latestRequest.current) return;
         setPositions(sorted);
+        setApiEvents(events);
         if (sorted.length === 0) {
           setErrorMsg(t("map.noPoints"));
         }
       } catch (err: unknown) {
         if (request !== latestRequest.current) return;
         setPositions([]);
+        setApiEvents([]);
         setErrorMsg(
           err instanceof TooManyFixesError
             ? t("map.tooManyPoints", { total: err.total.toLocaleString("en"), max: MAX_HISTORY_FIXES.toLocaleString("en") })
@@ -174,12 +178,11 @@ export function TrackingHistoryView() {
 
     async function loadInitialData() {
       try {
-        const [vehiclesRes, devicesRes, routesRes, eventTypesRes, alertEventsRes] = await Promise.allSettled([
+        const [vehiclesRes, devicesRes, routesRes, eventTypesRes] = await Promise.allSettled([
           gqlRequest<VehiclesResult>(GET_VEHICLES, { first: 100 }),
           gqlRequest<DevicesResult>(GET_DEVICES, { first: 100 }),
           gqlRequest<RoutesResult>(GET_ROUTES),
           gqlRequest<EventTypesResult>(GET_EVENT_TYPES),
-          gqlRequest<AlertEventsResult>(GET_ALERT_EVENTS),
         ]);
 
         if (cancelled) return;
@@ -208,10 +211,6 @@ export function TrackingHistoryView() {
 
         if (eventTypesRes.status === "fulfilled" && eventTypesRes.value?.eventTypes?.data) {
           setEventTypes(eventTypesRes.value.eventTypes.data);
-        }
-
-        if (alertEventsRes.status === "fulfilled" && alertEventsRes.value?.alertEvents?.data) {
-          setAllAlertEvents(alertEventsRes.value.alertEvents.data);
         }
 
         void fetchHistory(defaultTarget, companyDate(DEFAULT_RANGE_DAYS), "00:00", companyDate(0), "23:59");
@@ -243,15 +242,8 @@ export function TrackingHistoryView() {
     }
   };
 
-  // Filtered Alert Events for current vehicle and selected event type
-  const filteredEvents = useMemo(() => {
-    return allAlertEvents.filter((ev) => {
-      // Alert events carry a vehicle id; a device matches through the vehicle it's installed in.
-      const matchesVehicle = !!selectedTarget?.vehicleId && ev.vehicleId === selectedTarget.vehicleId;
-      const matchesType = selectedEventTypeId === "all" || ev.eventTypeId === selectedEventTypeId;
-      return matchesVehicle && matchesType;
-    });
-  }, [allAlertEvents, selectedTarget, selectedEventTypeId]);
+  const { shown: filteredEvents } = useTripEvents(apiEvents, positions, eventTypes, selectedEventTypeId);
+  const eventName = useEventLabel(eventTypes);
 
   // Valid fixes (non-zero lat/lng), with parked-GPS drift collapsed into one point per stop
   // (clean-track.ts): a parked tracker's scattered fixes would otherwise draw a star of fake lines.
@@ -370,7 +362,7 @@ export function TrackingHistoryView() {
       ? t("playback.routesUsed", { count: routeLegs.length })
       : dataTab === "points"
         ? `GPS Points (${validPoints.length})`
-        : `Trip Events (${filteredEvents.length})`;
+        : t("events.titleCount", { count: filteredEvents.length });
 
   const statItems = [
     { key: "totalDistance", value: stats.totalDistance, unit: t("stats.unitKm"), tone: "text-primary" },
@@ -393,7 +385,8 @@ export function TrackingHistoryView() {
           onSelectPoint={setActiveIndex}
           routePoints={routeDetail}
           events={filteredEvents}
-          eventTypes={eventTypes}
+          eventLabel={eventName}
+          timeZone={displayZone}
           followVehicle={followVehicle}
           snapToRoads={snapToRoads}
           onRoadSnapUnavailable={handleRoadSnapUnavailable}
@@ -712,7 +705,11 @@ export function TrackingHistoryView() {
       {dataTab && (
         <section
           aria-labelledby="history-data-title"
-          className="glass-panel absolute inset-x-3 top-3 bottom-[13rem] z-30 flex flex-col overflow-hidden rounded-2xl sm:inset-x-4 lg:inset-x-auto lg:end-4 lg:top-[8.25rem] lg:bottom-[8.5rem] lg:w-[460px]"
+          className={cn(
+            "glass-panel absolute inset-x-3 top-3 bottom-[13rem] z-30 flex flex-col overflow-hidden rounded-2xl sm:inset-x-4 lg:inset-x-auto lg:end-4 lg:top-[8.25rem] lg:bottom-[8.5rem]",
+            // Trip events have more columns: wider, but never over the parameters panel (380px + gaps).
+            dataTab === "events" ? "lg:w-[min(760px,calc(100%-26rem))]" : "lg:w-[460px]",
+          )}
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
             <h2 id="history-data-title" className="text-sm font-semibold">
@@ -839,43 +836,70 @@ export function TrackingHistoryView() {
               </div>
             )}
             {dataTab === "events" && (
-              <div className="p-4">
+              <div className="overflow-x-auto p-4">
                 {filteredEvents.length === 0 ? (
                   <div className="py-8 text-center text-xs text-muted-foreground">{t("events.noEvents")}</div>
                 ) : (
                   <table className="w-full border-collapse text-start text-xs">
                     <thead>
                       <tr className="border-b border-border bg-surface-2 text-subtle">
-                        <th className="p-2 text-start">Event ID</th>
-                        <th className="p-2 text-start">Event Type</th>
-                        <th className="p-2 text-start">Occurred At</th>
-                        <th className="p-2 text-start">Status</th>
-                        <th className="p-2 text-end">Action</th>
+                        <th className="p-2 text-start">{t("events.type")}</th>
+                        <th className="p-2 text-start">{t("events.occurredAt")}</th>
+                        <th className="p-2 text-start">{t("events.location")}</th>
+                        <th className="p-2 text-end">
+                          {t("events.speed")} · {t("events.voltage")}
+                        </th>
+                        <th className="p-2 text-start">{t("events.source")}</th>
+                        <th className="p-2 text-end">
+                          <span className="sr-only">{t("events.jumpTo")}</span>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredEvents.map((ev) => {
-                        const et = eventTypes.find((e) => e.id === ev.eventTypeId);
+                        const isOn = ev.code === IGNITION_ON;
+                        const isOff = ev.code === IGNITION_OFF;
                         return (
                           <tr key={ev.id} className="border-b border-border/50 hover:bg-surface-2">
-                            <td className="p-2 font-mono">{ev.id}</td>
-                            <td className="p-2 font-medium text-foreground">
-                              {et?.name || `Type ${ev.eventTypeId}`} ({et?.code || "event"})
-                            </td>
-                            <td className="p-2 font-mono">{ev.occurredAt}</td>
                             <td className="p-2">
                               <span
                                 className={cn(
-                                  "rounded px-1.5 py-0.5 text-[10px] font-semibold",
-                                  ev.resolvedAt
-                                    ? "bg-moving/10 text-moving"
-                                    : ev.acknowledgedAt
-                                      ? "bg-sand/15 text-sand"
-                                      : "bg-destructive/15 text-destructive",
+                                  "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap",
+                                  isOn
+                                    ? "border-moving/25 bg-moving/10 text-moving"
+                                    : isOff
+                                      ? "border-border bg-surface-2 text-muted-foreground"
+                                      : ev.code === "overspeed"
+                                        ? "border-destructive/25 bg-destructive/10 text-destructive"
+                                        : "border-sand/25 bg-sand-soft text-sand",
                                 )}
                               >
-                                {ev.resolvedAt ? "Resolved" : ev.acknowledgedAt ? "Acknowledged" : "Active"}
+                                <span className="size-1.5 rounded-full bg-current" aria-hidden />
+                                {eventName(ev.code, ev.eventTypeId)}
                               </span>
+                            </td>
+                            <td className="p-2 font-mono whitespace-nowrap" dir="ltr">
+                              {formatInCompanyTz(ev.occurredAt, displayZone, "dd-MM HH:mm:ss")}
+                            </td>
+                            <td className="p-2 font-mono whitespace-nowrap" dir="ltr">
+                              {ev.lat != null && ev.lng != null ? `${ev.lat.toFixed(4)}, ${ev.lng.toFixed(4)}` : "—"}
+                            </td>
+                            <td className="p-2 text-end font-mono whitespace-nowrap">
+                              {[
+                                ev.speed != null ? `${Math.round(ev.speed)} ${t("stats.unitKmh")}` : null,
+                                ev.externalVoltageMv != null ? `${(ev.externalVoltageMv / 1000).toFixed(1)} V` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ") || "—"}
+                            </td>
+                            <td className="p-2 whitespace-nowrap text-muted-foreground" title={ev.source === "track" ? t("events.fromTrackHint") : undefined}>
+                              {ev.source === "api"
+                                ? ev.resolvedAt
+                                  ? t("events.resolved")
+                                  : ev.acknowledgedAt
+                                    ? t("events.acknowledged")
+                                    : t("events.recorded")
+                                : t("events.fromTrack")}
                             </td>
                             <td className="p-2 text-end">
                               <Button
@@ -883,12 +907,8 @@ export function TrackingHistoryView() {
                                 size="sm"
                                 className="h-6 px-2 text-xs"
                                 onClick={() => {
-                                  const matchedIdx = validPoints.findIndex((p) =>
-                                    p.recordedAt.startsWith(ev.occurredAt.substring(0, 16)),
-                                  );
-                                  if (matchedIdx !== -1) {
-                                    setActiveIndex(matchedIdx);
-                                  }
+                                  const idx = nearestFixIndex(validPoints, ev.occurredAt);
+                                  if (idx !== -1) setActiveIndex(idx);
                                   setActiveTab("map");
                                 }}
                               >
