@@ -596,10 +596,13 @@ export type AuditLogsResult = {
   users: Paginated<{ id: string; name: string; email: string }>;
 };
 
-/** The signed-in user's own record, for My profile. */
+/**
+ * The signed-in user's own record, for My profile. Read from `me` and saved with `updateMyProfile`,
+ * which only need a signed-in user, so every role can edit its own profile (not just roles with "core").
+ */
 export const MY_PROFILE = /* GraphQL */ `
-  query MyProfile($id: ID!) {
-    user(id: $id) {
+  query MyProfile {
+    me {
       id
       name
       username
@@ -620,8 +623,8 @@ export type MyProfile = {
   lastLoginAt: string | null;
 };
 export const UPDATE_MY_PROFILE = /* GraphQL */ `
-  mutation UpdateMyProfile($id: ID!, $name: String, $mobile: String, $address: String) {
-    updateUser(id: $id, name: $name, mobile: $mobile, address: $address) {
+  mutation UpdateMyProfile($name: String, $mobile: String, $address: String) {
+    updateMyProfile(name: $name, mobile: $mobile, address: $address) {
       id
     }
   }

@@ -49,7 +49,7 @@ export function ProfileScreen() {
   const { data: me } = useMe();
   const profile = useQuery({
     queryKey: ["vm", "am-profile", me?.id],
-    queryFn: async () => (await gqlRequest<{ user: MyProfile | null }>(MY_PROFILE, { id: me!.id })).user,
+    queryFn: async () => (await gqlRequest<{ me: MyProfile }>(MY_PROFILE)).me,
     enabled: Boolean(me?.id),
   });
   const errorText = useErrorText();
@@ -107,7 +107,6 @@ function ProfileForm({ profile }: { profile: MyProfile }) {
     setPending(true);
     try {
       await gqlRequest(UPDATE_MY_PROFILE, {
-        id: profile.id,
         name: form.name.trim(),
         // An emptied optional field is cleared with an explicit null (API Doc §6 conventions).
         mobile: form.mobile.trim() || null,
