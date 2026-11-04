@@ -24,7 +24,8 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
   const [, startTransition] = useTransition();
 
   // After Google matched a registered user, their email comes back in the URL (see the Google callback).
-  const defaultEmail = searchParams.get("email") || mockHint?.email || "verify@klever-tracker.test";
+  // Pre-filled only from the Google callback (?email=) or the mock API's demo login, never for real users.
+  const defaultEmail = searchParams.get("email") || mockHint?.email || "";
   const defaultPassword = mockHint?.password || "";
 
   const {
@@ -87,7 +88,7 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
             <span className="text-[#0d9488]">Tracker</span>
           </div>
           <span className="text-[9px] font-bold tracking-[2.2px] text-slate-400 mt-1 uppercase">
-            VEHICLE TRACKING SYSTEM
+            {t("brandTagline")}
           </span>
         </div>
       </div>
@@ -144,7 +145,7 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
               autoComplete="username"
               inputMode="email"
               dir="ltr"
-              placeholder="verify@klever-tracker.test"
+              placeholder={t("emailPlaceholder")}
               className="h-11 w-full rounded-[10px] border border-[#d8e2ec] bg-[#eef3f8] pl-10 pr-4 text-sm font-medium text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-[#0d9488] focus:bg-white focus:ring-2 focus:ring-[#0d9488]/15"
               aria-invalid={!!fieldError("email")}
               aria-describedby={fieldError("email") ? "email-error" : undefined}
@@ -236,7 +237,7 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
                 </svg>
               ) : null}
             </span>
-            <span className="text-[13px] font-medium text-slate-700">Remember me</span>
+            <span className="text-[13px] font-medium text-slate-700">{t("rememberMe")}</span>
           </label>
 
           <Link
@@ -276,7 +277,7 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
       {/* Divider */}
       <div className="flex items-center gap-3 my-5">
         <span className="h-px flex-1 bg-slate-200" />
-        <span className="text-xs font-medium text-slate-400">or continue with</span>
+        <span className="text-xs font-medium text-slate-400">{t("orContinue")}</span>
         <span className="h-px flex-1 bg-slate-200" />
       </div>
 
@@ -324,9 +325,9 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
           </svg>
         </div>
         <div className="flex flex-col">
-          <span className="text-[12.5px] font-bold text-emerald-900 leading-tight">Secure &amp; Reliable</span>
+          <span className="text-[12.5px] font-bold text-emerald-900 leading-tight">{t("secureTitle")}</span>
           <span className="text-[11.5px] text-emerald-700 leading-tight mt-0.5">
-            Your data is encrypted and always protected
+            {t("secureText")}
           </span>
         </div>
       </div>

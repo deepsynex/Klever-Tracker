@@ -122,7 +122,13 @@
       "heading": "Welcome Back",
       "tagline": "Sign in to access your fleet tracking dashboard",
       "showPassword": "Show password",
-      "hidePassword": "Hide password"
+      "hidePassword": "Hide password",
+      "brandTagline": "Vehicle tracking system",
+      "rememberMe": "Remember me",
+      "orContinue": "or continue with",
+      "secureTitle": "Secure & reliable",
+      "secureText": "Your data is encrypted and always protected",
+      "emailPlaceholder": "name@company.ae"
     },
     "forgot": {
       "title": "Reset your password",
@@ -142,6 +148,19 @@
       "submitting": "Changing…",
       "invalidLink": "This reset link is incomplete. Open the link from your email again, or request a new one.",
       "requestNew": "Request a new link"
+    },
+    "showcase": {
+      "eyebrow": "Real-time tracking",
+      "headline1": "Track Your",
+      "headline2": "Vehicles",
+      "headline3": "Anywhere",
+      "intro": "Live location, smart alerts and detailed reports for complete fleet management.",
+      "liveTracking": "Live\nTracking",
+      "alerts": "Instant\nAlerts",
+      "reports": "Detailed\nReports",
+      "secure": "Safe &\nSecure",
+      "stopped": "Stopped",
+      "moving": "Moving"
     }
   },
   "nav": {
@@ -193,7 +212,7 @@
   "dashboard": {
     "title": "Dashboard",
     "welcome": "Welcome, {name}",
-    "intro": "Phase 1 is in progress. Fleet, live map and alerts screens arrive in the next phases.",
+    "intro": "Live tracking, history and the heatmap are ready. Alerts, reports and geofences arrive in the next phases.",
     "api": {
       "title": "Tracking API",
       "ok": "Connected",
@@ -219,9 +238,9 @@
         "auth": "Sign in, forgot and reset password",
         "bff": "Secure session: token kept on the server",
         "shell": "App shell and navigation",
-        "me": "Role-based menus (needs the me query from the backend)",
+        "me": "Role-based menus and permissions",
         "users": "Users, roles, departments and vehicle access",
-        "schema": "Typed API operations (needs schema.graphql)"
+        "schema": "Typed API operations from schema.graphql"
       }
     },
     "welcomeBack": "Welcome back,",
@@ -952,6 +971,7 @@
         "accounts": "Account",
         "users": "User",
         "drivers": "Driver",
+        "roles": "Menu setting",
         "changePassword": "Change password",
         "driverBehaviour": "Driver behaviour",
         "departments": "Departments",
@@ -962,6 +982,7 @@
         "accounts": "Company details, contacts, billing and limits.",
         "users": "Portal logins, their role, and the vehicles and drivers they see.",
         "drivers": "Driver records, licences, permits and driver-app logins. Import from Excel.",
+        "roles": "Roles and what each can view, add, edit and delete.",
         "changePassword": "Change your own password.",
         "driverBehaviour": "How driver scores are calculated for each company.",
         "departments": "Group users by department: add, rename or remove departments.",
@@ -1051,7 +1072,7 @@
         "assignVehicles": "Assign vehicles",
         "assignDrivers": "Assign drivers",
         "addDepartment": "Add department",
-        "noRoles": "No roles yet. Ask an administrator to add one.",
+        "noRoles": "No roles yet. Add one under Menu setting first.",
         "passwordKeepHint": "Leave the password empty to keep the current one.",
         "isAdminHint": "Admins see every vehicle in the company without assigning them.",
         "sections": {
@@ -1428,6 +1449,12 @@
       "invalidZoom": "Invalid map zoom.",
       "invalidBbox": "Invalid map area.",
       "companyScopeUnavailable": "Choosing another company isn't available yet."
+    },
+    "popup": {
+      "location": "Location",
+      "lastUpdate": "Last update",
+      "speed": "Speed",
+      "unitKmh": "km/h"
     }
   },
   "tracking": {

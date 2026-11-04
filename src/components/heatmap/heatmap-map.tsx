@@ -7,6 +7,7 @@ import { Bike, CarFront, Truck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Bbox, HeatmapCell } from "@/lib/heatmap/aggregate";
+import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { DUBAI_CENTER, type Rgb } from "@/lib/heatmap/client";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ type Props = {
 /** Google base map with a deck.gl HeatmapLayer and vehicle position markers. */
 export default function HeatmapMap({ apiKey, cells, bounds, fitKey, style, onZoomChange, markers }: Props) {
   const t = useTranslations("heatmap");
+  const zone = useCompanyTimeZone();
   const [activeMarker, setActiveMarker] = useState<VehicleMapMarker | null>(null);
 
   return (
@@ -89,23 +91,34 @@ export default function HeatmapMap({ apiKey, cells, bounds, fitKey, style, onZoo
           >
             <div className="p-1 min-w-[200px] text-xs text-foreground font-sans">
               <div className="font-bold text-sm text-[#0f4c47] mb-1">{activeMarker.label}</div>
-              <div className="space-y-0.5 text-muted-foreground text-[11px]">
-                <div><span className="font-semibold text-foreground">Exact DB Lat:</span> {activeMarker.position.lat.toFixed(6)}</div>
-                <div><span className="font-semibold text-foreground">Exact DB Lng:</span> {activeMarker.position.lng.toFixed(6)}</div>
+              <dl className="space-y-0.5 text-muted-foreground text-[11px]">
+                <div>
+                  <dt className="inline font-semibold text-foreground">{t("popup.location")}:</dt>{" "}
+                  <dd className="inline" dir="ltr">
+                    {activeMarker.position.lat.toFixed(5)}, {activeMarker.position.lng.toFixed(5)}
+                  </dd>
+                </div>
                 {activeMarker.recordedAt && (
-                  <div><span className="font-semibold text-foreground">Recorded:</span> {activeMarker.recordedAt}</div>
+                  <div>
+                    <dt className="inline font-semibold text-foreground">{t("popup.lastUpdate")}:</dt>{" "}
+                    <dd className="inline" dir="ltr">{formatInCompanyTz(activeMarker.recordedAt, zone, "dd-MM-yyyy HH:mm")}</dd>
+                  </div>
                 )}
                 {typeof activeMarker.speed === "number" && (
-                  <div><span className="font-semibold text-foreground">Speed:</span> {activeMarker.speed} km/h</div>
+                  <div>
+                    <dt className="inline font-semibold text-foreground">{t("popup.speed")}:</dt>{" "}
+                    <dd className="inline">
+                      {activeMarker.speed} {t("popup.unitKmh")}
+                    </dd>
+                  </div>
                 )}
                 {typeof activeMarker.totalPoints === "number" && (
-                  <div><span className="font-semibold text-foreground">{t("summary.pointsInPeriod")}:</span>{" "}
-                    {activeMarker.totalPoints.toLocaleString("en")}</div>
+                  <div>
+                    <dt className="inline font-semibold text-foreground">{t("summary.pointsInPeriod")}:</dt>{" "}
+                    <dd className="inline">{activeMarker.totalPoints.toLocaleString("en")}</dd>
+                  </div>
                 )}
-                <div className="mt-1.5 pt-1 border-t border-border/60 text-[10px] text-emerald-600 font-semibold">
-                  ✓ Verified Live Database Telemetry
-                </div>
-              </div>
+              </dl>
             </div>
           </InfoWindow>
         )}

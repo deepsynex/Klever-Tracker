@@ -441,9 +441,10 @@ const STEPS: Step[] = [
   { key: "auth", state: "done" },
   { key: "bff", state: "done" },
   { key: "shell", state: "done" },
-  { key: "users", state: "next" },
-  { key: "me", state: "blocked" },
-  { key: "schema", state: "blocked" },
+  { key: "users", state: "done" },
+  { key: "me", state: "done" },
+  // schema.graphql has arrived; the operations are still typed by hand until codegen is switched on.
+  { key: "schema", state: "next" },
 ];
 
 function SetupChecklist() {

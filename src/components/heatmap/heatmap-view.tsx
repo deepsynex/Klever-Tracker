@@ -103,8 +103,8 @@ export function HeatmapView({ today }: { today: string }) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Filters state: default to TEST-QA-001 which has 161 verified GPS fixes in Dubai
-  const [selected, setSelected] = useState<string[]>(["vehicle:16"]);
+  // Filters state. Nothing ticked at first; the first heatmap covers all of the company's vehicles.
+  const [selected, setSelected] = useState<string[]>([]);
   const [vehicleSearch, setVehicleSearch] = useState("");
   const [fromDate, setFromDate] = useState(() => companyDate(30));
   const [fromTime, setFromTime] = useState("00:00");
