@@ -3,10 +3,18 @@
 import { AdvancedMarker, APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
 import { Truck } from "lucide-react";
 import { useTranslations } from "next-intl";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import type { FleetStatus, FleetVehicle } from "@/lib/dashboard/data";
 import { DUBAI_CENTER } from "@/lib/heatmap/client";
+import { useMapConfig } from "@/lib/map-settings";
 import { cn } from "@/lib/utils";
+
+// MapLibre is only downloaded when the platform uses OpenStreetMap.
+const FleetOsmMap = dynamic(() => import("./fleet-osm-map").then((m) => m.FleetOsmMap), {
+  ssr: false,
+  loading: () => <div className="size-full animate-pulse bg-surface-2" />,
+}) as typeof import("./fleet-osm-map").FleetOsmMap; // dynamic() drops the generic
 
 const TONE: Record<FleetStatus, string> = {
   moving: "bg-moving",
@@ -62,12 +70,14 @@ function FitToFleet({ vehicles }: { vehicles: FleetVehicle[] }) {
 }
 
 /**
- * Latest fix per vehicle on Google Maps, or a drawn street canvas when no Maps key is configured
- * or Google rejects it (wrong referrer, billing off).
+ * Latest fix per vehicle on the platform's map (Google Maps or OpenStreetMap, set on
+ * /map-settings), or a drawn street canvas when no Google key is configured or Google rejects it
+ * (wrong referrer, billing off).
  */
 export function FleetMapPreview({ vehicles }: { vehicles: FleetVehicle[] }) {
   const t = useTranslations("dashboard.map");
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const mapConfig = useMapConfig();
+  const apiKey = mapConfig.googleMapsApiKey;
   const [authFailed, setAuthFailed] = useState(false);
 
   useEffect(() => {
@@ -85,11 +95,15 @@ export function FleetMapPreview({ vehicles }: { vehicles: FleetVehicle[] }) {
 
   return (
     <div className="relative h-[340px] overflow-hidden rounded-xl bg-surface-2">
-      {apiKey && !authFailed ? (
+      {!mapConfig.ready ? (
+        <div className="size-full animate-pulse bg-surface-2" />
+      ) : mapConfig.mapProvider === "osm" && mapConfig.maptilerApiKey ? (
+        <FleetOsmMap maptilerKey={mapConfig.maptilerApiKey} vehicles={vehicles} renderMarker={(v) => <VehicleTag vehicle={v} />} />
+      ) : apiKey && !authFailed ? (
         <APIProvider apiKey={apiKey}>
           <Map
             className="size-full"
-            mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID"}
+            mapId={mapConfig.googleMapsMapId || "DEMO_MAP_ID"}
             defaultCenter={DUBAI_CENTER}
             defaultZoom={11}
             gestureHandling="cooperative"

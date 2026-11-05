@@ -32,11 +32,17 @@ import { gridZoomLevel, type WeightMode } from "@/lib/heatmap/aggregate";
 import { GRADIENTS, HeatmapRequestError, fetchHeatmap, heatmapUrl, type HeatmapQuery } from "@/lib/heatmap/client";
 import { parseHeatmapQuery } from "@/lib/heatmap/request";
 import { buildTrackTargets, companyDate, companyTimeToUtcIso } from "@/lib/history/selection";
+import { useMapConfig } from "@/lib/map-settings";
 import { cn } from "@/lib/utils";
 import type { VehicleMapMarker } from "./heatmap-map";
 import { HeatmapToolbar, type ToolbarState } from "./heatmap-toolbar";
 
 const HeatmapMap = dynamic(() => import("./heatmap-map"), {
+  ssr: false,
+  loading: () => <div className="size-full animate-pulse bg-surface-2" />,
+});
+// MapLibre is only downloaded when the platform uses OpenStreetMap.
+const HeatmapOsmMap = dynamic(() => import("./heatmap-osm-map"), {
   ssr: false,
   loading: () => <div className="size-full animate-pulse bg-surface-2" />,
 });
@@ -100,7 +106,8 @@ function TargetVehicleIcon({ kind, className }: { kind: "truck" | "van" | "bike"
 export function HeatmapView({ today }: { today: string }) {
   const t = useTranslations("heatmap");
   const te = useTranslations("errors");
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+  const mapConfig = useMapConfig();
+  const apiKey = mapConfig.googleMapsApiKey ?? "";
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Filters state. Nothing ticked at first; the first heatmap covers all of the company's vehicles.
@@ -331,10 +338,23 @@ export function HeatmapView({ today }: { today: string }) {
 
   return (
     <div ref={containerRef} className="relative size-full overflow-hidden bg-surface-2 select-none">
-      {/* 1. Fullscreen Base Google Map & Heatmap Layer with Real Database Markers */}
-      {apiKey ? (
+      {/* 1. Fullscreen base map (Google or OpenStreetMap, per /map-settings) with the heatmap layer and markers */}
+      {!mapConfig.ready ? (
+        <div className="size-full animate-pulse bg-surface-2" />
+      ) : mapConfig.mapProvider === "osm" && mapConfig.maptilerApiKey ? (
+        <HeatmapOsmMap
+          maptilerKey={mapConfig.maptilerApiKey}
+          cells={data?.cells ?? []}
+          bounds={data?.bounds ?? null}
+          fitKey={fitKey}
+          style={mapStyle}
+          onZoomChange={onZoomChange}
+          markers={realMarkers}
+        />
+      ) : apiKey ? (
         <HeatmapMap
           apiKey={apiKey}
+          mapId={mapConfig.googleMapsMapId}
           cells={data?.cells ?? []}
           bounds={data?.bounds ?? null}
           fitKey={fitKey}

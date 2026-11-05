@@ -4,6 +4,7 @@ import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-qu
 import { APIProvider, Map as GoogleMap } from "@vis.gl/react-google-maps";
 import { History, LayoutGrid, Loader2, Map as MapIcon, Maximize2, RotateCw, Truck, X } from "lucide-react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import {
   useCallback,
@@ -28,12 +29,17 @@ import {
   type PreloadMinutes,
   type ViewMode,
 } from "@/lib/multi-tracking/core";
+import { useMapConfig } from "@/lib/map-settings";
 import { cn } from "@/lib/utils";
 import { Age } from "./age";
 import { useMultiTrackFeed, type FeedPhase } from "./feed";
 import { FloatingWindow } from "./floating-window";
 import { blocksAllMaps, MapsProblemBanner, MapUnavailable, useMapElementFailed, useMapsProblem } from "./maps-health";
+import { MapChoiceProvider, useMapChoice, type MapChoice } from "./map-choice";
 import { STATUS_COLOR, TrackMap, type MapEntry } from "./track-map";
+
+// MapLibre is only downloaded when the platform uses OpenStreetMap.
+const BackdropOsmMap = dynamic(() => import("./backdrop-osm-map").then((m) => m.BackdropOsmMap), { ssr: false });
 import { VehicleList, type ListRow } from "./vehicle-list";
 import { useResolvedColor, VehicleTile } from "./vehicle-tile";
 
@@ -57,22 +63,39 @@ function prefersDark(): boolean {
 }
 
 export function MultiTrackingView({ userKey }: { userKey: string }) {
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+  // The platform's map (Google or OpenStreetMap, chosen on /map-settings). Google's script is only
+  // loaded when Google is the map.
+  const config = useMapConfig();
+  const osm = config.mapProvider === "osm" && Boolean(config.maptilerApiKey);
+  const apiKey = config.googleMapsApiKey ?? "";
+  const choice: MapChoice = useMemo(
+    () => ({ provider: osm ? "osm" : "google", maptilerKey: config.maptilerApiKey, googleMapId: config.googleMapsMapId }),
+    [osm, config.maptilerApiKey, config.googleMapsMapId],
+  );
+  if (!config.ready) return <div className="h-full min-h-[300px] animate-pulse rounded-2xl bg-surface-2" />;
   return (
     <MotionConfig reducedMotion="user">
-      <APIProvider apiKey={apiKey}>
-        <Workspace userKey={userKey} apiKey={apiKey} />
-      </APIProvider>
+      <MapChoiceProvider value={choice}>
+        {osm ? (
+          <Workspace userKey={userKey} apiKey={apiKey} osm />
+        ) : (
+          <APIProvider apiKey={apiKey}>
+            <Workspace userKey={userKey} apiKey={apiKey} osm={false} />
+          </APIProvider>
+        )}
+      </MapChoiceProvider>
     </MotionConfig>
   );
 }
 
-function Workspace({ userKey, apiKey }: { userKey: string; apiKey: string }) {
+function Workspace({ userKey, apiKey, osm }: { userKey: string; apiKey: string; osm: boolean }) {
   const t = useTranslations("multiTracking");
   const te = useTranslations("errors");
   const mounted = useMounted();
   // Quota / billing / key / load failures: explained once, and each map shows "Map unavailable".
-  const mapsProblem = useMapsProblem();
+  // Google's own key / quota / load failures; none of them apply to OpenStreetMap.
+  const googleProblem = useMapsProblem();
+  const mapsProblem = osm ? null : googleProblem;
   const mapsDown = blocksAllMaps(mapsProblem);
   const singleBox = useRef<HTMLDivElement>(null);
   const singleFailed = useMapElementFailed(singleBox);
@@ -204,7 +227,7 @@ function Workspace({ userKey, apiKey }: { userKey: string; apiKey: string }) {
         {apiKey && mapsProblem ? <MapsProblemBanner problem={mapsProblem} /> : null}
 
         <div className="relative min-h-0 flex-1">
-          {!apiKey ? (
+          {!apiKey && !osm ? (
             <Alert tone="warning">{t("noApiKey")}</Alert>
           ) : !feed.restored || !mounted ? (
             <div className="h-full min-h-[300px] animate-pulse rounded-2xl bg-surface-2" />
@@ -488,6 +511,7 @@ function Legend({
 
 /** The static, blurred backdrop of the grid view (desktop only; not interactive). */
 function BackgroundMap({ dark }: { dark: boolean }) {
+  const choice = useMapChoice();
   const box = useRef<HTMLDivElement>(null);
   // If Google fails this map too, drop it rather than show its blurred error box.
   const failed = useMapElementFailed(box);
@@ -500,9 +524,12 @@ function BackgroundMap({ dark }: { dark: boolean }) {
       )}
       aria-hidden
     >
+      {choice.provider === "osm" && choice.maptilerKey ? (
+        <BackdropOsmMap maptilerKey={choice.maptilerKey} dark={dark} />
+      ) : (
       <GoogleMap
         className="size-full"
-        mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID"}
+        mapId={choice.googleMapId || "DEMO_MAP_ID"}
         colorScheme={dark ? "DARK" : "LIGHT"}
         defaultCenter={{ lat: 25.6, lng: 54.2 }}
         defaultZoom={7}
@@ -511,6 +538,7 @@ function BackgroundMap({ dark }: { dark: boolean }) {
         keyboardShortcuts={false}
         clickableIcons={false}
       />
+      )}
     </div>
   );
 }

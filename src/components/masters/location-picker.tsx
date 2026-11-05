@@ -1,12 +1,14 @@
 "use client";
 
 import { MapPin, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { loadGoogleMaps } from "@/lib/google-maps";
+import { useMapConfig } from "@/lib/map-settings";
 import { numberOrNull } from "@/lib/vehicle-management/helpers";
 
 /** The parts of the Maps API used here (the global `window.google` type only covers the history map). */
@@ -18,13 +20,20 @@ type MapsApi = {
   Marker: new (opts: Record<string, unknown>) => PinMarker;
 };
 
+// MapLibre is only downloaded when the platform uses OpenStreetMap.
+const LocationOsmMap = dynamic(() => import("./location-osm-map").then((m) => m.LocationOsmMap), {
+  ssr: false,
+  loading: () => <div className="h-56 w-full animate-pulse rounded-ctl bg-surface-2" />,
+});
+
 /** Dubai, where the map opens when no pin is set. */
 const DEFAULT_CENTER = { lat: 25.2048, lng: 55.2708 };
 const round = (n: number) => String(Math.round(n * 1e6) / 1e6);
 
 /**
  * "Mark location": click the map (or drag the pin) to set latitude and longitude, or type them.
- * Without a Maps key only the two inputs are shown.
+ * The map follows the platform's map setting (Google Maps or OpenStreetMap). Without a usable
+ * map only the two inputs are shown.
  */
 export function LocationPicker({
   lat,
@@ -40,7 +49,10 @@ export function LocationPicker({
   disabled?: boolean;
 }) {
   const t = useTranslations("masters.common.location");
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const mapConfig = useMapConfig();
+  const osmKey = mapConfig.ready && mapConfig.mapProvider === "osm" ? mapConfig.maptilerApiKey : null;
+  // Google only when the setting has loaded and doesn't pick OpenStreetMap.
+  const apiKey = mapConfig.ready && !osmKey ? mapConfig.googleMapsApiKey : null;
   const boxRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<PinMap | null>(null);
   const markerRef = useRef<PinMarker | null>(null);
@@ -99,9 +111,19 @@ export function LocationPicker({
     } else marker.setMap(null);
   }, [ready, valid, latN, lngN]);
 
+  const hasMap = Boolean(osmKey) || Boolean(apiKey && !failed);
+
   return (
     <div className="grid gap-2">
-      {apiKey && !failed ? (
+      {osmKey ? (
+        <LocationOsmMap
+          maptilerKey={osmKey}
+          pin={valid ? { lat: latN, lng: lngN } : null}
+          onChange={onChange}
+          disabled={disabled}
+          label={t("map")}
+        />
+      ) : apiKey && !failed ? (
         <div ref={boxRef} className="h-56 w-full overflow-hidden rounded-ctl border border-border bg-surface-2" role="application" aria-label={t("map")} />
       ) : null}
       <div className="flex flex-wrap items-end gap-2">
@@ -124,7 +146,7 @@ export function LocationPicker({
       </div>
       <p className="flex items-center gap-1.5 text-xs text-subtle">
         <MapPin className="size-3.5" aria-hidden />
-        {apiKey && !failed ? t("hint") : t("noMap")}
+        {hasMap || !mapConfig.ready ? t("hint") : t("noMap")}
       </p>
     </div>
   );

@@ -1,9 +1,17 @@
 "use client";
 
 import { AdvancedMarker, Map, useMap } from "@vis.gl/react-google-maps";
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { DUBAI_CENTER } from "@/lib/heatmap/client";
 import { headingOf, type LiveStatus, type Track } from "@/lib/multi-tracking/core";
+import { useMapChoice } from "./map-choice";
+
+// MapLibre is only downloaded when the platform uses OpenStreetMap.
+const TrackOsmMap = dynamic(() => import("./track-osm-map").then((m) => m.TrackOsmMap), {
+  ssr: false,
+  loading: () => <div className="size-full animate-pulse bg-surface-2" />,
+});
 
 export const STATUS_COLOR: Record<LiveStatus, string> = {
   moving: "var(--status-moving)",
@@ -14,7 +22,7 @@ export const STATUS_COLOR: Record<LiveStatus, string> = {
 
 export type MapEntry = { id: string; label: string; color: string; track: Track };
 
-type Props = {
+export type Props = {
   mode: "tile" | "single";
   entries: MapEntry[];
   version: number;
@@ -30,14 +38,21 @@ type Props = {
 const FOLLOW_ZOOM = 15;
 
 /**
- * A Google map for Multi Tracking. Created once per tile (never re-created on re-render);
+ * The Multi Tracking map, Google or OpenStreetMap as the platform setting says (useMapChoice).
+ * The Google one: Created once per tile (never re-created on re-render);
  * one polyline and one marker per vehicle, both updated in place (plan §8.5).
  */
-export function TrackMap({ mode, entries, version, follow = true, onUserMove, fitKey = 0, dark }: Props) {
+export function TrackMap(props: Props) {
+  const choice = useMapChoice();
+  return choice.provider === "osm" && choice.maptilerKey ? <TrackOsmMap {...props} maptilerKey={choice.maptilerKey} /> : <GoogleTrackMap {...props} />;
+}
+
+function GoogleTrackMap({ mode, entries, version, follow = true, onUserMove, fitKey = 0, dark }: Props) {
+  const { googleMapId } = useMapChoice();
   return (
     <Map
       className="size-full"
-      mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID"}
+      mapId={googleMapId || "DEMO_MAP_ID"}
       colorScheme={dark ? "DARK" : "LIGHT"}
       defaultCenter={DUBAI_CENTER}
       defaultZoom={mode === "tile" ? FOLLOW_ZOOM : 11}
@@ -198,7 +213,7 @@ function prefersReducedMotion() {
 }
 
 /** Glides the marker to each new fix over ~1 s (skipped for reduced motion). */
-function useGlide(target: { lat: number; lng: number }) {
+export function useGlide(target: { lat: number; lng: number }) {
   const [pos, setPos] = useState(target);
   const from = useRef(target);
   useEffect(() => {
@@ -227,8 +242,6 @@ function useGlide(target: { lat: number; lng: number }) {
 function VehicleMarker({ entry, version, labelled }: { entry: MapEntry; version: number; labelled: boolean }) {
   const latest = entry.track.latest!;
   const status = latest.status ?? "offline";
-  const color = STATUS_COLOR[status];
-  const heading = useStableHeading(entry.track, version);
   const pos = useGlide(latest);
 
   return (
@@ -239,6 +252,17 @@ function VehicleMarker({ entry, version, labelled }: { entry: MapEntry; version:
       anchorLeft="-50%"
       anchorTop="-50%"
     >
+      <VehicleMarkerBody entry={entry} version={version} labelled={labelled} />
+    </AdvancedMarker>
+  );
+}
+
+/** The vehicle's status disc, turned to its heading, with its plate when `labelled`. Shared with the OpenStreetMap map. */
+export function VehicleMarkerBody({ entry, version, labelled }: { entry: MapEntry; version: number; labelled: boolean }) {
+  const status = entry.track.latest?.status ?? "offline";
+  const color = STATUS_COLOR[status];
+  const heading = useStableHeading(entry.track, version);
+  return (
       <span className="relative grid size-11 place-items-center" aria-hidden>
         {status === "moving" ? (
           <span className="absolute size-6 rounded-full animate-ping-soft" style={{ background: color }} />
@@ -269,7 +293,6 @@ function VehicleMarker({ entry, version, labelled }: { entry: MapEntry; version:
           </span>
         ) : null}
       </span>
-    </AdvancedMarker>
   );
 }
 

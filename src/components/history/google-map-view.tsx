@@ -1,10 +1,12 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Navigation, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PositionHistoryPoint, RoutePoint } from "@/lib/graphql/operations";
 import { formatInCompanyTz } from "@/lib/company-time";
+import { useMapConfig } from "@/lib/map-settings";
 import { IGNITION_OFF, IGNITION_ON, nearestFixIndex, type TripEvent } from "@/lib/history/trip-events";
 import {
   bearing,
@@ -122,7 +124,29 @@ const DARK_MAP_STYLE = [
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#566B68" }] },
 ];
 
-export function GoogleMapView({
+// MapLibre is only downloaded when the platform uses OpenStreetMap.
+const HistoryOsmMap = dynamic(() => import("./history-osm-map").then((m) => m.HistoryOsmMap), {
+  ssr: false,
+  loading: () => <div className="size-full animate-pulse bg-surface-2" />,
+});
+
+/**
+ * The History map: OpenStreetMap or Google Maps, whichever the platform uses (Map settings).
+ * Road snapping is Google-only, so it's off on OpenStreetMap.
+ */
+export function GoogleMapView(props: MapProps) {
+  const config = useMapConfig();
+  if (!config.ready) {
+    return <div className={cn("relative w-full animate-pulse bg-surface-2", props.fullscreen ? FULL : CARD)} />;
+  }
+  if (config.mapProvider === "osm" && config.maptilerApiKey) {
+    return <HistoryOsmMap {...props} maptilerKey={config.maptilerApiKey} />;
+  }
+  return <GoogleHistoryMap {...props} apiKey={config.googleMapsApiKey ?? undefined} />;
+}
+
+function GoogleHistoryMap({
+  apiKey,
   points,
   activeIndex,
   onSelectPoint,
@@ -136,7 +160,7 @@ export function GoogleMapView({
   stepDurationMs = 0,
   focusedSegment = null,
   fullscreen = false,
-}: MapProps) {
+}: MapProps & { apiKey: string | undefined }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GoogleMapInstance | null>(null);
   const polylinesRef = useRef<GooglePolylineInstance[]>([]);
@@ -145,7 +169,6 @@ export function GoogleMapView({
   const vehicleMarkerRef = useRef<GoogleMarkerInstance | null>(null);
   const markersRef = useRef<GoogleMarkerInstance[]>([]);
 
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const [mapsLoaded, setMapsLoaded] = useState(() => typeof window !== "undefined" && Boolean(window.google?.maps));
   const [loadError, setLoadError] = useState<string | null>(null);
 

@@ -2,12 +2,19 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Clock, ExternalLink, Gauge, LinkIcon, MapPinOff, Navigation } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { SharedLocationPublic } from "@/lib/graphql/vehicle-management";
 import { loadGoogleMaps } from "@/lib/google-maps";
 import { bearing, metres, type LatLng } from "@/lib/history/road-path";
 import { formatDateTime, glideDurationMs, MAX_GLIDE_METRES, parseApiDateTime } from "@/lib/vehicle-management/helpers";
+
+// MapLibre is only downloaded when the platform uses OpenStreetMap.
+const TrackOsmMap = dynamic(() => import("./track-osm-map").then((m) => m.TrackOsmMap), {
+  ssr: false,
+  loading: () => <div className="h-[60dvh] min-h-80 w-full animate-pulse bg-surface-2" />,
+});
 
 /** How often the open page asks for the vehicle's latest fix (paused while the tab is hidden). */
 const REFRESH_MS = 15_000;
@@ -92,13 +99,29 @@ export function PublicTrackView({ token, initial }: { token: string; initial: Sh
         </dl>
       </div>
 
-      {hasPosition ? (
+      {hasPosition && link.mapProvider === "osm" && link.maptilerApiKey ? (
+        // The platform's map choice comes with the link (no sign-in here, so no platformSettings).
+        <div className="overflow-hidden rounded-card border border-border">
+          <TrackOsmMap
+            maptilerKey={link.maptilerApiKey}
+            latitude={link.latitude!}
+            longitude={link.longitude!}
+            heading={link.heading}
+            recordedAt={link.positionRecordedAt}
+            label={link.plateNo}
+            refreshMs={REFRESH_MS}
+            ariaLabel={t("mapLabel", { plate: link.plateNo ?? "" })}
+          />
+        </div>
+      ) : hasPosition ? (
         <LiveMap
           latitude={link.latitude!}
           longitude={link.longitude!}
           heading={link.heading}
           recordedAt={link.positionRecordedAt}
           label={link.plateNo}
+          // Google's key comes from the deployment's env.
+          apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
         />
       ) : (
         <Notice icon={<MapPinOff className="size-6" />} title={t("noPositionTitle")}>
@@ -153,15 +176,16 @@ function LiveMap({
   heading,
   recordedAt,
   label,
+  apiKey,
 }: {
   latitude: number;
   longitude: number;
   heading: number | null;
   recordedAt: string | null;
   label: string | null;
+  apiKey: string | undefined;
 }) {
   const t = useTranslations("track");
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLike | null>(null);
   const markerRef = useRef<MarkerLike | null>(null);

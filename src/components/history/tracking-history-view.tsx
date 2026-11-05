@@ -57,6 +57,7 @@ import {
 import { cleanTrack } from "@/lib/history/clean-track";
 import { calculateDistance, computeRouteLegs, formatDuration, tripTimes, type RouteLeg } from "@/lib/history/legs";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
+import { useMapConfig } from "@/lib/map-settings";
 import { fetchHistoryFixes, fetchVehicleEventsSafely, MAX_HISTORY_FIXES, TooManyFixesError, type HistoryFix } from "@/lib/history/fetch-history";
 import { IGNITION_OFF, IGNITION_ON, nearestFixIndex } from "@/lib/history/trip-events";
 import { useEventLabel, useTripEvents } from "@/lib/history/use-trip-events";
@@ -108,6 +109,9 @@ export function TrackingHistoryView() {
   const [followVehicle, setFollowVehicle] = useState<boolean>(true);
   const [roadSnapAvailable, setRoadSnapAvailable] = useState<boolean>(ROAD_SNAP_CONFIGURED);
   const [snapToRoads, setSnapToRoads] = useState<boolean>(ROAD_SNAP_CONFIGURED);
+  // Road snapping uses Google's Routes API, so the option is hidden when the map is OpenStreetMap.
+  const mapConfig = useMapConfig();
+  const googleMap = mapConfig.mapProvider === "google" || !mapConfig.maptilerApiKey;
   const handleRoadSnapUnavailable = useCallback(() => {
     setRoadSnapAvailable(false);
     setSnapToRoads(false);
@@ -675,7 +679,7 @@ export function TrackingHistoryView() {
             <AlertTriangle className="size-3.5" />
             Trip Events ({filteredEvents.length})
           </Button>
-          {roadSnapAvailable && (
+          {roadSnapAvailable && googleMap && (
             <Button
               variant={snapToRoads ? "secondary" : "ghost"}
               size="sm"

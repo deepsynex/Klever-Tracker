@@ -1129,6 +1129,8 @@ export const SHARED_LOCATION_BY_TOKEN = /* GraphQL */ `
       speed
       heading
       positionRecordedAt
+      mapProvider
+      maptilerApiKey
     }
   }
 `;
@@ -1142,5 +1144,8 @@ export type SharedLocationPublic = {
   speed: number | null;
   heading: number | null;
   positionRecordedAt: string | null;
+  /** The platform's map choice (M3): the share page has no sign-in, so it can't read platformSettings. Google's key comes from env. */
+  mapProvider?: string | null;
+  maptilerApiKey?: string | null;
 };
 export type SharedLocationByTokenResult = { sharedLiveLocationByToken: SharedLocationPublic | null };
