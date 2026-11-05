@@ -7,16 +7,12 @@ import {
   BarChart3,
   Bell,
   CarFront,
-  CheckCircle2,
-  CircleAlert,
-  CircleDot,
   Clock,
   Flame,
   Gauge,
   History,
   Hourglass,
   MapPin,
-  Truck,
   type LucideIcon,
 } from "lucide-react";
 import type { Metadata } from "next";
@@ -24,13 +20,11 @@ import { connection } from "next/server";
 import { useTranslations } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import { Suspense, type ReactNode } from "react";
-import { CopyButton } from "@/components/dashboard/copy-button";
 import { FleetMapPreview } from "@/components/dashboard/fleet-map-preview";
 import { HeroIllustration } from "@/components/dashboard/hero-illustration";
 import { Stagger, StaggerItem } from "@/components/dashboard/stagger";
 import { Link } from "@/i18n/navigation";
-import { loadDashboard } from "@/lib/dashboard/data";
-import { env } from "@/lib/env";
+import { loadDashboard, type FleetStatus } from "@/lib/dashboard/data";
 import { COMPANY_TIME_ZONE } from "@/lib/history/selection";
 import { getSessionUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -59,20 +53,10 @@ export default function DashboardPage() {
     <div className="mx-auto grid max-w-[1520px] gap-5">
       <Hero />
       <Stagger className="grid gap-5">
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-5 sm:grid-cols-3">
           <Suspense fallback={<KpiSkeletons />}>
             <KpiCards />
           </Suspense>
-        </div>
-        <div className="grid items-stretch gap-5 lg:grid-cols-2">
-          <StaggerItem className="grid">
-            <Suspense fallback={<PanelSkeleton title={t("api.title")} />}>
-              <ApiStatus />
-            </Suspense>
-          </StaggerItem>
-          <StaggerItem className="grid">
-            <SetupChecklist />
-          </StaggerItem>
         </div>
         <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1.85fr)_minmax(0,1fr)]">
           <StaggerItem className="grid">
@@ -122,11 +106,6 @@ function Hero() {
       <div className="pointer-events-none absolute inset-y-0 end-0 hidden w-[62%] lg:block rtl:-scale-x-100">
         <HeroIllustration className="absolute inset-0 size-full" />
       </div>
-      <div className="pointer-events-none absolute inset-y-0 end-0 hidden w-[62%] lg:block">
-        <Suspense fallback={null}>
-          <HeroCallout />
-        </Suspense>
-      </div>
 
       <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="grid content-start gap-2 pb-4">
@@ -153,8 +132,8 @@ function Hero() {
           </div>
         </div>
         <div className="grid lg:block">
-          <Suspense fallback={<SystemStatusSkeleton />}>
-            <SystemStatus />
+          <Suspense fallback={<FleetStatusSkeleton />}>
+            <FleetStatus />
           </Suspense>
         </div>
       </div>
@@ -167,81 +146,61 @@ async function WelcomeName() {
   return <h1 className="text-4xl font-bold tracking-tight">{user?.name ?? t("title")}</h1>;
 }
 
-/** Floating tag on the illustration: the first vehicle with a recent fix. */
-async function HeroCallout() {
-  const [d, t] = await Promise.all([data(), getTranslations("dashboard.map")]);
-  const v = d.fleet.find((f) => f.status === "moving") ?? d.fleet[0];
-  if (!v) return null;
-
-  return (
-    // Sits over the highway above the truck's trailer, clear of the pin and the System Status card.
-    <div className="absolute start-[40%] top-[3%] animate-float">
-      <div className="glass-panel flex items-start gap-3 rounded-xl px-3.5 py-3" dir="ltr">
-        <span className="grid size-11 place-items-center rounded-xl bg-moving/15 text-moving">
-          <Truck className="size-5" aria-hidden />
-        </span>
-        <span className="grid gap-0.5 text-[13px]">
-          <span className="font-bold">{v.label}</span>
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <span className={cn("size-2 rounded-full", v.status === "moving" ? "bg-moving" : "bg-stopped")} />
-            {v.status === "moving" ? t("speed", { n: v.speed }) : t(v.status)}
-          </span>
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <Clock className="size-3.5" aria-hidden />
-            {companyTime(v.recordedAt, "hh:mm a")}
-          </span>
-        </span>
-      </div>
-      <span className="ms-6 -mt-1.5 block size-3 rotate-45 border-e border-b border-border/70 bg-surface" aria-hidden />
-    </div>
-  );
-}
-
-async function SystemStatus() {
-  const [d, t] = await Promise.all([data(), getTranslations("dashboard.status")]);
+/** Vehicle counts by status from the dashboard's fleet (vehicles with a fix in the last 7 days). */
+async function FleetStatus() {
+  const [d, t] = await Promise.all([data(), getTranslations("dashboard.fleetStatus")]);
+  const count = (status: FleetStatus) => d.fleet.filter((v) => v.status === status).length;
+  const moving = count("moving");
   const rows = [
-    ["api", d.checks.api],
-    ["database", d.checks.database],
-    ["tracking", d.checks.tracking],
+    { key: "moving", n: moving, tone: "text-moving", pulse: true },
+    { key: "stopped", n: count("stopped"), tone: "text-idle", pulse: false },
+    { key: "offline", n: count("offline"), tone: "text-stopped", pulse: false },
   ] as const;
-  const allOk = rows.every(([, ok]) => ok === true);
+  const latest = d.fleet.reduce<string | null>((max, v) => (!max || v.recordedAt > max ? v.recordedAt : max), null);
 
   return (
     <div className="glass-panel relative w-full max-w-[360px] justify-self-end rounded-2xl p-5 lg:ms-auto lg:mt-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[15px] font-semibold">{t("title")}</h2>
-        <span className={cn("flex items-center gap-1.5 text-xs font-semibold", allOk ? "text-moving" : "text-idle")}>
+        <span className={cn("flex items-center gap-1.5 text-xs font-semibold", moving > 0 ? "text-moving" : "text-muted-foreground")}>
           <span className="size-2 rounded-full bg-current" aria-hidden />
-          {t(allOk ? "allOk" : "degraded")}
+          {moving > 0 ? t("movingNow", { n: moving }) : t("noneMoving")}
         </span>
       </div>
-      <dl className="mt-4 grid grid-cols-3 divide-x divide-border rtl:divide-x-reverse">
-        {rows.map(([key, ok]) => (
-          <div key={key} className="grid gap-1.5 px-3 first:ps-0 last:pe-0">
-            <dt className="text-[13px] font-medium">{t(key)}</dt>
-            <dd
-              className={cn(
-                "flex items-center gap-1.5 text-xs font-medium",
-                ok === true ? "text-moving" : ok === false ? "text-stopped" : "text-subtle",
-              )}
-            >
-              <span className="relative grid size-3 place-items-center" aria-hidden>
-                {ok === true ? <span className="absolute size-2 rounded-full bg-current animate-ping-soft" /> : null}
-                <span className="size-2 rounded-full bg-current" />
-              </span>
-              {t(ok === true ? "online" : ok === false ? "offline" : "unknown")}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      {d.fleet.length === 0 ? (
+        <p className="mt-4 text-[13px] text-muted-foreground">{t("empty")}</p>
+      ) : (
+        <>
+          <dl className="mt-4 grid grid-cols-3 divide-x divide-border rtl:divide-x-reverse">
+            {rows.map((row) => (
+              <div key={row.key} className="grid gap-1 px-3 first:ps-0 last:pe-0">
+                <dt className={cn("flex items-center gap-1.5 text-xs font-medium", row.tone)}>
+                  <span className="relative grid size-3 place-items-center" aria-hidden>
+                    {row.pulse && row.n > 0 ? <span className="absolute size-2 rounded-full bg-current animate-ping-soft" /> : null}
+                    <span className="size-2 rounded-full bg-current" />
+                  </span>
+                  {t(row.key)}
+                </dt>
+                <dd className="text-2xl font-bold tracking-tight tabular-nums">{row.n}</dd>
+              </div>
+            ))}
+          </dl>
+          {latest ? (
+            <p className="mt-3 flex items-center gap-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
+              <Clock className="size-3.5" aria-hidden />
+              {t("lastFix", { time: companyTime(latest, "dd MMM, hh:mm a") })}
+            </p>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
 
-function SystemStatusSkeleton() {
+function FleetStatusSkeleton() {
   return (
     <div
-      className="glass-panel h-[132px] w-full max-w-[360px] justify-self-end rounded-2xl lg:ms-auto lg:mt-8"
+      className="glass-panel h-[168px] w-full max-w-[360px] justify-self-end rounded-2xl lg:ms-auto lg:mt-8"
       aria-hidden
     />
   );
@@ -260,8 +219,6 @@ type Kpi = {
 
 async function KpiCards() {
   const [d, t] = await Promise.all([data(), getTranslations("dashboard.kpi")]);
-  const latency = d.api.latencyMs;
-  const speed = latency == null ? "down" : latency < 800 ? "stable" : "slow";
   const activePct =
     d.totalVehicles && d.activeVehicles != null ? Math.round((d.activeVehicles / d.totalVehicles) * 100) : null;
   const n = (v: number | null) => (v == null ? "—" : v.toLocaleString("en"));
@@ -282,22 +239,6 @@ async function KpiCards() {
       value: n(d.activeVehicles),
       sub: t("activeSub"),
       badge: activePct != null ? { text: `${activePct}%`, tone: "bg-nogps/12 text-nogps" } : undefined,
-    },
-    {
-      key: "latency",
-      icon: Gauge,
-      tone: "bg-info/12 text-info",
-      value: latency == null ? "—" : `${latency} ms`,
-      sub: t("latencySub"),
-      badge: {
-        text: t(speed),
-        tone:
-          speed === "stable"
-            ? "bg-info/12 text-info"
-            : speed === "slow"
-              ? "bg-idle/12 text-idle"
-              : "bg-stopped/12 text-stopped",
-      },
     },
     {
       key: "alerts",
@@ -349,7 +290,7 @@ async function KpiCards() {
 }
 
 function KpiSkeletons() {
-  return Array.from({ length: 4 }, (_, i) => (
+  return Array.from({ length: 3 }, (_, i) => (
     <div key={i} className="float-card h-[116px] animate-pulse" aria-hidden />
   ));
 }
@@ -375,98 +316,6 @@ function Panel({
       </div>
       {children}
     </section>
-  );
-}
-
-function PanelSkeleton({ title }: { title: string }) {
-  return (
-    <Panel title={title}>
-      <div className="h-11 animate-pulse rounded-lg bg-surface-2" aria-hidden />
-      <div className="h-11 animate-pulse rounded-lg bg-surface-2" aria-hidden />
-    </Panel>
-  );
-}
-
-async function ApiStatus() {
-  const [d, t] = await Promise.all([data(), getTranslations("dashboard.api")]);
-  const { state, detail } = d.api;
-  const tone =
-    state === "ok"
-      ? "text-moving bg-moving/12"
-      : state === "mock"
-        ? "text-sand bg-sand-soft"
-        : "text-destructive bg-destructive/12";
-  const box =
-    state === "ok"
-      ? "border-moving/30 bg-moving/8 text-moving"
-      : state === "mock"
-        ? "border-sand/30 bg-sand-soft text-sand"
-        : "border-destructive/30 bg-destructive/8 text-destructive";
-  const BoxIcon = state === "ok" ? CheckCircle2 : CircleAlert;
-
-  return (
-    <Panel
-      title={t("title")}
-      action={
-        <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", tone)}>
-          <span className="size-1.5 rounded-full bg-current" aria-hidden />
-          {t(state)}
-        </span>
-      }
-    >
-      <dl className="grid items-center gap-x-6 gap-y-3 text-[13px] sm:grid-cols-[auto_minmax(0,1fr)]">
-        <dt className="text-muted-foreground">{t("endpoint")}</dt>
-        <dd className="flex min-w-0 items-center overflow-hidden rounded-lg border border-border bg-surface-2/60">
-          <span className="min-w-0 flex-1 truncate px-3.5 font-mono" dir="ltr">
-            {env.graphqlUrl}
-          </span>
-          <CopyButton value={env.graphqlUrl} label={t("copy")} copiedLabel={t("copied")} />
-        </dd>
-        <dt className="text-muted-foreground">{t("response")}</dt>
-        <dd className={cn("flex min-h-11 items-center gap-2.5 rounded-lg border px-3.5 py-2", box)}>
-          <BoxIcon className="size-[18px] shrink-0" aria-hidden />
-          <span className="break-words" dir="ltr">
-            {state === "ok" ? t("upMessage") : detail}
-          </span>
-        </dd>
-      </dl>
-      {state === "mock" ? <p className="text-xs text-muted-foreground">{t("mockDetail")}</p> : null}
-    </Panel>
-  );
-}
-
-type Step = { key: string; state: "done" | "next" | "blocked" };
-const STEPS: Step[] = [
-  { key: "foundation", state: "done" },
-  { key: "auth", state: "done" },
-  { key: "bff", state: "done" },
-  { key: "shell", state: "done" },
-  { key: "users", state: "done" },
-  { key: "me", state: "done" },
-  // schema.graphql has arrived; the operations are still typed by hand until codegen is switched on.
-  { key: "schema", state: "next" },
-];
-
-function SetupChecklist() {
-  const t = useTranslations("dashboard.setup");
-  const icon = { done: CheckCircle2, next: CircleDot, blocked: Hourglass };
-  const color = { done: "text-moving", next: "text-primary", blocked: "text-sand" };
-
-  return (
-    <Panel title={t("title")}>
-      <ul className="grid gap-2">
-        {STEPS.map((step) => {
-          const Icon = icon[step.state];
-          return (
-            <li key={step.key} className="flex items-start gap-2.5 text-[13px]">
-              <Icon className={cn("mt-0.5 size-4 shrink-0", color[step.state])} aria-hidden />
-              <span className="flex-1 text-muted-foreground">{t(`items.${step.key}`)}</span>
-              <span className={cn("shrink-0 text-xs font-semibold", color[step.state])}>{t(step.state)}</span>
-            </li>
-          );
-        })}
-      </ul>
-    </Panel>
   );
 }
 

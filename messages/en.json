@@ -213,51 +213,10 @@
     "title": "Dashboard",
     "welcome": "Welcome, {name}",
     "intro": "Live tracking, history and the heatmap are ready. Alerts, reports and geofences arrive in the next phases.",
-    "api": {
-      "title": "Tracking API",
-      "ok": "Connected",
-      "mock": "Mock API",
-      "mockDetail": "Responses come from the built-in development mock, not the real server.",
-      "api_locked": "Server password required",
-      "gateway": "Blocked",
-      "network": "Unreachable",
-      "unknown": "Error",
-      "endpoint": "Endpoint",
-      "response": "Response",
-      "copy": "Copy endpoint",
-      "copied": "Endpoint copied",
-      "upMessage": "Klever Tracker GraphQL API is up."
-    },
-    "setup": {
-      "title": "Phase 1 progress",
-      "done": "Done",
-      "next": "Next",
-      "blocked": "Waiting on backend",
-      "items": {
-        "foundation": "Project setup, design tokens, English and Arabic",
-        "auth": "Sign in, forgot and reset password",
-        "bff": "Secure session: token kept on the server",
-        "shell": "App shell and navigation",
-        "me": "Role-based menus and permissions",
-        "users": "Users, roles, departments and vehicle access",
-        "schema": "Typed API operations from schema.graphql"
-      }
-    },
     "welcomeBack": "Welcome back,",
     "cta": {
       "history": "Open History",
       "heatmap": "View Heatmap"
-    },
-    "status": {
-      "title": "System Status",
-      "allOk": "All Systems Operational",
-      "degraded": "Needs attention",
-      "api": "API",
-      "database": "Database",
-      "tracking": "Tracking",
-      "online": "Online",
-      "offline": "Offline",
-      "unknown": "Not checked"
     },
     "kpi": {
       "total": "Total Vehicles",
@@ -265,11 +224,6 @@
       "devices": "{n} GPS",
       "active": "Active Vehicles",
       "activeSub": "Marked active in the fleet",
-      "latency": "API Response",
-      "latencySub": "Live check, just now",
-      "stable": "Stable",
-      "slow": "Slow",
-      "down": "Down",
       "alerts": "Active Alerts",
       "alertsSub": "Requires attention"
     },
@@ -286,6 +240,16 @@
     "alerts": {
       "title": "Recent Alerts",
       "empty": "No alerts yet"
+    },
+    "fleetStatus": {
+      "title": "Fleet Status",
+      "movingNow": "{n, plural, one {# vehicle moving} other {# vehicles moving}}",
+      "noneMoving": "No vehicle moving",
+      "moving": "Moving",
+      "stopped": "Stopped",
+      "offline": "Offline",
+      "lastFix": "Last update {time}",
+      "empty": "No positions in the last 7 days."
     }
   },
   "notFound": {

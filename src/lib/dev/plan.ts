@@ -1,5 +1,5 @@
 /**
- * Parsers for the planning docs shown on the local /development page: the phase table and
+ * Parsers for the planning docs shown on the local /dev page: the phase table and
  * checklists in implementation-plan.md, and the request tables in backend-changes.md. Pure, so
  * Vitest can test them. They read the docs' current shapes and skip anything they don't recognise.
  */

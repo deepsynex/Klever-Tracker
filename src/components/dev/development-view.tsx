@@ -12,7 +12,7 @@ import type { BackendRequest, Checklist, Phase, RequestTone } from "@/lib/dev/pl
 import { cn } from "@/lib/utils";
 
 /*
- * Local developer page (see app/[locale]/(app)/development/page.tsx). English only on purpose: it is
+ * Local developer page (see app/[locale]/(app)/dev/page.tsx). English only on purpose: it is
  * a tool for the team, never shown to customers, so its text is not in messages/*.json.
  */
 
