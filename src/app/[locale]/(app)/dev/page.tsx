@@ -10,7 +10,7 @@ import { parseBackendRequests, parseChecklists, parsePhases } from "@/lib/dev/pl
 /**
  * Local developer page: phase progress, backend requests and live API checks. It exists only under
  * `npm run dev` (a 404 in production builds) and is deliberately not linked from anywhere: open it
- * by typing /en/development.
+ * by typing /en/dev.
  */
 export const metadata: Metadata = { title: "Development", robots: { index: false, follow: false } };
 

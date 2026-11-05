@@ -8,18 +8,15 @@ import {
   GET_EVENT_TYPES,
   GET_POSITION_HISTORY,
   GET_VEHICLES,
-  PING,
   type AlertEventsResult,
   type DevicesResult,
   type EventTypesResult,
-  type PingResult,
   type PositionHistoryResult,
   type VehiclesResult,
 } from "@/lib/graphql/operations";
 import { getSessionToken } from "@/lib/session";
 import { parseApiDateTime } from "@/lib/vehicle-management/helpers";
 
-export type ApiState = "ok" | "mock" | "api_locked" | "gateway" | "network" | "unknown";
 export type FleetStatus = "moving" | "stopped" | "offline";
 
 export type FleetVehicle = {
@@ -35,9 +32,6 @@ export type FleetVehicle = {
 export type RecentAlert = { id: string; plate: string; typeName: string; typeCode: string; occurredAt: string };
 
 export type DashboardData = {
-  api: { state: ApiState; latencyMs: number | null; detail: string };
-  /** System status: API answers `ping`; database answers a signed-in list query; tracking has a recent fix. Null = not checked. */
-  checks: { api: boolean; database: boolean | null; tracking: boolean | null };
   totalVehicles: number | null;
   activeVehicles: number | null;
   devices: number | null;
@@ -64,26 +58,12 @@ export const loadDashboard = cache(async (): Promise<DashboardData> => {
   const authed = <T>(query: string, variables: Record<string, unknown> = {}) =>
     token ? kleverRequest<T>(query, variables, { token }) : Promise.resolve(null);
 
-  const started = performance.now();
-  const pingPromise = kleverRequest<PingResult>(PING).then((r) => ({ r, ms: Math.round(performance.now() - started) }));
-  const [ping, vehicles, devices, alerts, eventTypes] = await Promise.all([
-    pingPromise,
+  const [vehicles, devices, alerts, eventTypes] = await Promise.all([
     authed<VehiclesResult>(GET_VEHICLES, { first: 500 }),
     authed<DevicesResult>(GET_DEVICES, { first: 500 }),
     authed<AlertEventsResult>(GET_ALERT_EVENTS),
     authed<EventTypesResult>(GET_EVENT_TYPES),
   ]);
-
-  const pingError = ping.r.ok ? null : ping.r.error;
-  const api: DashboardData["api"] = env.mock
-    ? { state: "mock", latencyMs: ping.ms, detail: ping.r.ok ? ping.r.data.ping : pingError!.message }
-    : ping.r.ok
-      ? { state: "ok", latencyMs: ping.ms, detail: ping.r.data.ping }
-      : {
-          state: (["api_locked", "gateway", "network"] as const).find((k) => k === pingError!.kind) ?? "unknown",
-          latencyMs: null,
-          detail: pingError!.message,
-        };
 
   const vehicleList = vehicles?.ok ? vehicles.data.vehicles.data : [];
   const deviceList = devices?.ok ? devices.data.devices.data : [];
@@ -147,12 +127,6 @@ export const loadDashboard = cache(async (): Promise<DashboardData> => {
   ).filter((v): v is FleetVehicle => v !== null);
 
   return {
-    api,
-    checks: {
-      api: ping.r.ok,
-      database: vehicles ? vehicles.ok : null,
-      tracking: token ? fleet.some((v) => v.status !== "offline") : null,
-    },
     totalVehicles: vehicles?.ok ? (vehicles.data.vehicles.paginatorInfo?.total ?? vehicleList.length) : null,
     activeVehicles: vehicles?.ok ? vehicleList.filter((v) => v.status === "active").length : null,
     devices: devices?.ok ? deviceList.length : null,
