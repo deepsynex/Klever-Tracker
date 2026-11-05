@@ -1023,7 +1023,8 @@
         "driverBehaviour": "Driver behaviour",
         "departments": "Departments",
         "auditLog": "Audit log",
-        "profile": "My profile"
+        "profile": "My profile",
+        "mapSettings": "Map settings"
       },
       "moduleHints": {
         "accounts": "Company details, contacts, billing and limits.",
@@ -1428,6 +1429,30 @@
         "timeZoneSaved": "Times are now shown in {zone}.",
         "timeZoneCommon": "Common time zones",
         "timeZoneAll": "All time zones"
+      },
+      "mapSettings": {
+        "title": "Map settings",
+        "description": "Choose the base map for the whole platform and enter its keys. Every map screen uses this choice.",
+        "backendMissing": "The backend can't store this setting yet, so the app keeps using Google Maps with the key from the deployment. The form is read-only until the backend adds platformSettings.",
+        "providerTitle": "Map provider",
+        "providerHint": "Switch every map in the platform between Google Maps and OpenStreetMap. The change applies to every user on their next page load.",
+        "google": "Google Maps",
+        "osm": "OpenStreetMap",
+        "switchLabel": "Use OpenStreetMap instead of Google Maps",
+        "googleActive": "Google Maps is in use on every map screen.",
+        "osmActive": "OpenStreetMap is in use (MapTiler tiles) on every map screen.",
+        "googleKey": "Google Maps API key",
+        "keyHint": "A browser key: restrict it to this site's domains in the MapTiler dashboard.",
+        "googleMapId": "Google Map ID (optional)",
+        "osmHint": "OpenStreetMap maps are served by MapTiler. Create a key at cloud.maptiler.com.",
+        "maptilerKey": "MapTiler API key",
+        "showKey": "Show key",
+        "hideKey": "Hide key",
+        "saved": "Map settings saved.",
+        "googleEnvHint": "Google Maps uses the key and Map ID set in the deployment (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY and NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID). Change them in the hosting settings and redeploy.",
+        "configured": "Set",
+        "notConfigured": "Not set",
+        "demoMapId": "Not set: Google's demo map ID is used"
       }
     }
   },

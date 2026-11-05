@@ -29,6 +29,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { downloadSheet } from "@/components/masters/excel";
 import { VehiclesHeaderBanner } from "@/components/masters/vehicles-header-banner";
@@ -38,7 +39,14 @@ import {
   type PositionHistoryResult,
 } from "@/lib/graphql/operations";
 import { useVmLookups } from "@/lib/vehicle-management/use-vm";
+import { useMapConfig } from "@/lib/map-settings";
 import { cn } from "@/lib/utils";
+
+// MapLibre is only downloaded when the platform uses OpenStreetMap.
+const DetailedOsmMap = dynamic(() => import("./detailed-osm-map").then((m) => m.DetailedOsmMap), {
+  ssr: false,
+  loading: () => <div className="size-full animate-pulse bg-surface-2" />,
+});
 
 export type VehicleStatus = "stopped" | "running" | "idle" | "noGps" | "noData";
 
@@ -105,7 +113,8 @@ function resolveLocation(lat: number, lng: number): string {
 export function DetailedTrackingView() {
   const t = useTranslations("tracking.detailed");
   const tNav = useTranslations("nav");
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+  const mapConfig = useMapConfig();
+  const apiKey = mapConfig.googleMapsApiKey ?? "";
 
   // 1. Company-Scoped Lookups: automatically scopes vehicles, drivers & vehicleTypes company-wise
   const lookups = useVmLookups();
@@ -1087,7 +1096,7 @@ export function DetailedTrackingView() {
         </div>
       </div>
 
-      {/* 5. GOOGLE MAP MODAL */}
+      {/* 5. MAP MODAL (Google or OpenStreetMap) */}
       {mapModalVehicle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="relative w-full max-w-2xl rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden flex flex-col">
@@ -1115,11 +1124,20 @@ export function DetailedTrackingView() {
             </div>
 
             <div className="h-80 w-full relative bg-surface-2">
-              {apiKey && mapModalVehicle.lat && mapModalVehicle.lng ? (
+              {/* The platform's map: OpenStreetMap or Google, chosen on /map-settings. */}
+              {!mapConfig.ready ? (
+                <div className="size-full animate-pulse bg-surface-2" />
+              ) : mapConfig.mapProvider === "osm" && mapConfig.maptilerApiKey && mapModalVehicle.lat && mapModalVehicle.lng ? (
+                <DetailedOsmMap maptilerKey={mapConfig.maptilerApiKey} lat={mapModalVehicle.lat} lng={mapModalVehicle.lng}>
+                  <div className="grid size-10 place-items-center rounded-full bg-[#00897b] text-white ring-4 ring-white shadow-xl animate-bounce">
+                    <Truck className="size-5" />
+                  </div>
+                </DetailedOsmMap>
+              ) : apiKey && mapModalVehicle.lat && mapModalVehicle.lng ? (
                 <APIProvider apiKey={apiKey}>
                   <GoogleMap
                     className="size-full"
-                    mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID"}
+                    mapId={mapConfig.googleMapsMapId || "DEMO_MAP_ID"}
                     defaultCenter={{ lat: mapModalVehicle.lat, lng: mapModalVehicle.lng }}
                     defaultZoom={15}
                     gestureHandling="greedy"

@@ -1023,7 +1023,8 @@
         "driverBehaviour": "سلوك السائق",
         "departments": "الأقسام",
         "auditLog": "سجل التدقيق",
-        "profile": "ملفي الشخصي"
+        "profile": "ملفي الشخصي",
+        "mapSettings": "إعدادات الخريطة"
       },
       "moduleHints": {
         "accounts": "بيانات الشركة وجهات الاتصال والفوترة والحدود.",
@@ -1428,6 +1429,30 @@
         "timeZoneSaved": "تُعرض الأوقات الآن بتوقيت {zone}.",
         "timeZoneCommon": "المناطق الزمنية الشائعة",
         "timeZoneAll": "جميع المناطق الزمنية"
+      },
+      "mapSettings": {
+        "title": "إعدادات الخريطة",
+        "description": "اختر الخريطة الأساسية للمنصة بالكامل وأدخل مفاتيحها. تستخدم جميع شاشات الخرائط هذا الاختيار.",
+        "backendMissing": "لا يستطيع الخادم حفظ هذا الإعداد بعد، لذلك يستمر التطبيق في استخدام خرائط Google بالمفتاح المحدد في النشر. يبقى النموذج للقراءة فقط حتى يضيف الخادم platformSettings.",
+        "providerTitle": "مزوّد الخريطة",
+        "providerHint": "بدّل جميع خرائط المنصة بين خرائط Google وOpenStreetMap. يُطبّق التغيير على جميع المستخدمين عند تحميل الصفحة التالي.",
+        "google": "خرائط Google",
+        "osm": "OpenStreetMap",
+        "switchLabel": "استخدام OpenStreetMap بدلاً من خرائط Google",
+        "googleActive": "خرائط Google قيد الاستخدام في جميع شاشات الخرائط.",
+        "osmActive": "OpenStreetMap قيد الاستخدام (بلاطات MapTiler) في جميع شاشات الخرائط.",
+        "googleKey": "مفتاح واجهة خرائط Google",
+        "keyHint": "مفتاح متصفح: قيّده بنطاقات هذا الموقع في لوحة تحكم MapTiler.",
+        "googleMapId": "معرّف خريطة Google (اختياري)",
+        "osmHint": "تُقدَّم خرائط OpenStreetMap عبر MapTiler. أنشئ مفتاحاً في cloud.maptiler.com.",
+        "maptilerKey": "مفتاح واجهة MapTiler",
+        "showKey": "إظهار المفتاح",
+        "hideKey": "إخفاء المفتاح",
+        "saved": "تم حفظ إعدادات الخريطة.",
+        "googleEnvHint": "تستخدم خرائط Google المفتاح ومعرّف الخريطة المحددين في النشر (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY وNEXT_PUBLIC_GOOGLE_MAPS_MAP_ID). غيّرهما في إعدادات الاستضافة ثم أعد النشر.",
+        "configured": "مُعيّن",
+        "notConfigured": "غير مُعيّن",
+        "demoMapId": "غير مُعيّن: يُستخدم معرّف Google التجريبي"
       }
     }
   },

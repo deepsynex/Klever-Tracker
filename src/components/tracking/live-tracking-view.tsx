@@ -5,6 +5,7 @@ import { Bike, CarFront, Navigation, RefreshCw, Search, Truck } from "lucide-rea
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import { gqlRequest } from "@/lib/graphql/client";
 import {
   GET_POSITION_HISTORY,
@@ -16,7 +17,14 @@ import {
 import { DUBAI_CENTER } from "@/lib/heatmap/client";
 import { bearing, metres } from "@/lib/history/road-path";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
+import { useMapConfig } from "@/lib/map-settings";
 import { cn } from "@/lib/utils";
+
+// MapLibre is only downloaded when the platform uses OpenStreetMap.
+const LiveOsmMap = dynamic(() => import("./live-osm-map").then((m) => m.LiveOsmMap), {
+  ssr: false,
+  loading: () => <div className="size-full animate-pulse bg-surface-2" />,
+}) as typeof import("./live-osm-map").LiveOsmMap; // dynamic() drops the generic
 
 /** API times are UTC; show them in the user's / company's time zone like the rest of the app. */
 const TIME_PATTERN = "dd-MM-yyyy HH:mm";
@@ -137,7 +145,10 @@ function MapController({ selected, vehicles }: { selected: LiveVehicle | null; v
     } else if (valid.length > 1) {
       const bounds = new google.maps.LatLngBounds();
       valid.forEach((v) => bounds.extend({ lat: v.lat!, lng: v.lng! }));
-      map.fitBounds(bounds, 64);
+      // Extra room on the side the vehicles panel covers (same rule as the OpenStreetMap map).
+      const panel = window.innerWidth >= 640 ? 380 : 0;
+      const rtl = document.documentElement.dir === "rtl";
+      map.fitBounds(bounds, { top: 64, bottom: 64, left: rtl ? 64 : 64 + panel, right: rtl ? 64 + panel : 64 });
     }
   }, [map, selected, vehicles]);
 
@@ -147,7 +158,8 @@ function MapController({ selected, vehicles }: { selected: LiveVehicle | null; v
 export function LiveTrackingView() {
   const tNav = useTranslations("nav");
   const zone = useCompanyTimeZone();
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+  const mapConfig = useMapConfig();
+  const apiKey = mapConfig.googleMapsApiKey ?? "";
   const [search, setSearch] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [hoveredVehicleId, setHoveredVehicleId] = useState<string | null>(null);
@@ -227,12 +239,27 @@ export function LiveTrackingView() {
 
   return (
     <div className="relative size-full overflow-hidden bg-surface-2 select-none">
-      {/* Google Map */}
-      {apiKey ? (
+      {/* The platform's map: OpenStreetMap or Google, chosen by a super admin on /map-settings. */}
+      {!mapConfig.ready ? (
+        <div className="size-full animate-pulse bg-surface-2" />
+      ) : mapConfig.mapProvider === "osm" && mapConfig.maptilerApiKey ? (
+        <LiveOsmMap
+          maptilerKey={mapConfig.maptilerApiKey}
+          vehicles={vehicles}
+          selected={selectedVehicle}
+          selectedId={selectedVehicleId}
+          hoveredId={hoveredVehicleId}
+          onSelect={setSelectedVehicleId}
+          onHover={(id) => setHoveredVehicleId((current) => (id === null && current !== null ? null : id))}
+          renderMarker={(v) => (
+            <VehicleArrow vehicle={v} selected={v.id === selectedVehicleId} hovered={v.id === hoveredVehicleId} />
+          )}
+        />
+      ) : apiKey ? (
         <APIProvider apiKey={apiKey}>
           <Map
             className="size-full"
-            mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID"}
+            mapId={mapConfig.googleMapsMapId || "DEMO_MAP_ID"}
             defaultCenter={DUBAI_CENTER}
             defaultZoom={11}
             gestureHandling="greedy"
