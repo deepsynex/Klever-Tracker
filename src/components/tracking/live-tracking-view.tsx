@@ -21,6 +21,7 @@ import { useMapConfig } from "@/lib/map-settings";
 import { takeLiveFocus } from "@/lib/notifications/api";
 import { engineCharging, formatEngineTime, latestReadings, type DeviceReadings } from "@/lib/telemetry/device-readings";
 import { cn } from "@/lib/utils";
+import { GeofenceDrawMode, GeofenceToolbar, GoogleGeofenceLayer, useLiveGeofences } from "./live-geofences";
 
 // MapLibre is only downloaded when the platform uses OpenStreetMap.
 const LiveOsmMap = dynamic(() => import("./live-osm-map").then((m) => m.LiveOsmMap), {
@@ -246,6 +247,12 @@ export function LiveTrackingView() {
   const [search, setSearch] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [hoveredVehicleId, setHoveredVehicleId] = useState<string | null>(null);
+  const [showGeofences, setShowGeofences] = useState(false);
+  // Bumped each time geofences are switched on, so the map fits them once.
+  const [geofenceFitKey, setGeofenceFitKey] = useState(0);
+  const [drawingGeofence, setDrawingGeofence] = useState(false);
+  const liveGeofences = useLiveGeofences(showGeofences);
+  const shownGeofences = showGeofences ? liveGeofences.geofences : [];
 
   // A notification (bell, toast or browser push) can ask Live to focus one vehicle.
   useEffect(() => {
@@ -352,6 +359,8 @@ export function LiveTrackingView() {
           selected={selectedVehicle}
           selectedId={selectedVehicleId}
           hoveredId={hoveredVehicleId}
+          geofences={shownGeofences}
+          geofenceFitKey={geofenceFitKey}
           onSelect={setSelectedVehicleId}
           onHover={(id) => setHoveredVehicleId((current) => (id === null && current !== null ? null : id))}
           renderMarker={(v) => (
@@ -372,6 +381,7 @@ export function LiveTrackingView() {
             zoomControl={true}
           >
             <MapController selected={selectedVehicle} vehicles={vehicles} />
+            {showGeofences ? <GoogleGeofenceLayer geofences={shownGeofences} fitKey={geofenceFitKey} /> : null}
             {vehicles
               .filter((v) => v.lat && v.lng)
               .map((v) => {
@@ -400,10 +410,34 @@ export function LiveTrackingView() {
         <div className="grid size-full place-items-center">Google Maps API Key not configured</div>
       )}
 
+      {drawingGeofence ? (
+        <GeofenceDrawMode
+          onDone={(saved) => {
+            setDrawingGeofence(false);
+            // Show the new geofence on the live map.
+            if (saved) {
+              setShowGeofences(true);
+              setGeofenceFitKey((k) => k + 1);
+            }
+          }}
+        />
+      ) : (
+        <GeofenceToolbar
+          showing={showGeofences}
+          loading={liveGeofences.loading}
+          count={liveGeofences.geofences.length}
+          onToggle={() => {
+            if (!showGeofences) setGeofenceFitKey((k) => k + 1);
+            setShowGeofences((v) => !v);
+          }}
+          onDraw={() => setDrawingGeofence(true)}
+        />
+      )}
+
       {/* Floating Vehicles Panel on Left */}
-      <div className="absolute start-4 top-4 z-10 w-[300px] sm:w-[340px] max-h-[calc(100%-2rem)] flex flex-col rounded-2xl border border-border/70 bg-surface/95 backdrop-blur-md p-4 shadow-xl text-foreground overflow-hidden">
+      <div className="absolute start-4 top-4 z-10 w-[300px] sm:w-[340px] max-h-[calc(100%-2rem)] flex flex-col rounded-3xl border border-border/70 bg-surface/95 backdrop-blur-md p-3 shadow-xl text-foreground overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-border/50">
+        <div className="flex items-center justify-between ps-1 pb-3 border-b border-border/50">
           <div className="flex items-center gap-2">
             <Navigation className="size-4.5 text-primary" />
             <span className="font-bold text-sm text-foreground">{tNav("liveTracking")}</span>
@@ -419,7 +453,7 @@ export function LiveTrackingView() {
         </div>
 
         {/* Search */}
-        <div className="relative pt-3 pb-2">
+        <div className="relative py-3">
           <Search className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
           <input
             type="search"
@@ -431,7 +465,7 @@ export function LiveTrackingView() {
         </div>
 
         {/* Vehicles list */}
-        <div className="flex-1 overflow-y-auto space-y-1.5 pe-1 pt-1 max-h-[380px]">
+        <div className="-me-3 flex-1 overflow-y-auto space-y-1.5 pe-3 max-h-[380px] [scrollbar-width:thin]">
           {filteredVehicles.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-6">
               {vehiclesQuery.isPending ? "Loading real fleet data..." : "No vehicles found"}

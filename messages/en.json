@@ -191,7 +191,6 @@
     "detailTracking": "Tracking Detail"
   },
   "shell": {
-    "skipToContent": "Skip to content",
     "signOut": "Sign out",
     "signedInAs": "Signed in as {email}",
     "changePassword": "Change password",
@@ -1023,7 +1022,8 @@
           "centre": "Click the map to set the circle's centre.",
           "radius": "Enter a radius between 1 and {max} km (in metres).",
           "polygon": "Draw an area with at least 3 points that aren't all in a line."
-        }
+        },
+        "sheetHintDrawn": "Area drawn. Give it a name and choose which vehicles and groups it watches."
       }
     },
     "am": {
@@ -1574,7 +1574,18 @@
   "tracking": {
     "live": {
       "title": "Live Tracking",
-      "description": "Real-time GPS fleet positions, live movement alerts, and active vehicle telemetry."
+      "description": "Real-time GPS fleet positions, live movement alerts, and active vehicle telemetry.",
+      "geofences": {
+        "toolbar": "Geofence tools",
+        "draw": "Draw Geofence",
+        "show": "Show Geofence",
+        "hide": "Hide Geofence",
+        "count": "{count, plural, =0 {No geofences yet} one {# geofence shown} other {# geofences shown}}",
+        "pickCompany": "Choose a company first (Vehicle Management > Company) to add geofences.",
+        "noPermission": "Your role can't add geofences.",
+        "continue": "Continue",
+        "drawing": "Drawing a geofence"
+      }
     },
     "detailed": {
       "title": "Tracking Detail",

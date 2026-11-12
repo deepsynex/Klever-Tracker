@@ -17,14 +17,9 @@ export default function AppLayout({ children }: LayoutProps<"/[locale]">) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <a
-        href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-ctl focus:bg-surface focus:px-3 focus:py-2 focus:shadow-panel"
-      >
-        {t("skipToContent")}
-      </a>
-      <header className="sticky top-0 z-20 border-b border-border/70 bg-surface/80 backdrop-blur-xl">
-        <div className="flex h-16 items-center gap-3 px-4 sm:px-6 xl:gap-6">
+      {/* Exactly 4rem tall including the border: the full-screen map pages size themselves as 100dvh - 4rem. */}
+      <header className="sticky top-0 z-20 h-16 border-b border-border/70 bg-surface/80 backdrop-blur-xl">
+        <div className="flex h-full items-center gap-3 px-4 sm:px-6 xl:gap-6">
           <Link href="/dashboard" className="shrink-0 rounded-lg">
             <Brand subtitle={t("tagline")} />
           </Link>
@@ -36,7 +31,6 @@ export default function AppLayout({ children }: LayoutProps<"/[locale]">) {
               <LocaleSwitcher />
             </span>
             <ThemeToggle />
-            {/* Hidden until the backend has the notification inbox (G3). */}
             <NotificationBell />
             <Suspense fallback={<UserMenuSkeleton />}>
               <UserMenu />
