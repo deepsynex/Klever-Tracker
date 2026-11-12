@@ -18,50 +18,50 @@ interface VehicleData {
 const VEHICLES: VehicleData[] = [
   {
     id: "v1",
-    plate: "GJ01AB1234",
+    plate: "DXB A 12345",
     status: "moving",
-    speed: "65 km/h",
-    location: "Chandkheda",
+    speed: "68 km/h",
+    location: "Sheikh Zayed Rd",
     time: "10:24 AM",
     haloColor: "cyan",
-    top: "18%",
-    left: "21%",
-    rotation: -40,
+    top: "45%",
+    left: "40%",
+    rotation: -30,
   },
   {
     id: "v2",
-    plate: "GJ01CD5678",
+    plate: "DXB K 56789",
     status: "moving",
-    speed: "48 km/h",
-    location: "Naroda",
+    speed: "42 km/h",
+    location: "Deira",
     time: "10:24 AM",
     haloColor: "green",
-    top: "33%",
-    left: "50%",
+    top: "17%",
+    left: "82%",
     rotation: -55,
   },
   {
     id: "v3",
-    plate: "GJ01EF9012",
+    plate: "DXB M 90120",
     status: "stopped",
-    location: "Maninagar",
+    location: "Al Quoz",
     time: "09:48 AM",
     haloColor: "red",
-    top: "64%",
-    left: "45%",
-    rotation: -55,
+    top: "62%",
+    left: "47%",
+    rotation: -30,
   },
   {
     id: "v4",
-    plate: "GJ01GH3456",
+    plate: "DXB T 34567",
     status: "moving",
-    speed: "72 km/h",
-    location: "Vatva",
+    speed: "74 km/h",
+    location: "Al Khail Rd",
     time: "10:24 AM",
     haloColor: "green",
-    top: "80%",
-    left: "37%",
-    rotation: 45,
+    top: "64%",
+    left: "73%",
+    rotation: -28,
   },
 ];
 
@@ -134,19 +134,12 @@ function VehicleMarker({ vehicle }: { vehicle: VehicleData }) {
     );
 
   return (
-    <div
-      className="absolute z-20"
-      style={{ top: vehicle.top, left: vehicle.left }}
-    >
+    <div className="absolute z-20" style={{ top: vehicle.top, left: vehicle.left }}>
       {/* Static Radar Halo Ring */}
-      <div
-        className={`absolute -inset-6 rounded-full border ${halo.ring} ${halo.bg} pointer-events-none`}
-      />
+      <div className={`absolute -inset-6 rounded-full border ${halo.ring} ${halo.bg} pointer-events-none`} />
 
       {/* Vehicle Icon */}
-      <div className="relative z-10 drop-shadow-[0_4px_10px_rgba(0,0,0,0.7)]">
-        {icon}
-      </div>
+      <div className="relative z-10 drop-shadow-[0_4px_10px_rgba(0,0,0,0.7)]">{icon}</div>
 
       {/* Telemetry Card */}
       <div
@@ -162,7 +155,10 @@ function VehicleMarker({ vehicle }: { vehicle: VehicleData }) {
           <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-300">
             <span className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
             <span>
-              {t("moving")} <strong className="text-white font-bold" dir="ltr">{vehicle.speed}</strong>
+              {t("moving")}{" "}
+              <strong className="text-white font-bold" dir="ltr">
+                {vehicle.speed}
+              </strong>
             </span>
           </div>
         )}
@@ -191,26 +187,32 @@ export function FleetMapMotion() {
   const t = useTranslations("auth.showcase");
   return (
     <div className="relative size-full overflow-hidden bg-[#06121c] select-none">
-      {/* 1. Vector Map Layer (Ahmedabad Dark Satellite / Road Grid) */}
+      {/* 1. Vector map layer: Dubai at night (coastline, Palm Jumeirah, Creek, SZR and landmarks) */}
       <svg
         className="absolute inset-0 size-full block object-cover"
         viewBox="0 0 1000 900"
         preserveAspectRatio="xMidYMid slice"
         xmlns="http://www.w3.org/2000/svg"
+        aria-hidden
       >
         <defs>
-          <radialGradient id="mapVignetteNext" cx="50%" cy="50%" r="70%">
-            <stop offset="0%" stopColor="#0c2333" stopOpacity="0.25" />
-            <stop offset="80%" stopColor="#06121c" stopOpacity="0.95" />
+          <radialGradient id="mapVignetteNext" cx="55%" cy="45%" r="72%">
+            <stop offset="0%" stopColor="#0c2333" stopOpacity="0.15" />
+            <stop offset="78%" stopColor="#06121c" stopOpacity="0.92" />
             <stop offset="100%" stopColor="#03090e" stopOpacity="1" />
           </radialGradient>
-
-          <linearGradient id="riverGradNext" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#0e3a54" />
-            <stop offset="50%" stopColor="#144b6e" />
+          <linearGradient id="gulfGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#04182a" />
             <stop offset="100%" stopColor="#0a2c42" />
           </linearGradient>
-
+          <linearGradient id="creekGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0e3a54" />
+            <stop offset="100%" stopColor="#144b6e" />
+          </linearGradient>
+          <radialGradient id="khalifaGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#67e8f9" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#67e8f9" stopOpacity="0" />
+          </radialGradient>
           <filter id="neonGlowNext" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="6" result="blur1" />
             <feGaussianBlur stdDeviation="14" result="blur2" />
@@ -222,194 +224,250 @@ export function FleetMapMotion() {
           </filter>
         </defs>
 
-        {/* Base dark canvas */}
+        {/* Land */}
         <rect width="1000" height="900" fill="#081724" />
 
-        {/* Urban District Blocks */}
-        <g opacity="0.16">
-          <rect x="30" y="40" width="160" height="130" fill="#1e3a50" rx="6" />
-          <rect x="220" y="30" width="190" height="150" fill="#1b3548" rx="8" />
-          <rect x="440" y="50" width="230" height="120" fill="#183144" rx="8" />
-          <rect x="710" y="60" width="250" height="190" fill="#1b384d" rx="10" />
-          <rect x="50" y="220" width="220" height="180" fill="#1a3449" rx="8" />
-          <rect x="420" y="240" width="200" height="200" fill="#1e3d54" rx="12" />
-          <rect x="740" y="290" width="220" height="230" fill="#183244" rx="8" />
-          <rect x="60" y="460" width="210" height="210" fill="#1a354b" rx="10" />
-          <rect x="410" y="520" width="240" height="220" fill="#173042" rx="12" />
-          <rect x="680" y="560" width="280" height="240" fill="#193347" rx="10" />
-        </g>
-
-        {/* Street Network Grids */}
-        <g stroke="#142c3d" strokeWidth="1.2" opacity="0.75">
-          <line x1="0" y1="80" x2="1000" y2="80" />
-          <line x1="0" y1="140" x2="1000" y2="140" />
-          <line x1="0" y1="210" x2="1000" y2="210" />
-          <line x1="0" y1="280" x2="1000" y2="280" />
-          <line x1="0" y1="360" x2="1000" y2="360" />
-          <line x1="0" y1="430" x2="1000" y2="430" />
-          <line x1="0" y1="510" x2="1000" y2="510" />
-          <line x1="0" y1="590" x2="1000" y2="590" />
-          <line x1="0" y1="670" x2="1000" y2="670" />
-          <line x1="0" y1="750" x2="1000" y2="750" />
-          <line x1="0" y1="820" x2="1000" y2="820" />
-
-          <line x1="80" y1="0" x2="80" y2="900" />
-          <line x1="160" y1="0" x2="160" y2="900" />
-          <line x1="240" y1="0" x2="240" y2="900" />
-          <line x1="330" y1="0" x2="330" y2="900" />
-          <line x1="410" y1="0" x2="410" y2="900" />
-          <line x1="500" y1="0" x2="500" y2="900" />
-          <line x1="600" y1="0" x2="600" y2="900" />
-          <line x1="690" y1="0" x2="690" y2="900" />
-          <line x1="780" y1="0" x2="780" y2="900" />
-          <line x1="870" y1="0" x2="870" y2="900" />
-          <line x1="940" y1="0" x2="940" y2="900" />
-
-          {/* Diagonal Arterials */}
-          <line x1="20" y1="120" x2="380" y2="500" strokeWidth="1.8" />
-          <line x1="600" y1="80" x2="980" y2="480" strokeWidth="1.8" />
-          <line x1="150" y1="700" x2="520" y2="350" strokeWidth="1.8" />
-          <line x1="400" y1="880" x2="850" y2="500" strokeWidth="1.8" />
-        </g>
-
-        {/* Sabarmati River */}
-        <g>
-          <path
-            d="M 540,-20 C 530,120 480,220 410,320 C 370,380 360,450 375,520 C 390,600 440,680 430,780 C 420,840 400,890 380,920"
-            fill="none"
-            stroke="#22d3ee"
-            strokeWidth="32"
-            strokeOpacity="0.12"
-            strokeLinecap="round"
-          />
-          <path
-            d="M 540,-20 C 530,120 480,220 410,320 C 370,380 360,450 375,520 C 390,600 440,680 430,780 C 420,840 400,890 380,920"
-            fill="none"
-            stroke="url(#riverGradNext)"
-            strokeWidth="26"
-            strokeLinecap="round"
-          />
-          <path
-            d="M 542,-10 C 532,125 482,225 412,323 C 372,382 362,452 377,522 C 392,602 442,682 432,782 C 422,842 402,892 382,920"
-            fill="none"
-            stroke="#38bdf8"
-            strokeWidth="2"
-            strokeOpacity="0.3"
-            strokeDasharray="14 10"
-          />
-        </g>
-
-        {/* Major Highways */}
-        <g stroke="#1c4159" strokeLinecap="round">
-          {/* S G Hwy */}
-          <path d="M 170,-10 L 100,380 L 10,880" stroke="#225475" strokeWidth="5" />
-          <path d="M 170,-10 L 100,380 L 10,880" stroke="#facc15" strokeWidth="1.2" strokeDasharray="8 6" opacity="0.6" />
-          {/* East-West 147 */}
-          <path d="M -10,120 Q 250,110 500,160 T 1010,170" stroke="#225475" strokeWidth="4.5" />
-          {/* Ring Road 48 */}
-          <path d="M 460,-10 Q 650,220 820,380 T 990,750" stroke="#225475" strokeWidth="4.5" />
-          <path d="M 460,-10 Q 650,220 820,380 T 990,750" stroke="#facc15" strokeWidth="1.2" strokeDasharray="8 6" opacity="0.6" />
-          {/* South Express NE 1 */}
-          <path d="M -20,780 Q 250,750 550,720 T 1020,790" stroke="#225475" strokeWidth="4.5" />
-        </g>
-
-        {/* Highway Badges */}
-        <g transform="translate(136, 74)">
-          <rect width="24" height="15" rx="3" fill="#facc15" />
-          <text x="12" y="11" fill="#0f172a" fontSize="8.5" fontWeight="800" textAnchor="middle">147</text>
-        </g>
-        <g transform="translate(118, 240) rotate(-78)">
-          <text x="0" y="0" fill="#f1f5f9" fontSize="11" fontWeight="700" letterSpacing="1.5">S G Hwy</text>
-        </g>
-        <g transform="translate(108, 332)">
-          <rect width="20" height="14" rx="3" fill="#facc15" />
-          <text x="10" y="10.5" fill="#0f172a" fontSize="8.5" fontWeight="800" textAnchor="middle">48</text>
-        </g>
-        <g transform="translate(1, 740)">
-          <rect width="28" height="14" rx="3" fill="#facc15" />
-          <text x="14" y="10.5" fill="#0f172a" fontSize="8" fontWeight="800" textAnchor="middle">NE 1</text>
-        </g>
-
-        {/* Neighborhood Labels */}
-        <g fill="#6488a4" fontSize="13" fontWeight="600" opacity="0.8">
-          <text x="210" y="48">Chandkheda</text>
-          <text x="370" y="152">Motera</text>
-          <text x="190" y="295">Satellite</text>
-          <text x="230" y="345">Vastrapur</text>
-          <text x="350" y="318">Satellite</text>
-          <text x="578" y="412">Naroda</text>
-          <text x="532" y="915">Vatva</text>
-        </g>
-
-        {/* Central Landmark City Label */}
-        <text x="365" y="432" fill="#547997" fontSize="20" fontWeight="700" letterSpacing="0.5" opacity="0.9">
-          Ahmedabad
+        {/* Arabian Gulf: the coast runs from the south-west (Marina) to the north-east (Deira) */}
+        <path
+          d="M -10,-10 L 1010,-10 L 1010,40 C 860,90 760,150 640,215 C 520,280 430,330 330,390 C 230,450 120,520 -10,600 Z"
+          fill="url(#gulfGrad)"
+        />
+        <path
+          d="M 1010,40 C 860,90 760,150 640,215 C 520,280 430,330 330,390 C 230,450 120,520 -10,600"
+          fill="none"
+          stroke="#22d3ee"
+          strokeOpacity="0.35"
+          strokeWidth="1.6"
+        />
+        <text x="250" y="110" fill="#3f6a88" fontSize="18" fontWeight="700" letterSpacing="6" opacity="0.7">
+          ARABIAN GULF
         </text>
 
-        {/* Glowing GPS Neon Routes */}
-        <g>
+        {/* Palm Jumeirah: trunk to the shore, 16 fronds, and the crescent breakwater on the sea side */}
+        <g transform="translate(215,330) rotate(-35)" strokeLinecap="round" fill="none">
+          {/* Land masses (filled look: thick strokes in the island colour) */}
+          <g stroke="#173d57">
+            <path d="M 0,-30 L 0,150" strokeWidth="13" />
+            {[-20, -2, 16, 34, 52, 70, 88, 106].map((y, k) => {
+              const len = 72 - Math.abs(k - 3.5) * 6;
+              return (
+                <g key={y}>
+                  <path d={`M 0,${y} L ${-len},${y - 26}`} strokeWidth="7" />
+                  <path d={`M 0,${y} L ${len},${y - 26}`} strokeWidth="7" />
+                </g>
+              );
+            })}
+            <path d="M -112,-6 C -104,-92 104,-92 112,-6" strokeWidth="9" />
+          </g>
+          {/* Shoreline highlight */}
+          <g stroke="#38bdf8" strokeOpacity="0.55" strokeWidth="1">
+            <path d="M 0,-30 L 0,150" />
+            {[-20, -2, 16, 34, 52, 70, 88, 106].map((y, k) => {
+              const len = 72 - Math.abs(k - 3.5) * 6;
+              return (
+                <g key={y}>
+                  <path d={`M 0,${y} L ${-len},${y - 26}`} />
+                  <path d={`M 0,${y} L ${len},${y - 26}`} />
+                </g>
+              );
+            })}
+            <path d="M -112,-6 C -104,-92 104,-92 112,-6" />
+          </g>
+          {/* Atlantis at the crescent's centre */}
+          <circle cx="0" cy="-73" r="3" fill="#fde68a" stroke="none" />
+        </g>
+        <text x="80" y="262" fill="#7aa3c0" fontSize="13" fontWeight="700" opacity="0.85">
+          Palm Jumeirah
+        </text>
+
+        {/* Dubai Creek, winding inland from the coast between Bur Dubai and Deira */}
+        <path
+          d="M 800,108 C 815,160 790,205 830,250 C 870,295 860,340 900,380 C 930,410 950,440 990,455"
+          fill="none"
+          stroke="url(#creekGrad)"
+          strokeWidth="18"
+          strokeLinecap="round"
+        />
+        <path
+          d="M 800,108 C 815,160 790,205 830,250 C 870,295 860,340 900,380 C 930,410 950,440 990,455"
+          fill="none"
+          stroke="#38bdf8"
+          strokeOpacity="0.3"
+          strokeWidth="1.5"
+          strokeDasharray="10 8"
+        />
+
+        {/* City blocks */}
+        <g opacity="0.16" fill="#1e3a50">
+          <rect x="80" y="610" width="150" height="110" rx="8" />
+          <rect x="300" y="470" width="170" height="120" rx="8" />
+          <rect x="520" y="380" width="160" height="150" rx="10" />
+          <rect x="700" y="280" width="120" height="120" rx="8" />
+          <rect x="860" y="150" width="130" height="120" rx="8" />
+          <rect x="420" y="640" width="220" height="140" rx="10" />
+          <rect x="700" y="520" width="240" height="170" rx="10" />
+        </g>
+
+        {/* Street grid, parallel and across the coast */}
+        <g stroke="#142c3d" strokeWidth="1.1" opacity="0.7">
+          {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((k) => (
+            <line key={`p${k}`} x1={-60 + k * 30} y1={760 + k * 40} x2={1060 + k * 30} y2={200 + k * 40} />
+          ))}
+          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((k) => (
+            <line key={`a${k}`} x1={80 + k * 95} y1={420 - k * 30} x2={330 + k * 95} y2={940 - k * 30} />
+          ))}
+        </g>
+
+        {/* Highways */}
+        <g strokeLinecap="round" fill="none">
+          {/* Sheikh Zayed Road (E11), along the coast */}
+          <path d="M -10,700 C 200,590 420,470 620,370 C 760,300 860,250 1010,190" stroke="#225475" strokeWidth="6" />
           <path
-            d="M 230,195 C 255,230 280,310 285,340 C 290,380 340,480 435,595"
-            fill="none"
+            d="M -10,700 C 200,590 420,470 620,370 C 760,300 860,250 1010,190"
+            stroke="#facc15"
+            strokeWidth="1.2"
+            strokeDasharray="8 6"
+            opacity="0.6"
+          />
+          {/* Al Khail Road (E44) */}
+          <path d="M 120,900 C 330,760 560,640 760,540 C 870,485 940,450 1010,420" stroke="#225475" strokeWidth="4.5" />
+          {/* Emirates Road (E611) */}
+          <path d="M 520,910 C 680,820 820,760 1010,690" stroke="#225475" strokeWidth="4.5" />
+          <path
+            d="M 520,910 C 680,820 820,760 1010,690"
+            stroke="#facc15"
+            strokeWidth="1.1"
+            strokeDasharray="8 6"
+            opacity="0.5"
+          />
+        </g>
+
+        {/* Road badges */}
+        <g transform="translate(300, 528)">
+          <rect width="28" height="15" rx="3" fill="#facc15" />
+          <text x="14" y="11" fill="#0f172a" fontSize="8.5" fontWeight="800" textAnchor="middle">
+            E 11
+          </text>
+        </g>
+        <g transform="translate(335, 552) rotate(-27)">
+          <text fill="#f1f5f9" fontSize="11" fontWeight="700" letterSpacing="1.2">
+            Sheikh Zayed Rd
+          </text>
+        </g>
+        <g transform="translate(560, 655)">
+          <rect width="28" height="15" rx="3" fill="#facc15" />
+          <text x="14" y="11" fill="#0f172a" fontSize="8.5" fontWeight="800" textAnchor="middle">
+            E 44
+          </text>
+        </g>
+        <g transform="translate(800, 742)">
+          <rect width="32" height="15" rx="3" fill="#facc15" />
+          <text x="16" y="11" fill="#0f172a" fontSize="8.5" fontWeight="800" textAnchor="middle">
+            E 611
+          </text>
+        </g>
+
+        {/* DXB airport runways */}
+        <g transform="translate(905,300) rotate(-28)" opacity="0.75">
+          <rect x="-70" y="-6" width="140" height="7" rx="2" fill="#1f4a66" />
+          <rect x="-70" y="12" width="140" height="7" rx="2" fill="#1f4a66" />
+          <line x1="-64" y1="-2.5" x2="64" y2="-2.5" stroke="#e2e8f0" strokeWidth="0.8" strokeDasharray="5 5" />
+          <line x1="-64" y1="15.5" x2="64" y2="15.5" stroke="#e2e8f0" strokeWidth="0.8" strokeDasharray="5 5" />
+        </g>
+
+        {/* Area labels */}
+        <g fill="#6488a4" fontSize="13" fontWeight="600" opacity="0.85">
+          <text x="70" y="600">
+            Dubai Marina
+          </text>
+          <text x="455" y="590">
+            Al Quoz
+          </text>
+          <text x="865" y="140">
+            Deira
+          </text>
+          <text x="760" y="235">
+            Bur Dubai
+          </text>
+          <text x="878" y="352">
+            DXB Airport
+          </text>
+          <text x="640" y="560">
+            Al Khail
+          </text>
+          <text x="440" y="300">
+            Jumeirah
+          </text>
+        </g>
+
+        {/* Landmarks */}
+        {/* Burj Al Arab: the sail on its island */}
+        <g transform="translate(372,372)">
+          <circle r="11" fill="#0f2f45" stroke="#38bdf8" strokeOpacity="0.6" />
+          <path d="M -3,7 L -3,-22 C 9,-16 12,-2 6,7 Z" fill="#e0f2fe" opacity="0.9" />
+          <text x="16" y="-14" fill="#cfe7f7" fontSize="11.5" fontWeight="700">
+            Burj Al Arab
+          </text>
+        </g>
+        {/* Burj Khalifa: the glowing spire in Downtown */}
+        <g transform="translate(612,408)">
+          <circle r="46" fill="url(#khalifaGlow)" />
+          <path d="M -7,16 L -4,-6 L -2,-30 L 0,-58 L 2,-30 L 4,-6 L 7,16 Z" fill="#e0f2fe" />
+          <circle r="2.5" cy="-58" fill="#67e8f9" />
+          <text x="14" y="-34" fill="#e0f2fe" fontSize="14" fontWeight="800">
+            Burj Khalifa
+          </text>
+          <text x="14" y="-19" fill="#7aa3c0" fontSize="11" fontWeight="600">
+            Downtown · Dubai Mall
+          </text>
+        </g>
+        {/* Museum of the Future: the torus beside SZR */}
+        <g transform="translate(700,336)">
+          <ellipse rx="10" ry="7" fill="none" stroke="#a5f3fc" strokeWidth="3" />
+          <text x="-128" y="-12" fill="#cfe7f7" fontSize="11" fontWeight="700">
+            Museum of the Future
+          </text>
+        </g>
+        {/* Dubai Frame */}
+        <g transform="translate(760,286)">
+          <rect x="-7" y="-14" width="14" height="22" fill="none" stroke="#fbbf24" strokeWidth="2.5" />
+          <text x="12" y="-6" fill="#fde68a" fontSize="11" fontWeight="700">
+            Dubai Frame
+          </text>
+        </g>
+
+        {/* City label */}
+        <text x="560" y="610" fill="#547997" fontSize="22" fontWeight="800" letterSpacing="2" opacity="0.9">
+          DUBAI
+        </text>
+
+        {/* Glowing GPS routes along Sheikh Zayed Road, Marina → Downtown → Creek */}
+        <g fill="none" strokeLinecap="round">
+          <path
+            d="M 150,618 C 300,535 450,455 600,380 C 700,330 760,300 830,262"
             stroke="#22d3ee"
             strokeWidth="7"
-            strokeLinecap="round"
             opacity="0.4"
             filter="url(#neonGlowNext)"
           />
+          <path d="M 150,618 C 300,535 450,455 600,380 C 700,330 760,300 830,262" stroke="#06b6d4" strokeWidth="3" />
           <path
-            d="M 230,195 C 255,230 280,310 285,340 C 290,380 340,480 435,595"
-            fill="none"
-            stroke="#06b6d4"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-
-          <path
-            d="M 285,340 C 350,440 430,620 445,630 C 460,610 470,410 505,350"
-            fill="none"
-            stroke="#22d3ee"
-            strokeWidth="7"
-            strokeLinecap="round"
-            opacity="0.4"
-            filter="url(#neonGlowNext)"
-          />
-          <path
-            d="M 285,340 C 350,440 430,620 445,630 C 460,610 470,410 505,350"
-            fill="none"
-            stroke="#00f2fe"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-
-          <path
-            d="M 505,350 C 470,420 460,520 445,635 C 420,680 380,750 375,815"
-            fill="none"
+            d="M 600,380 C 620,450 640,520 700,560 C 760,600 830,590 900,560"
             stroke="#22d3ee"
             strokeWidth="6"
-            strokeLinecap="round"
             opacity="0.4"
             filter="url(#neonGlowNext)"
           />
-          <path
-            d="M 505,350 C 470,420 460,520 445,635 C 420,680 380,750 375,815"
-            fill="none"
-            stroke="#22d3ee"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-          />
-
-          {/* Directional Flow Arrows */}
-          <g fill="#22d3ee" opacity="0.9">
-            <polygon points="248,222 242,213 255,217" />
-            <polygon points="286,338 280,328 292,333" />
-            <polygon points="466,380 475,372 472,385" />
-            <polygon points="489,355 498,347 495,360" />
-            <polygon points="432,605 440,615 444,601" />
+          <path d="M 600,380 C 620,450 640,520 700,560 C 760,600 830,590 900,560" stroke="#00f2fe" strokeWidth="2.6" />
+          <g fill="#22d3ee" stroke="none" opacity="0.9">
+            <polygon points="330,520 318,522 326,512" />
+            <polygon points="520,421 508,423 516,413" />
+            <polygon points="760,300 748,302 756,292" />
+            <polygon points="660,540 650,532 662,530" />
           </g>
         </g>
 
-        {/* Cinematic Vignette */}
+        {/* Cinematic vignette */}
         <rect width="1000" height="900" fill="url(#mapVignetteNext)" pointerEvents="none" />
       </svg>
 
@@ -420,9 +478,7 @@ export function FleetMapMotion() {
 
       {/* 3. BOTTOM-LEFT GLASSMORPHIC FEATURE SHOWCASE CARD — STATIC */}
       <aside className="absolute bottom-7 left-7 z-30 max-w-[420px] rounded-[24px] border border-white/10 bg-[#091924]/80 p-7 text-white backdrop-blur-xl shadow-[0_25px_60px_rgba(0,0,0,0.65)]">
-        <div className="text-[10.5px] font-extrabold tracking-[2.5px] text-sky-400 uppercase">
-          {t("eyebrow")}
-        </div>
+        <div className="text-[10.5px] font-extrabold tracking-[2.5px] text-sky-400 uppercase">{t("eyebrow")}</div>
         <h1 className="mt-3 text-3xl sm:text-4xl font-extrabold leading-[1.12] tracking-tight">
           <span className="block text-white">{t("headline1")}</span>
           <span className="block text-white">{t("headline2")}</span>
@@ -430,16 +486,20 @@ export function FleetMapMotion() {
             {t("headline3")}
           </span>
         </h1>
-        <p className="mt-3 text-[13.5px] leading-relaxed text-slate-300">
-          {t("intro")}
-        </p>
+        <p className="mt-3 text-[13.5px] leading-relaxed text-slate-300">{t("intro")}</p>
 
         {/* 4 Feature Badges Grid */}
         <div className="mt-6 grid grid-cols-4 gap-2.5">
           {/* Live Tracking */}
           <div className="flex flex-col items-center gap-2 text-center">
             <div className="flex size-12 items-center justify-center rounded-2xl border border-emerald-500/40 bg-emerald-500/15 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-              <svg viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                viewBox="0 0 24 24"
+                className="size-5 fill-none stroke-current"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <polygon points="3 11 22 2 13 21 11 13 3 11" />
               </svg>
             </div>
@@ -451,7 +511,13 @@ export function FleetMapMotion() {
           {/* Instant Alerts */}
           <div className="flex flex-col items-center gap-2 text-center">
             <div className="flex size-12 items-center justify-center rounded-2xl border border-purple-500/40 bg-purple-500/15 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.2)]">
-              <svg viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                viewBox="0 0 24 24"
+                className="size-5 fill-none stroke-current"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
@@ -464,7 +530,13 @@ export function FleetMapMotion() {
           {/* Detailed Reports */}
           <div className="flex flex-col items-center gap-2 text-center">
             <div className="flex size-12 items-center justify-center rounded-2xl border border-sky-500/40 bg-sky-500/15 text-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.2)]">
-              <svg viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                viewBox="0 0 24 24"
+                className="size-5 fill-none stroke-current"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <line x1="18" y1="20" x2="18" y2="10" />
                 <line x1="12" y1="20" x2="12" y2="4" />
                 <line x1="6" y1="20" x2="6" y2="14" />
@@ -478,7 +550,13 @@ export function FleetMapMotion() {
           {/* Safe & Secure */}
           <div className="flex flex-col items-center gap-2 text-center">
             <div className="flex size-12 items-center justify-center rounded-2xl border border-amber-500/40 bg-amber-500/15 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
-              <svg viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                viewBox="0 0 24 24"
+                className="size-5 fill-none stroke-current"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 <polyline points="9 12 11 14 15 10" />
               </svg>

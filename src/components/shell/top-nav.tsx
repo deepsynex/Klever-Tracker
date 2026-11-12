@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  // BarChart3, Bell, CircleDashed: used by the hidden Alerts / Reports / Geofences items below.
   CarFront,
   ChevronDown,
   Flame,
@@ -86,12 +85,6 @@ function useNavEntries() {
           } satisfies NavGroup,
         ]
       : []),
-    // Hidden for now (screens not built yet). To show them again, uncomment these and the
-    // BarChart3 / Bell / CircleDashed imports at the top.
-    // { key: "alerts", icon: Bell, phase: 4 },
-    // { key: "reports", icon: BarChart3, phase: 5 },
-    // { key: "geofences", icon: CircleDashed, phase: 4 },
-    // { key: "fleet", icon: Truck, phase: 2 },
     ...(vehicleChildren.length > 0
       ? [
           {

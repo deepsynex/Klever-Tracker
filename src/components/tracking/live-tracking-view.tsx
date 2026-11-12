@@ -8,16 +8,18 @@ import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { gqlRequest } from "@/lib/graphql/client";
 import {
-  GET_POSITION_HISTORY,
+  GET_LATEST_POSITIONS_WITH_READINGS,
   GET_VEHICLES,
   type PositionHistoryPoint,
-  type PositionHistoryResult,
+  type LatestPositionsWithReadingsResult,
   type VehiclesResult,
 } from "@/lib/graphql/operations";
 import { DUBAI_CENTER } from "@/lib/heatmap/client";
 import { bearing, metres } from "@/lib/history/road-path";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { useMapConfig } from "@/lib/map-settings";
+import { takeLiveFocus } from "@/lib/notifications/api";
+import { engineCharging, formatEngineTime, latestReadings, type DeviceReadings } from "@/lib/telemetry/device-readings";
 import { cn } from "@/lib/utils";
 
 // MapLibre is only downloaded when the platform uses OpenStreetMap.
@@ -41,7 +43,25 @@ type LiveVehicle = {
   status: "moving" | "stopped" | "offline";
   /** Compass degrees the arrow points (0 = north); null when unknown. */
   heading: number | null;
+  /** The tracker's newest readings (battery, odometer, engine hours…); null without tracker data. */
+  readings: DeviceReadings | null;
 };
+
+const KM = new Intl.NumberFormat("en", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+
+/** "14.1 V · 1,071.2 km · eco 8.3" for the vehicle list; null when there's nothing to show. */
+function readingsLine(r: DeviceReadings | null, ecoLabel: string): string | null {
+  if (!r) return null;
+  const parts = [
+    r.vehicleBatteryV !== null ? `${r.vehicleBatteryV.toFixed(1)} V` : null,
+    r.odometerKm !== null ? `${KM.format(r.odometerKm)} km` : null,
+    r.ecoScore !== null ? `${ecoLabel} ${r.ecoScore.toFixed(1)}` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+/** A focus request taken from storage but not applied yet (see the effect in LiveTrackingView). */
+let pendingFocus: string | null = null;
 
 /** Same arrow colour as the public /track page. */
 const ARROW_FILL = "#0B6E69";
@@ -64,18 +84,31 @@ function VehicleArrow({ vehicle, selected, hovered }: { vehicle: LiveVehicle; se
   const t = useTranslations("tracking.marker");
   const zone = useCompanyTimeZone();
   const status =
-    vehicle.status === "moving" ? t("moving", { speed: vehicle.speed }) : vehicle.status === "stopped" ? t("stopped") : t("offline");
+    vehicle.status === "moving"
+      ? t("moving", { speed: vehicle.speed })
+      : vehicle.status === "stopped"
+        ? t("stopped")
+        : t("offline");
 
   return (
     <div className="relative grid size-9 cursor-pointer place-items-center">
       {selected ? <span className="absolute inset-0 animate-ping rounded-full bg-primary/30" aria-hidden /> : null}
       <svg
         viewBox="0 0 24 24"
-        className={cn("relative size-7 drop-shadow-md transition-transform duration-500", (hovered || selected) && "scale-125")}
+        className={cn(
+          "relative size-7 drop-shadow-md transition-transform duration-500",
+          (hovered || selected) && "scale-125",
+        )}
         style={{ transform: `rotate(${vehicle.heading ?? 0}deg)` }}
         aria-hidden
       >
-        <path d="M12 2.5 20 21 12 16.8 4 21Z" fill={ARROW_FILL} stroke="#ffffff" strokeWidth="2" strokeLinejoin="round" />
+        <path
+          d="M12 2.5 20 21 12 16.8 4 21Z"
+          fill={ARROW_FILL}
+          stroke="#ffffff"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
       </svg>
 
       {hovered ? (
@@ -98,7 +131,11 @@ function VehicleArrow({ vehicle, selected, hovered }: { vehicle: LiveVehicle; se
             <span
               className={cn(
                 "size-1.5 rounded-full",
-                vehicle.status === "moving" ? "bg-emerald-500" : vehicle.status === "stopped" ? "bg-amber-500" : "bg-slate-400",
+                vehicle.status === "moving"
+                  ? "bg-emerald-500"
+                  : vehicle.status === "stopped"
+                    ? "bg-amber-500"
+                    : "bg-slate-400",
               )}
               aria-hidden
             />
@@ -107,15 +144,60 @@ function VehicleArrow({ vehicle, selected, hovered }: { vehicle: LiveVehicle; se
           {vehicle.heading !== null ? (
             <p className="mt-0.5 text-muted-foreground">{t("heading", { deg: Math.round(vehicle.heading) })}</p>
           ) : null}
+          <ReadingsGrid r={vehicle.readings} />
           {vehicle.recordedAt ? (
             <p className="mt-0.5 text-muted-foreground">
-              {t("updated")}: <span className="font-mono text-[10px]" dir="ltr">{formatInCompanyTz(vehicle.recordedAt, zone, TIME_PATTERN)}</span>
+              {t("updated")}:{" "}
+              <span className="font-mono text-[10px]" dir="ltr">
+                {formatInCompanyTz(vehicle.recordedAt, zone, TIME_PATTERN)}
+              </span>
             </p>
           ) : null}
           {!selected ? <p className="mt-1.5 text-[10px] text-subtle">{t("track")}</p> : null}
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** The tracker's readings in the hover card: a compact two-column grid, missing values hidden. */
+function ReadingsGrid({ r }: { r: DeviceReadings | null }) {
+  const t = useTranslations("tracking.marker");
+  if (!r) return null;
+  const charging = engineCharging(r.vehicleBatteryV);
+  const rows: Array<[string, string]> = [];
+  if (r.vehicleBatteryV !== null)
+    rows.push([
+      t("battery"),
+      `${r.vehicleBatteryV.toFixed(1)} V${charging === null ? "" : ` · ${charging ? t("engineOn") : t("engineOff")}`}`,
+    ]);
+  if (r.odometerKm !== null) rows.push([t("odometer"), `${KM.format(r.odometerKm)} km`]);
+  const engine = formatEngineTime(r.engineSeconds);
+  if (engine) rows.push([t("engineHours"), engine]);
+  if (r.tripKm !== null && (r.moving || charging)) rows.push([t("trip"), `${r.tripKm.toFixed(2)} km`]);
+  if (r.ecoScore !== null) rows.push([t("eco"), `${r.ecoScore.toFixed(1)} / 10`]);
+  if (r.gsmSignal !== null || r.gpsFix !== null)
+    rows.push([
+      t("signal"),
+      [
+        r.gsmSignal !== null ? `GSM ${r.gsmSignal}/5` : null,
+        r.gpsFix === null ? null : r.gpsFix ? t("gpsFix") : t("gpsNoFix"),
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    ]);
+  if (rows.length === 0) return null;
+  return (
+    <dl className="mt-1.5 grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 border-t border-border/60 pt-1.5 text-[11px]">
+      {rows.map(([label, value]) => (
+        <div key={label} className="contents">
+          <dt className="text-muted-foreground">{label}</dt>
+          <dd className="text-end font-medium tabular-nums" dir="ltr">
+            {value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -157,12 +239,29 @@ function MapController({ selected, vehicles }: { selected: LiveVehicle | null; v
 
 export function LiveTrackingView() {
   const tNav = useTranslations("nav");
+  const tMarker = useTranslations("tracking.marker");
   const zone = useCompanyTimeZone();
   const mapConfig = useMapConfig();
   const apiKey = mapConfig.googleMapsApiKey ?? "";
   const [search, setSearch] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [hoveredVehicleId, setHoveredVehicleId] = useState<string | null>(null);
+
+  // A notification (bell, toast or browser push) can ask Live to focus one vehicle.
+  useEffect(() => {
+    const id = takeLiveFocus() ?? pendingFocus;
+    if (!id) return;
+    pendingFocus = id; // survives React's dev-only double effect run
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      pendingFocus = null;
+      setSelectedVehicleId(id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Query vehicles from real database
   const vehiclesQuery = useQuery({
@@ -180,12 +279,15 @@ export function LiveTrackingView() {
           let recordedAt: string | null = null;
           let status: "moving" | "stopped" | "offline" = "offline";
           let heading: number | null = null;
+          let readings: DeviceReadings | null = null;
 
           try {
-            const posRes = await gqlRequest<PositionHistoryResult>(GET_POSITION_HISTORY, {
+            // A few more than needed: the tracker's minute-by-minute beacon records carry no readings.
+            const posRes = await gqlRequest<LatestPositionsWithReadingsResult>(GET_LATEST_POSITIONS_WITH_READINGS, {
               vehicleId: v.id,
-              first: 10,
+              first: 15,
             });
+            readings = latestReadings(posRes.positionHistory?.data ?? []);
             // Newest first: the first valid fix is the current position.
             const fixes = (posRes.positionHistory?.data ?? []).filter(
               (p) => p.locationLat && p.locationLng && Math.abs(p.locationLat) > 0.01,
@@ -214,6 +316,7 @@ export function LiveTrackingView() {
             recordedAt,
             status,
             heading,
+            readings,
           };
         }),
       );
@@ -395,6 +498,11 @@ export function LiveTrackingView() {
                       </span>
                     )}
                   </div>
+                  {readingsLine(v.readings, tMarker("ecoShort")) ? (
+                    <div className="text-[11px] text-muted-foreground tabular-nums" dir="ltr">
+                      {readingsLine(v.readings, tMarker("ecoShort"))}
+                    </div>
+                  ) : null}
                 </div>
               );
             })

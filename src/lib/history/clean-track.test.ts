@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanTrack, type TrackFix } from "./clean-track";
+import { cleanTrack, effectiveIgnition, type TrackFix } from "./clean-track";
 import { metres } from "./road-path";
 
 const T0 = Date.UTC(2026, 10, 1, 20, 0, 0);
@@ -101,5 +101,27 @@ describe("cleanTrack", () => {
     const wait = [fix(5, SPOT.lat, SPOT.lng, 0, true), fix(6, SPOT.lat, SPOT.lng, 0, true)];
     const r = cleanTrack([...drive(0, 5), ...wait, ...drive(7, 3, "after")]);
     expect(r.stops).toHaveLength(0);
+  });
+});
+
+describe("effectiveIgnition", () => {
+  it("fills missing readings with the last known state, and the start with the first one", () => {
+    const pts = [null, false, null, true, null, null].map((ignition) => ({ ignition }));
+    expect(effectiveIgnition(pts)).toEqual([false, false, false, true, true, true]);
+  });
+
+  it("stays unknown when the window has no reading at all", () => {
+    expect(effectiveIgnition([{ ignition: null }, { ignition: undefined }])).toEqual([null, null]);
+  });
+});
+
+describe("cleanTrack with no-reading beacon records", () => {
+  it("keeps a parked night a stop when beacon records (no ignition reading) carry drift speeds", () => {
+    // A parked night with the ignition off, where every other record is a beacon record with no
+    // ignition reading and a GPS-drift speed: before, these counted as driving.
+    const night = parked(0, 180).map((p, k) => (k % 2 ? { ...p, ignition: null, speed: 8 } : p));
+    const r = cleanTrack([...night, ...drive(180, 5)]);
+    expect(r.stops).toHaveLength(1);
+    expect(r.stops[0].start).toBe(night[0].recordedAt);
   });
 });

@@ -22,6 +22,7 @@ import {
   Truck,
   User,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -75,6 +76,9 @@ import {
   vehicleToForm,
   type VehicleFormValues,
 } from "@/lib/vehicle-management/vehicle-form";
+import { gqlRequest } from "@/lib/graphql/client";
+import { GET_LATEST_POSITIONS_WITH_READINGS, type LatestPositionsWithReadingsResult } from "@/lib/graphql/operations";
+import { formatEngineTime, latestReadings } from "@/lib/telemetry/device-readings";
 import { cn } from "@/lib/utils";
 
 type SortKey = "plate" | "asset" | "type" | "company" | "driver" | "status";
@@ -155,9 +159,6 @@ export function VehiclesScreen() {
   const [pageSize, setPageSize] = useState(10);
   const [pageNumber, setPageNumber] = useState(1);
 
-  // Checkbox selection
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
   const vehicles = useMemo(
     () => [...(page.data?.vehicles.data ?? [])].filter((v) => lookups.inScope(v.companyId)),
     [page.data, lookups],
@@ -232,30 +233,6 @@ export function VehiclesScreen() {
     const start = (currentPage - 1) * pageSize;
     return sortedVehicles.slice(start, start + pageSize);
   }, [sortedVehicles, currentPage, pageSize]);
-
-  // Checkbox selection
-  const isAllSelected = pageVehicles.length > 0 && pageVehicles.every((v) => selectedIds.has(v.id));
-
-  const toggleSelectAll = () => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (isAllSelected) {
-        pageVehicles.forEach((v) => next.delete(v.id));
-      } else {
-        pageVehicles.forEach((v) => next.add(v.id));
-      }
-      return next;
-    });
-  };
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   const handleExport = async () => {
     const headers = [
@@ -480,7 +457,6 @@ export function VehiclesScreen() {
           >
             <Download className="size-4 text-muted-foreground" />
             <span>{t("filters.export")}</span>
-            <ChevronDown className="size-3.5 text-muted-foreground" />
           </Button>
         </div>
       </div>
@@ -491,14 +467,6 @@ export function VehiclesScreen() {
           <table className="w-full text-start text-sm border-collapse">
             <thead>
               <tr className="border-b border-border/70 bg-transparent">
-                <th scope="col" className="w-10 px-4 py-3.5 text-center">
-                  <Checkbox
-                    checked={isAllSelected}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all vehicles"
-                  />
-                </th>
-
                 {/* Vehicle ID Sortable */}
                 <th
                   scope="col"
@@ -602,25 +570,12 @@ export function VehiclesScreen() {
                   const typeName = lookups.typeName(v.vehicleTypeId);
                   const dev = deviceByVehicle.get(v.id);
                   const sim = simByVehicle.get(v.id);
-                  const isSelected = selectedIds.has(v.id);
 
                   return (
                     <tr
                       key={v.id}
-                      className={cn(
-                        "border-b border-border/50 hover:bg-surface-2/40 transition-colors last:border-b-0",
-                        isSelected && "bg-primary/5 hover:bg-primary/10",
-                      )}
+                      className="border-b border-border/50 hover:bg-surface-2/40 transition-colors last:border-b-0"
                     >
-                      {/* Checkbox */}
-                      <td className="w-10 px-4 py-3.5 text-center">
-                        <Checkbox
-                          checked={isSelected}
-                          onChange={() => toggleSelect(v.id)}
-                          aria-label={`Select ${v.plateNo}`}
-                        />
-                      </td>
-
                       {/* Vehicle ID */}
                       <td className="py-3.5 px-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
@@ -1046,7 +1001,12 @@ function VehicleSheet({ vehicle, onClose }: { vehicle: Vehicle | null; onClose: 
           </FormSection>
 
           <FormSection title={t("sections.service")} columns={3}>
-            {text("odometerKm", t("f.odometer"), { type: "number" })}
+            {text("odometerKm", t("f.odometer"), {
+              type: "number",
+              hint: vehicleId ? (
+                <TrackerOdometerHint vehicleId={vehicleId} onUse={(km) => set("odometerKm", String(km) as never)} />
+              ) : undefined,
+            })}
             {text("lastServiceDate", t("f.lastService"), { type: "date" })}
             {text("lastOilChangeDate", t("f.lastOil"), { type: "date" })}
             {text("lastTyreChangeDate", t("f.lastTyre"), { type: "date" })}
@@ -1204,5 +1164,39 @@ function VehicleChildren({ vehicleId, tab }: { vehicleId: string; tab: Exclude<T
       addLabel={t("tank.add")}
       emptyText={t("tank.empty")}
     />
+  );
+}
+
+/**
+ * Under the manual Odometer field: what the vehicle's tracker reads (its total odometer and engine
+ * hours, from the newest position that carries readings), with "Use this" to copy the distance into
+ * the field. Nothing while loading or when the vehicle has no tracker data.
+ */
+function TrackerOdometerHint({ vehicleId, onUse }: { vehicleId: string; onUse: (km: number) => void }) {
+  const t = useTranslations("masters.vm.vehicles.tracker");
+  const q = useQuery({
+    queryKey: ["vehicle-tracker-readings", vehicleId],
+    queryFn: async () =>
+      latestReadings(
+        (await gqlRequest<LatestPositionsWithReadingsResult>(GET_LATEST_POSITIONS_WITH_READINGS, { vehicleId, first: 15 }))
+          .positionHistory.data,
+      ),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const r = q.data;
+  if (!r || r.odometerKm === null) return null;
+  const km = Math.round(r.odometerKm * 10) / 10;
+  const engine = formatEngineTime(r.engineSeconds);
+  return (
+    <span className="grid gap-0.5">
+      <span className="flex flex-wrap items-center gap-2">
+        <span dir="ltr">{t("odometer", { km: km.toLocaleString("en", { minimumFractionDigits: 1 }) })}</span>
+        <button type="button" onClick={() => onUse(km)} className="font-semibold text-primary hover:underline">
+          {t("useThis")}
+        </button>
+      </span>
+      {engine ? <span dir="ltr">{t("engineHours", { hours: engine })}</span> : null}
+    </span>
   );
 }
