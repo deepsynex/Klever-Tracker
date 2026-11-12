@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Pencil, Sea
 import { useTranslations } from "next-intl";
 import { useMemo, useState, type ReactNode } from "react";
 import { Alert } from "@/components/ui/alert";
+import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 export type Column<T> = {
@@ -306,17 +307,17 @@ export function Pager({
     <div className="flex flex-col items-center justify-between gap-3 border-t border-border/70 px-5 py-4 text-sm sm:flex-row">
       <label className="flex items-center gap-2 text-xs text-muted-foreground sm:text-sm">
         <span>{t("show")}</span>
-        <select
+        <Select
           value={pageSize}
           onChange={(e) => onPageSize(Number(e.target.value))}
-          className="h-8 cursor-pointer rounded-lg border border-border/80 bg-surface px-2 text-xs font-semibold text-foreground focus:border-primary focus:outline-none"
+          className="h-8 w-auto gap-1.5 rounded-lg px-2.5 text-xs font-semibold"
         >
           {PAGE_SIZES.map((n) => (
             <option key={n} value={n}>
               {n}
             </option>
           ))}
-        </select>
+        </Select>
         <span>{t("entries")}</span>
       </label>
       <nav className="flex items-center gap-1" aria-label={t("pageOf", { page: page + 1, total: pageCount })}>

@@ -32,9 +32,13 @@ export type GeofenceMapProps = {
   label: string;
   /** Shown instead of the map when no map can be loaded (no key, or the API failed). */
   unavailable: string;
+  /** Size and frame of the map box; defaults to the form's 320px bordered box (FRAME). */
+  frameClassName?: string;
 };
 
-export const MAP_HEIGHT = "h-80";
+/** The map box inside a form: fixed height, rounded, bordered. */
+export const FRAME = "h-80 rounded-ctl border border-border";
+
 /** Dubai, where the map opens when there's nothing to show. */
 const DEFAULT_CENTER = { lat: 25.2048, lng: 55.2708 };
 const PRIMARY = "#0B6E69";
@@ -42,7 +46,8 @@ const PRIMARY = "#0B6E69";
 // MapLibre is only downloaded when the platform uses OpenStreetMap.
 const GeofenceOsmMap = dynamic(() => import("./geofence-osm-map").then((m) => m.GeofenceOsmMap), {
   ssr: false,
-  loading: () => <div className={`${MAP_HEIGHT} w-full animate-pulse rounded-ctl bg-surface-2`} />,
+  // Fills a full-size frame, or the form's 320px one.
+  loading: () => <div className="h-full min-h-80 w-full animate-pulse rounded-ctl bg-surface-2" />,
 }) as typeof import("./geofence-osm-map").GeofenceOsmMap; // dynamic() drops the extra prop
 
 /** Every point of the draft and the other shapes, for fitting the view. */
@@ -55,7 +60,7 @@ export function viewPoints(draft: GeofenceDraft, others: ContextShape[]): LatLng
 
 export function GeofenceMap(props: GeofenceMapProps) {
   const mapConfig = useMapConfig();
-  if (!mapConfig.ready) return <div className={`${MAP_HEIGHT} w-full animate-pulse rounded-ctl bg-surface-2`} />;
+  if (!mapConfig.ready) return <div className={`${props.frameClassName ?? FRAME} w-full animate-pulse bg-surface-2`} />;
   if (mapConfig.mapProvider === "osm" && mapConfig.maptilerApiKey) {
     return <GeofenceOsmMap {...props} maptilerKey={mapConfig.maptilerApiKey} />;
   }
@@ -99,7 +104,7 @@ const toPoint = (p: GLatLng): LatLng => roundPoint({ lat: p.lat(), lng: p.lng() 
 const samePoints = (a: LatLng[], b: LatLng[]) =>
   a.length === b.length && a.every((p, i) => Math.abs(p.lat - b[i].lat) < 1e-7 && Math.abs(p.lng - b[i].lng) < 1e-7);
 
-function GoogleGeofenceMap({ draft, onChange, others, disabled, label, unavailable, apiKey }: GeofenceMapProps & { apiKey: string | null }) {
+function GoogleGeofenceMap({ draft, onChange, others, disabled, label, unavailable, frameClassName = FRAME, apiKey }: GeofenceMapProps & { apiKey: string | null }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const api = useRef<{ maps: GApi; map: GMap; circle: GCircle; polygon: GPolygon; others: GPolygon[] } | null>(null);
   // Latest values for the map's own listeners, which are attached once.
@@ -239,10 +244,10 @@ function GoogleGeofenceMap({ draft, onChange, others, disabled, label, unavailab
 
   if (!apiKey || failed) {
     return (
-      <div className={`${MAP_HEIGHT} grid w-full place-items-center rounded-ctl border border-dashed border-border bg-surface-2 p-4 text-center text-sm text-muted-foreground`}>
+      <div className={`${frameClassName} grid w-full place-items-center border-dashed bg-surface-2 p-4 text-center text-sm text-muted-foreground`}>
         {unavailable}
       </div>
     );
   }
-  return <div ref={boxRef} className={`${MAP_HEIGHT} w-full overflow-hidden rounded-ctl border border-border bg-surface-2`} role="application" aria-label={label} />;
+  return <div ref={boxRef} className={`${frameClassName} w-full overflow-hidden bg-surface-2`} role="application" aria-label={label} />;
 }

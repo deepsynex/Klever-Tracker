@@ -7,12 +7,16 @@ import {
   Bike,
   Car,
   CarFront,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Circle,
+  CirclePause,
+  Database,
   Download,
   Map as MapIcon,
   MapPin,
+  MapPinOff,
+  OctagonMinus,
   Radio,
   RefreshCw,
   RotateCcw,
@@ -27,6 +31,7 @@ import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { downloadSheet } from "@/components/masters/excel";
 import { VehiclesHeaderBanner } from "@/components/masters/vehicles-header-banner";
+import { Select } from "@/components/ui/select";
 import { gqlRequest } from "@/lib/graphql/client";
 import {
   GET_POSITION_HISTORY,
@@ -68,6 +73,16 @@ export interface DetailedVehicleRow {
 }
 
 /** The position as coordinates: the API has no place names yet (L3, reverse geocoding). */
+/** Status filter icons, the same colours as the vehicle status badges. */
+const STATUS_ICONS = {
+  all: <Circle className="text-primary" strokeWidth={3} />,
+  running: <CarFront className="text-emerald-600" />,
+  stopped: <OctagonMinus className="fill-red-500 text-white" />,
+  idle: <CirclePause className="fill-slate-500 text-white" />,
+  noGps: <MapPinOff className="text-amber-500" />,
+  noData: <Database className="text-slate-500" />,
+};
+
 function resolveLocation(lat: number, lng: number): string {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
@@ -530,50 +545,48 @@ export function DetailedTrackingView() {
             {/* Vehicle Type */}
             <div className="flex flex-col">
               <label className="text-[10px] font-medium text-muted-foreground mb-0.5">Vehicle Type</label>
-              <div className="relative min-w-[130px]">
-                <Truck className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                <select
+              <div className="min-w-[130px]">
+                <Select
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
-                  className="h-9 w-full rounded-full border border-border/80 bg-surface ps-8.5 pe-7 text-xs font-semibold text-foreground appearance-none cursor-pointer focus:outline-none focus:border-primary shadow-2xs"
+                  startIcon={<Truck className="text-primary" />}
+                  className="h-9 rounded-full ps-3 pe-2.5 text-xs font-semibold shadow-2xs"
                 >
                   <option value="all">All</option>
                   {scopedTypes.map((typ) => (
                     <option key={typ.id} value={typ.id}>{typ.name}</option>
                   ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
+                </Select>
               </div>
             </div>
 
             {/* Driver */}
             <div className="flex flex-col">
               <label className="text-[10px] font-medium text-muted-foreground mb-0.5">Driver</label>
-              <div className="relative min-w-[140px]">
-                <User className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                <select
+              <div className="min-w-[140px]">
+                <Select
                   value={driverFilter}
                   onChange={(e) => setDriverFilter(e.target.value)}
-                  className="h-9 w-full rounded-full border border-border/80 bg-surface ps-8.5 pe-7 text-xs font-semibold text-foreground appearance-none cursor-pointer focus:outline-none focus:border-primary shadow-2xs"
+                  startIcon={<User className="text-primary" />}
+                  className="h-9 rounded-full ps-3 pe-2.5 text-xs font-semibold shadow-2xs"
                 >
                   <option value="all">All</option>
                   {scopedDrivers.map((d) => (
                     <option key={d.id} value={d.name}>{d.name}</option>
                   ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
+                </Select>
               </div>
             </div>
 
             {/* Status */}
             <div className="flex flex-col">
               <label className="text-[10px] font-medium text-muted-foreground mb-0.5">Status</label>
-              <div className="relative min-w-[120px]">
-                <span className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 size-2.5 rounded-full border-2 border-muted-foreground" />
-                <select
+              <div className="min-w-[130px]">
+                <Select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="h-9 w-full rounded-full border border-border/80 bg-surface ps-8 pe-7 text-xs font-semibold text-foreground appearance-none cursor-pointer focus:outline-none focus:border-primary shadow-2xs"
+                  icons={STATUS_ICONS}
+                  className="h-9 rounded-full ps-3 pe-2.5 text-xs font-semibold shadow-2xs"
                 >
                   <option value="all">All</option>
                   <option value="running">Running</option>
@@ -581,8 +594,7 @@ export function DetailedTrackingView() {
                   <option value="idle">Idle</option>
                   <option value="noGps">No GPS</option>
                   <option value="noData">No Data</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
+                </Select>
               </div>
             </div>
           </div>
@@ -631,18 +643,18 @@ export function DetailedTrackingView() {
             {/* Show entries */}
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span>Show</span>
-              <select
+              <Select
                 value={pageSize}
                 onChange={(e) => {
                   setPageSize(Number(e.target.value));
                   setCurrentPage(1);
                 }}
-                className="h-8 rounded-lg border border-border/80 bg-surface px-2 text-xs font-semibold text-foreground focus:outline-none cursor-pointer shadow-2xs"
+                className="h-8 w-auto gap-1.5 rounded-lg px-2.5 text-xs font-semibold shadow-2xs"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
-              </select>
+              </Select>
             </div>
 
           </div>

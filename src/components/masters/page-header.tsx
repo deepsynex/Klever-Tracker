@@ -1,5 +1,5 @@
-import { ChevronDown } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
+import { Select, type SelectProps } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 /**
@@ -76,7 +76,7 @@ export function KpiCards({ items, loading }: { items: Kpi[]; loading?: boolean }
  * Compact labelled dropdown for a list's filter bar ("Type / All" on Vehicle details): the label
  * sits above the value inside one 44px rounded-xl box.
  */
-export function FilterSelect({ label, className, children, ...props }: ComponentProps<"select"> & { label: ReactNode }) {
+export function FilterSelect({ label, className, children, ...props }: SelectProps & { label: ReactNode }) {
   return (
     <label
       className={cn(
@@ -85,13 +85,9 @@ export function FilterSelect({ label, className, children, ...props }: Component
       )}
     >
       <span className="block text-[11px] leading-tight font-medium text-muted-foreground">{label}</span>
-      <select
-        className="w-full cursor-pointer appearance-none bg-transparent pe-5 text-sm font-semibold text-foreground focus:outline-none"
-        {...props}
-      >
+      <Select variant="bare" {...props}>
         {children}
-      </select>
-      <ChevronDown className="pointer-events-none absolute end-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+      </Select>
     </label>
   );
 }

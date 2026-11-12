@@ -5,7 +5,6 @@ import {
   Bike,
   Calendar,
   CarFront,
-  ChevronDown,
   Clock,
   Flame,
   Loader2,
@@ -19,6 +18,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { gqlRequest } from "@/lib/graphql/client";
 import {
   GET_DEVICES,
@@ -625,21 +625,18 @@ export function HeatmapView({ today }: { today: string }) {
               <label htmlFor="heatmap-mode" className="block text-[11px] font-semibold text-foreground mb-1">
                 {t("filters.weightMode")}
               </label>
-              <div className="relative">
-                <select
-                  id="heatmap-mode"
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value as WeightMode)}
-                  className="h-8.5 w-full rounded-xl border border-border/80 bg-surface px-3 text-xs text-foreground font-medium appearance-none focus:border-primary focus:outline-none cursor-pointer"
-                >
-                  {(["dwell", "idle", "density"] as const).map((m) => (
-                    <option key={m} value={m}>
-                      {t(`modes.${m}.label`)}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-              </div>
+              <Select
+                id="heatmap-mode"
+                value={mode}
+                onChange={(e) => setMode(e.target.value as WeightMode)}
+                className="h-8.5 rounded-xl px-3 text-xs font-medium"
+              >
+                {(["dwell", "idle", "density"] as const).map((m) => (
+                  <option key={m} value={m}>
+                    {t(`modes.${m}.label`)}
+                  </option>
+                ))}
+              </Select>
               <p className="text-[11px] text-muted-foreground pt-1.5 leading-relaxed">{t(`modes.${mode}.hint`)}</p>
             </div>
 

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
-import Map, { Marker, NavigationControl, useMap } from "react-map-gl/maplibre";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import Map, { Layer, Marker, NavigationControl, Source, useMap } from "react-map-gl/maplibre";
 import { boundsOf, DEFAULT_VIEW, fitPadding, maptilerStyleUrl } from "@/lib/maplibre";
+import { GeofenceLabel, geofenceBounds, type LiveGeofence } from "./live-geofences";
 
 /**
  * Live map on OpenStreetMap (MapTiler tiles, drawn with MapLibre): the same arrows, hover cards
@@ -20,8 +21,13 @@ export function LiveOsmMap<V extends OsmVehicle>({
   onSelect,
   onHover,
   renderMarker,
+  geofences = [],
+  geofenceFitKey = 0,
 }: {
   maptilerKey: string;
+  /** Geofence outlines to draw (empty when hidden), and a counter that fits the map to them when bumped. */
+  geofences?: LiveGeofence[];
+  geofenceFitKey?: number;
   vehicles: V[];
   selected: V | null;
   selectedId: string | null;
@@ -39,6 +45,7 @@ export function LiveOsmMap<V extends OsmVehicle>({
     >
       <NavigationControl position="bottom-right" showCompass={false} />
       <FollowController selected={selected} vehicles={vehicles} />
+      <OsmGeofences geofences={geofences} fitKey={geofenceFitKey} />
       {vehicles
         .filter((v) => v.lat && v.lng)
         .map((v) => {
@@ -87,4 +94,45 @@ function FollowController({ selected, vehicles }: { selected: OsmVehicle | null;
   }, [map, selected, vehicles]);
 
   return null;
+}
+
+const PRIMARY = "#0B6E69";
+const INACTIVE = "#64748b";
+
+/** Geofence outlines (teal when active, grey when not) with their names, under the vehicle arrows. */
+function OsmGeofences({ geofences, fitKey }: { geofences: LiveGeofence[]; fitKey: number }) {
+  const { current: map } = useMap();
+  const data = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: geofences.map((g) => ({
+        type: "Feature" as const,
+        properties: { color: g.isActive ? PRIMARY : INACTIVE, opacity: g.isActive ? 0.14 : 0.08 },
+        geometry: { type: "Polygon" as const, coordinates: [g.ring] },
+      })),
+    }),
+    [geofences],
+  );
+
+  const fitted = useRef(0);
+  useEffect(() => {
+    if (!map || fitKey === fitted.current || geofences.length === 0) return;
+    fitted.current = fitKey;
+    const b = geofenceBounds(geofences);
+    if (b) map.fitBounds(b, { padding: { ...fitPadding(380), top: 110 }, duration: 600, maxZoom: 16 });
+  }, [map, geofences, fitKey]);
+
+  return (
+    <>
+      <Source id="live-geofences" type="geojson" data={data}>
+        <Layer id="live-geofences-fill" type="fill" paint={{ "fill-color": ["get", "color"], "fill-opacity": ["get", "opacity"] }} />
+        <Layer id="live-geofences-line" type="line" paint={{ "line-color": ["get", "color"], "line-width": 2, "line-opacity": 0.9 }} />
+      </Source>
+      {geofences.map((g) => (
+        <Marker key={g.id} latitude={g.label.lat} longitude={g.label.lng} anchor="center" style={{ zIndex: 0 }}>
+          <GeofenceLabel geofence={g} />
+        </Marker>
+      ))}
+    </>
+  );
 }
