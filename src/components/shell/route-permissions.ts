@@ -13,7 +13,6 @@ const ROUTES: Array<[prefix: string, module: PermissionModule]> = [
   ["/history", TRACKING_PERMISSION],
   ["/multi", TRACKING_PERMISSION],
   ["/heatmap", TRACKING_PERMISSION],
-  ["/sales", TRACKING_PERMISSION],
   ["/tracking", TRACKING_PERMISSION],
 ];
 

@@ -3,20 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { AdvancedMarker, APIProvider, Map as GoogleMap } from "@vis.gl/react-google-maps";
 import {
-  AlertTriangle,
   BarChart2,
   Bike,
-  Calendar,
   Car,
   CarFront,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  Columns,
   Download,
-  Grid,
-  List,
   Map as MapIcon,
   MapPin,
   Radio,
@@ -39,6 +33,7 @@ import {
   type PositionHistoryResult,
 } from "@/lib/graphql/operations";
 import { useVmLookups } from "@/lib/vehicle-management/use-vm";
+import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { useMapConfig } from "@/lib/map-settings";
 import { cn } from "@/lib/utils";
 
@@ -68,50 +63,18 @@ export interface DetailedVehicleRow {
   timeClock: string;
   rawTime: string;
   odometer: number;
-  temp1: string;
-  temp2: string;
-  temp3: string;
   status: VehicleStatus;
   category: "truck" | "van" | "bike" | "car";
 }
 
-function formatDateDisplay(iso: string): string {
-  if (!iso) return "31-Oct-2026";
-  const parts = iso.split("-").map(Number);
-  if (parts.length !== 3 || parts.some(isNaN)) return iso;
-  const [y, m, d] = parts;
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${String(d).padStart(2, "0")}-${months[m - 1] ?? "Oct"}-${y}`;
-}
-
-function formatTimeDisplay(timeStr: string): string {
-  if (!timeStr) return "12:00 AM";
-  const parts = timeStr.split(":").map(Number);
-  if (parts.length < 2 || parts.some(isNaN)) return timeStr;
-  const [hh, mm] = parts;
-  const period = hh >= 12 ? "PM" : "AM";
-  const h12 = hh % 12 === 0 ? 12 : hh % 12;
-  return `${String(h12).padStart(2, "0")}:${String(mm).padStart(2, "0")} ${period}`;
-}
-
+/** The position as coordinates: the API has no place names yet (L3, reverse geocoding). */
 function resolveLocation(lat: number, lng: number): string {
-  if (Math.abs(lat - 25.0772) < 0.15 && Math.abs(lng - 55.1409) < 0.15) {
-    return "Dubai Marina, Sheikh Zayed Road, Dubai - United Arab Emirates";
-  }
-  if (Math.abs(lat - 25.1972) < 0.15 && Math.abs(lng - 55.2744) < 0.15) {
-    return "Downtown Dubai, Sheikh Mohammed bin Rashid Blvd - Dubai";
-  }
-  if (Math.abs(lat - 24.9857) < 0.15 && Math.abs(lng - 55.1409) < 0.15) {
-    return "Jebel Ali Industrial Area, Dubai - United Arab Emirates";
-  }
-  if (Math.abs(lat - 22.687) < 0.5 && Math.abs(lng - 72.843) < 0.5) {
-    return "Anand District, Gujarat, India";
-  }
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
 export function DetailedTrackingView() {
   const t = useTranslations("tracking.detailed");
+  const zone = useCompanyTimeZone();
   const tNav = useTranslations("nav");
   const mapConfig = useMapConfig();
   const apiKey = mapConfig.googleMapsApiKey ?? "";
@@ -126,19 +89,11 @@ export function DetailedTrackingView() {
   const [driverFilter, setDriverFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  // Date/Time pickers state
-  const [fromDate, setFromDate] = useState("2026-10-31");
-  const [fromTime, setFromTime] = useState("00:00");
-  const [toDate, setToDate] = useState("2026-10-31");
-  const [toTime, setToTime] = useState("23:59");
-
   // Auto-refresh state
   const [refreshIntervalSec, setRefreshIntervalSec] = useState<number>(60);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
-  // Table selections & view
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+  // Table paging
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [mapModalVehicle, setMapModalVehicle] = useState<DetailedVehicleRow | null>(null);
@@ -188,7 +143,10 @@ export function DetailedTrackingView() {
               vehicleId: v.id,
               first: 5,
             });
-            const valid = (pRes.positionHistory?.data ?? []).find(
+            const fixes = pRes.positionHistory?.data ?? [];
+            // The newest real ignition reading (beacon records carry none).
+            const ignitionReading = fixes.find((p) => typeof p.ignition === "boolean")?.ignition;
+            const valid = fixes.find(
               (p) => typeof p.locationLat === "number" && typeof p.locationLng === "number" && Math.abs(p.locationLat) > 0.01,
             );
 
@@ -196,7 +154,7 @@ export function DetailedTrackingView() {
               lat = valid.locationLat;
               lng = valid.locationLng;
               speed = Math.round(valid.speed ?? 0);
-              ignition = speed > 0;
+              ignition = typeof ignitionReading === "boolean" ? ignitionReading : speed > 0;
               status = speed > 3 ? "running" : speed > 0 ? "idle" : "stopped";
               rawTime = valid.recordedAt || "-";
               if (valid.recordedAt && valid.recordedAt.includes(" ")) {
@@ -237,9 +195,6 @@ export function DetailedTrackingView() {
             timeClock,
             rawTime,
             odometer: v.odometerKm ?? 0,
-            temp1: "0.00",
-            temp2: "0.00",
-            temp3: "0.00",
             status,
             category,
           };
@@ -307,28 +262,8 @@ export function DetailedTrackingView() {
     setDriverFilter("all");
     setStatusFilter("all");
     setActiveFilterStatus("all");
-    setFromDate("2026-10-31");
-    setFromTime("00:00");
-    setToDate("2026-10-31");
-    setToTime("23:59");
-  };
+    setCurrentPage(1);
 
-  // Selection handlers
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedIds(new Set(filteredRows.map((v) => v.id)));
-    } else {
-      setSelectedIds(new Set());
-    }
-  };
-
-  const handleToggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
   };
 
   // Export to Excel
@@ -345,9 +280,6 @@ export function DetailedTrackingView() {
       "GPS Status",
       "Alert",
       "Odometer",
-      "Temp1",
-      "Temp2",
-      "Temp3",
     ];
     const rows = filteredRows.map((v) => [
       v.vehicleNo,
@@ -361,14 +293,14 @@ export function DetailedTrackingView() {
       v.hasGps ? "Connected" : "No GPS",
       "Normal",
       v.odometer,
-      v.temp1,
-      v.temp2,
-      v.temp3,
     ]);
     await downloadSheet([headers, ...rows], "detailed-tracking.xlsx");
   };
 
-  const allSelected = filteredRows.length > 0 && filteredRows.every((v) => selectedIds.has(v.id));
+  // Real paging: "Show N" and the pager now change which rows are listed.
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const page = Math.min(currentPage, pageCount);
+  const pageRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="grid gap-5 text-foreground select-none">
@@ -399,7 +331,6 @@ export function DetailedTrackingView() {
             >
               <Download className="size-3.5 text-muted-foreground" />
               <span>Export</span>
-              <ChevronDown className="size-3 text-muted-foreground" />
             </button>
           </div>
         </div>
@@ -565,9 +496,6 @@ export function DetailedTrackingView() {
                 onChange={(e) => setRefreshIntervalSec(Math.max(5, Number(e.target.value) || 60))}
                 className="w-12 h-9 rounded-xl border border-border/80 bg-surface text-center font-semibold text-xs text-foreground focus:outline-none focus:border-primary shadow-2xs"
               />
-              <div className="size-9 rounded-xl border border-border/80 bg-surface flex items-center justify-center text-muted-foreground shadow-2xs">
-                <Calendar className="size-4" />
-              </div>
               <span className="text-muted-foreground font-medium text-xs">Sec</span>
             </div>
 
@@ -659,106 +587,8 @@ export function DetailedTrackingView() {
             </div>
           </div>
 
-          {/* Right: Date & Time pickers + Action Buttons */}
+          {/* Right: refresh and reset */}
           <div className="flex flex-wrap items-end gap-2 ms-auto">
-            {/* From date */}
-            <div className="flex flex-col">
-              <label className="text-[10px] font-medium text-muted-foreground mb-0.5">From date</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={formatDateDisplay(fromDate)}
-                  readOnly
-                  className="h-8.5 w-26 rounded-xl border border-border/80 bg-surface px-2.5 text-xs font-medium text-foreground text-center shadow-2xs cursor-pointer"
-                />
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                  onClick={(e) => {
-                    try {
-                      e.currentTarget.showPicker?.();
-                    } catch {}
-                  }}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                />
-              </div>
-            </div>
-
-            {/* From time */}
-            <div className="flex flex-col">
-              <label className="text-[10px] font-medium text-muted-foreground mb-0.5">From time</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={formatTimeDisplay(fromTime)}
-                  readOnly
-                  className="h-8.5 w-24 rounded-xl border border-border/80 bg-surface ps-2.5 pe-6 text-xs font-medium text-foreground shadow-2xs cursor-pointer"
-                />
-                <Clock className="pointer-events-none absolute end-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
-                <input
-                  type="time"
-                  value={fromTime}
-                  onChange={(e) => setFromTime(e.target.value)}
-                  onClick={(e) => {
-                    try {
-                      e.currentTarget.showPicker?.();
-                    } catch {}
-                  }}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                />
-              </div>
-            </div>
-
-            {/* To date */}
-            <div className="flex flex-col">
-              <label className="text-[10px] font-medium text-muted-foreground mb-0.5">To date</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={formatDateDisplay(toDate)}
-                  readOnly
-                  className="h-8.5 w-26 rounded-xl border border-border/80 bg-surface px-2.5 text-xs font-medium text-foreground text-center shadow-2xs cursor-pointer"
-                />
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                  onClick={(e) => {
-                    try {
-                      e.currentTarget.showPicker?.();
-                    } catch {}
-                  }}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                />
-              </div>
-            </div>
-
-            {/* To time */}
-            <div className="flex flex-col">
-              <label className="text-[10px] font-medium text-muted-foreground mb-0.5">To time</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={formatTimeDisplay(toTime)}
-                  readOnly
-                  className="h-8.5 w-24 rounded-xl border border-border/80 bg-surface ps-2.5 pe-6 text-xs font-medium text-foreground shadow-2xs cursor-pointer"
-                />
-                <Clock className="pointer-events-none absolute end-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
-                <input
-                  type="time"
-                  value={toTime}
-                  onChange={(e) => setToTime(e.target.value)}
-                  onClick={(e) => {
-                    try {
-                      e.currentTarget.showPicker?.();
-                    } catch {}
-                  }}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                />
-              </div>
-            </div>
-
             {/* Search Button */}
             <button
               type="button"
@@ -796,24 +626,17 @@ export function DetailedTrackingView() {
             </h2>
           </div>
 
-          {/* Right Controls: Columns dropdown + Show entries + List/Grid view switch */}
+          {/* Right: rows per page */}
           <div className="flex items-center gap-2.5">
-            {/* Columns button */}
-            <button
-              type="button"
-              className="h-8 px-2.5 rounded-lg border border-border/80 bg-surface text-xs font-medium inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground shadow-2xs cursor-pointer"
-            >
-              <Columns className="size-3.5 text-muted-foreground" />
-              <span>Columns</span>
-              <ChevronDown className="size-3" />
-            </button>
-
             {/* Show entries */}
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span>Show</span>
               <select
                 value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
                 className="h-8 rounded-lg border border-border/80 bg-surface px-2 text-xs font-semibold text-foreground focus:outline-none cursor-pointer shadow-2xs"
               >
                 <option value={10}>10</option>
@@ -822,31 +645,6 @@ export function DetailedTrackingView() {
               </select>
             </div>
 
-            {/* View Mode Switches */}
-            <div className="flex items-center rounded-lg border border-border/80 p-0.5 bg-surface-2">
-              <button
-                type="button"
-                onClick={() => setViewMode("table")}
-                className={cn(
-                  "p-1.5 rounded-md text-xs transition-colors cursor-pointer",
-                  viewMode === "table" ? "bg-surface shadow-xs text-primary" : "text-muted-foreground hover:text-foreground",
-                )}
-                title="Table view"
-              >
-                <List className="size-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("grid")}
-                className={cn(
-                  "p-1.5 rounded-md text-xs transition-colors cursor-pointer",
-                  viewMode === "grid" ? "bg-surface shadow-xs text-primary" : "text-muted-foreground hover:text-foreground",
-                )}
-                title="Grid view"
-              >
-                <Grid className="size-3.5" />
-              </button>
-            </div>
           </div>
         </div>
 
@@ -856,14 +654,6 @@ export function DetailedTrackingView() {
             {/* Table Header */}
             <thead className="bg-[#f8fafc] dark:bg-slate-900 border-b border-border/70 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
               <tr>
-                <th className="py-2.5 px-3 w-8 text-center">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={(e) => handleSelectAll(e.target.checked)}
-                    className="size-3.5 rounded border-border-strong accent-[#0f4c47] cursor-pointer"
-                  />
-                </th>
                 <th className="py-2.5 px-3 min-w-[140px]">Vehicle No.</th>
                 <th className="py-2.5 px-3 min-w-[100px]">Driver Id</th>
                 <th className="py-2.5 px-3 min-w-[110px]">Vehicle Type</th>
@@ -873,11 +663,7 @@ export function DetailedTrackingView() {
                 <th className="py-2.5 px-3 text-right min-w-[90px]">Speed (Km/h)</th>
                 <th className="py-2.5 px-3 min-w-[120px]">Time</th>
                 <th className="py-2.5 px-3 text-center min-w-[60px]">GPS</th>
-                <th className="py-2.5 px-3 text-center min-w-[60px]">Alert</th>
                 <th className="py-2.5 px-3 text-right min-w-[90px]">Odometer</th>
-                <th className="py-2.5 px-3 text-right min-w-[70px]">Temp1.</th>
-                <th className="py-2.5 px-3 text-right min-w-[70px]">Temp2.</th>
-                <th className="py-2.5 px-3 text-right min-w-[70px]">Temp3.</th>
                 <th className="py-2.5 px-3 text-center min-w-[55px]">Map</th>
               </tr>
             </thead>
@@ -886,7 +672,7 @@ export function DetailedTrackingView() {
             <tbody className="divide-y divide-border/60">
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="py-12 text-center text-muted-foreground text-xs">
+                  <td colSpan={11} className="py-12 text-center text-muted-foreground text-xs">
                     {vehiclesQuery.isLoading ? (
                       <span className="inline-flex items-center gap-2">
                         <RefreshCw className="size-4 animate-spin text-primary" />
@@ -898,26 +684,14 @@ export function DetailedTrackingView() {
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((v) => {
-                  const isChecked = selectedIds.has(v.id);
+                pageRows.map((v) => {
                   return (
                     <tr
                       key={v.id}
                       className={cn(
                         "transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/40 select-none",
-                        isChecked && "bg-sky-50/50 dark:bg-sky-950/30",
                       )}
                     >
-                      {/* Checkbox */}
-                      <td className="py-3 px-3 text-center">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => handleToggleSelect(v.id)}
-                          className="size-3.5 rounded border-border-strong accent-[#0f4c47] cursor-pointer"
-                        />
-                      </td>
-
                       {/* Vehicle No */}
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-2.5">
@@ -1008,8 +782,9 @@ export function DetailedTrackingView() {
                           "-"
                         ) : (
                           <div className="flex flex-col">
-                            <span>{v.timeDate}</span>
-                            {v.timeClock && <span className="text-[10px] text-muted-foreground/80">{v.timeClock}</span>}
+                            {/* API times are UTC: show them in the company's time zone like the rest of the app. */}
+                            <span>{formatInCompanyTz(v.rawTime, zone, "yyyy-MM-dd")}</span>
+                            <span className="text-[10px] text-muted-foreground/80">{formatInCompanyTz(v.rawTime, zone, "HH:mm:ss")}</span>
                           </div>
                         )}
                       </td>
@@ -1026,26 +801,10 @@ export function DetailedTrackingView() {
                         </div>
                       </td>
 
-                      {/* Alert */}
-                      <td className="py-3 px-3 text-center">
-                        <div className="flex items-center justify-center">
-                          <AlertTriangle className="size-4 text-emerald-600 stroke-[2]" />
-                        </div>
-                      </td>
-
                       {/* Odometer */}
                       <td className="py-3 px-3 text-right font-medium text-muted-foreground text-xs">
                         {v.odometer.toLocaleString()}
                       </td>
-
-                      {/* Temp1 */}
-                      <td className="py-3 px-3 text-right font-mono text-muted-foreground text-xs">{v.temp1}</td>
-
-                      {/* Temp2 */}
-                      <td className="py-3 px-3 text-right font-mono text-muted-foreground text-xs">{v.temp2}</td>
-
-                      {/* Temp3 */}
-                      <td className="py-3 px-3 text-right font-mono text-muted-foreground text-xs">{v.temp3}</td>
 
                       {/* Map Button */}
                       <td className="py-3 px-3 text-center">
@@ -1076,18 +835,21 @@ export function DetailedTrackingView() {
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              disabled={currentPage <= 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              onClick={() => setCurrentPage(page - 1)}
+              aria-label="Previous page"
               className="size-7 rounded-lg border border-border/80 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-40 cursor-pointer shadow-2xs"
             >
               <ChevronLeft className="size-3.5" />
             </button>
-            <span className="size-7 rounded-lg bg-[#0f4c47] text-white font-bold flex items-center justify-center text-xs shadow-2xs">
-              1
+            <span className="h-7 min-w-7 px-2 rounded-lg bg-[#0f4c47] text-white font-bold flex items-center justify-center text-xs shadow-2xs">
+              {page} / {pageCount}
             </span>
             <button
               type="button"
-              disabled
+              disabled={page >= pageCount}
+              onClick={() => setCurrentPage(page + 1)}
+              aria-label="Next page"
               className="size-7 rounded-lg border border-border/80 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-40 cursor-pointer shadow-2xs"
             >
               <ChevronRight className="size-3.5" />
