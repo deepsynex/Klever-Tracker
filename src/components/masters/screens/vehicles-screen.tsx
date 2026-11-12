@@ -7,7 +7,6 @@ import {
   Bike,
   Car,
   CarFront,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -371,13 +370,13 @@ export function VehiclesScreen() {
           {/* Type filter */}
           <div className="relative min-w-[110px] rounded-xl border border-border/80 bg-surface px-3 py-1 text-start shadow-2xs focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
             <span className="block text-[11px] font-medium text-muted-foreground leading-tight">{t("filters.type")}</span>
-            <select
+            <Select
+              variant="bare"
               value={typeFilter}
               onChange={(e) => {
                 setTypeFilter(e.target.value);
                 setPageNumber(1);
               }}
-              className="w-full bg-transparent text-sm font-semibold text-foreground focus:outline-none cursor-pointer pe-4 appearance-none"
             >
               <option value="all">{t("filters.all")}</option>
               {lookups.vehicleTypes.map((vt) => (
@@ -385,38 +384,36 @@ export function VehiclesScreen() {
                   {vt.name}
                 </option>
               ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            </Select>
           </div>
 
           {/* Status filter */}
           <div className="relative min-w-[110px] rounded-xl border border-border/80 bg-surface px-3 py-1 text-start shadow-2xs focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
             <span className="block text-[11px] font-medium text-muted-foreground leading-tight">{t("filters.status")}</span>
-            <select
+            <Select
+              variant="bare"
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
                 setPageNumber(1);
               }}
-              className="w-full bg-transparent text-sm font-semibold text-foreground focus:outline-none cursor-pointer pe-4 appearance-none"
             >
               <option value="all">{t("filters.all")}</option>
               <option value="active">{tc("statuses.active")}</option>
               <option value="inactive">{tc("statuses.inactive")}</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            </Select>
           </div>
 
           {/* Company filter */}
           <div className="relative min-w-[120px] rounded-xl border border-border/80 bg-surface px-3 py-1 text-start shadow-2xs focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
             <span className="block text-[11px] font-medium text-muted-foreground leading-tight">{t("filters.company")}</span>
-            <select
+            <Select
+              variant="bare"
               value={companyFilter}
               onChange={(e) => {
                 setCompanyFilter(e.target.value);
                 setPageNumber(1);
               }}
-              className="w-full bg-transparent text-sm font-semibold text-foreground focus:outline-none cursor-pointer pe-4 appearance-none"
             >
               <option value="all">{t("filters.all")}</option>
               {lookups.companies.map((c) => (
@@ -424,8 +421,7 @@ export function VehiclesScreen() {
                   {c.name}
                 </option>
               ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            </Select>
           </div>
 
           {/* Reset button */}
@@ -710,19 +706,19 @@ export function VehiclesScreen() {
           {/* Left: Show [ 10 v ] entries */}
           <div className="flex items-center gap-2 text-muted-foreground text-xs sm:text-sm">
             <span>{t("pagination.show")}</span>
-            <select
+            <Select
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
                 setPageNumber(1);
               }}
-              className="h-8 rounded-lg border border-border/80 bg-surface px-2 text-xs font-semibold text-foreground focus:border-primary focus:outline-none cursor-pointer"
+              className="h-8 w-auto gap-1.5 rounded-lg px-2.5 text-xs font-semibold"
             >
               <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
               <option value={100}>100</option>
-            </select>
+            </Select>
             <span>{t("pagination.entries")}</span>
           </div>
 

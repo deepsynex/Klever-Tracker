@@ -7,6 +7,7 @@ import { PANEL } from "@/components/masters/data-table";
 import { KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { ApiRequestError, gqlRequest } from "@/lib/graphql/client";
 import type { BackendRequest, Checklist, Phase, RequestTone } from "@/lib/dev/plan";
 import { cn } from "@/lib/utils";
@@ -304,21 +305,21 @@ export function DevelopmentView({
       <Panel title="API response viewer" icon={<Code2 />} aside="read-only queries">
         <div className="grid gap-3 px-5 pb-5">
           <div className="flex flex-wrap items-center gap-2.5">
-            <select
+            <Select
               value={viewerKey}
               onChange={(e) => {
                 setViewerKey(e.target.value);
                 setViewer(null);
               }}
               aria-label="Query"
-              className="h-10 min-w-72 cursor-pointer rounded-xl border border-border/80 bg-surface px-3 text-sm font-semibold focus:border-primary focus:outline-none"
+              className="h-10 w-auto min-w-72 rounded-xl px-3 font-semibold"
             >
               {PRESETS.map((p) => (
                 <option key={p.key} value={p.key}>
                   {p.label}
                 </option>
               ))}
-            </select>
+            </Select>
             <Button onClick={() => void runViewer()} disabled={viewerBusy} className="h-10 rounded-xl">
               <Play />
               Run

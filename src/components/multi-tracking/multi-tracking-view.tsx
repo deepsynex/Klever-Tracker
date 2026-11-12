@@ -17,6 +17,7 @@ import {
   type ReactNode,
 } from "react";
 import { Alert } from "@/components/ui/alert";
+import { Select } from "@/components/ui/select";
 import { fetchVehiclePage, fetchVehiclesById, fetchVehicleTypes, type MultiVehicle } from "@/lib/multi-tracking/api";
 import {
   MAX_GRID,
@@ -324,17 +325,18 @@ function Toolbar(props: {
       <label className="glass-panel flex h-10 items-center gap-2 rounded-xl px-3 text-[13px]">
         <History className="size-4 text-primary" aria-hidden />
         <span className="text-muted-foreground">{t("preload.label")}</span>
-        <select
+        <Select
+          variant="bare"
           value={props.preload}
           onChange={(e) => props.onPreload(Number(e.target.value) as PreloadMinutes)}
-          className="bg-transparent font-semibold outline-none"
+          className="w-auto gap-1.5 text-[13px]"
         >
           {PRELOAD_OPTIONS.map((m) => (
             <option key={m} value={m}>
               {m === 0 ? t("preload.off") : t("preload.min", { n: m })}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
 
       {props.onResetLayout ? (
