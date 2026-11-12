@@ -1,11 +1,12 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Globe, KeyRound } from "lucide-react";
+import { BellRing, Globe, KeyRound } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CHANGE_PASSWORD_HREF } from "@/components/masters/am-modules";
+import { PushToggle } from "@/components/notifications/push-toggle";
 import { FormSection, PageHeader } from "@/components/masters/page-header";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -76,6 +77,7 @@ export function ProfileScreen() {
         <>
           <ProfileForm key={profile.data.id} profile={profile.data} />
           <TimeZoneSetting />
+          <BrowserNotificationsCard />
         </>
       )}
     </div>
@@ -208,6 +210,25 @@ function ProfileForm({ profile }: { profile: MyProfile }) {
  * Saved per user in this browser (the API has no per-user time zone yet); "company" follows the
  * company's zone, which an administrator sets under Accounts.
  */
+/** Browser push for this device (geofence and other alerts while the tab is in the background or closed). */
+function BrowserNotificationsCard() {
+  const t = useTranslations("notifications.push");
+  return (
+    <section className="rounded-2xl border border-border/70 bg-surface shadow-sm p-6" aria-labelledby="push-title">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="grid content-start gap-1.5">
+          <h2 id="push-title" className="flex items-center gap-2 text-sm font-semibold">
+            <BellRing className="size-4 text-primary" aria-hidden />
+            {t("title")}
+          </h2>
+          <p className="text-[13px] text-muted-foreground">{t("description")}</p>
+        </div>
+        <PushToggle />
+      </div>
+    </section>
+  );
+}
+
 function TimeZoneSetting() {
   const t = useTranslations("masters.am.profile");
   const { data: me } = useMe();

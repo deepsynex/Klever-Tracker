@@ -4,6 +4,9 @@ import { Brand } from "@/components/brand";
 import { RouteGuard } from "@/components/shell/route-guard";
 import { TimeZoneSync } from "@/components/shell/time-zone-sync";
 import { LocaleSwitcher } from "@/components/locale-switcher";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import { NotificationsRealtime } from "@/components/notifications/notifications-realtime";
+import { PushHeal } from "@/components/notifications/push-heal";
 import { TopNav } from "@/components/shell/top-nav";
 import { UserMenu, UserMenuSkeleton } from "@/components/shell/user-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -33,12 +36,17 @@ export default function AppLayout({ children }: LayoutProps<"/[locale]">) {
               <LocaleSwitcher />
             </span>
             <ThemeToggle />
+            {/* Hidden until the backend has the notification inbox (G3). */}
+            <NotificationBell />
             <Suspense fallback={<UserMenuSkeleton />}>
               <UserMenu />
             </Suspense>
           </div>
         </div>
       </header>
+      {/* Live notification socket and toasts, once for the whole signed-in app. */}
+      <NotificationsRealtime />
+      <PushHeal />
       <main id="main" className="flex-1 px-4 py-6 sm:px-6">
         <TimeZoneSync>
           <RouteGuard>{children}</RouteGuard>

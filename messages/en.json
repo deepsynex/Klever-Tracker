@@ -166,24 +166,18 @@
   "nav": {
     "main": "Main navigation",
     "dashboard": "Dashboard",
-    "liveMap": "Live map",
     "history": "History & playback",
     "alerts": "Alerts",
     "reports": "Reports",
     "geofences": "Geofences",
     "fleet": "Fleet",
-    "settingsGroup": "Settings",
     "users": "Users",
     "roles": "Roles & permissions",
     "departments": "Departments",
     "audit": "Audit log",
     "phase": "Phase {n}",
     "comingSoon": "Available in phase {n}",
-    "mastersGroup": "Masters",
-    "vehicleManagement": "Vehicle management",
     "heatmap": "Heatmap",
-    "trackingGroup": "Tracking",
-    "accountManagement": "Account management",
     "open": "Open menu",
     "historyShort": "History",
     "vehicles": "Vehicles",
@@ -191,7 +185,6 @@
     "settings": "Settings",
     "track": "Tracking",
     "liveTracking": "Live Tracking",
-    "detailedTracking": "Tracking Detail",
     "historyTracking": "History Tracking",
     "multiTracking": "Multi Tracking",
     "tracking": "Tracking",
@@ -211,7 +204,6 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "welcome": "Welcome, {name}",
     "intro": "Live tracking, history and the heatmap are ready. Alerts, reports and geofences arrive in the next phases.",
     "welcomeBack": "Welcome back,",
     "cta": {
@@ -263,7 +255,6 @@
     "filters": {
       "title": "Tracking Parameters",
       "vehicle": "Vehicle or device",
-      "vehiclePlaceholder": "Select a vehicle",
       "vehiclesGroup": "Vehicles",
       "devicesGroup": "Devices (IMEI)",
       "loadingTargets": "Loading vehicles…",
@@ -294,7 +285,18 @@
       "pointsCount": "GPS Points",
       "eventsCount": "Events",
       "unitKm": "km",
-      "unitKmh": "km/h"
+      "unitKmh": "km/h",
+      "trackerTitle": "Tracker readings",
+      "trackerDistance": "Tracker distance",
+      "trackerDistanceHint": "Distance counted by the tracker's odometer while the engine was on in this period.",
+      "engineTime": "Engine time",
+      "engineTimeHint": "Time the engine was on in this period, from the tracker.",
+      "lowestEco": "Lowest eco",
+      "lowestEcoHint": "Worst driving-style score in this period (10 = smooth).",
+      "harshMoments": "Harsh moments",
+      "harshHint": "Records at 0.3 g or more (harsh acceleration, braking or cornering). Peak {peak} g.",
+      "partial": "Long period: based on the newest and oldest records only.",
+      "trackerDistanceDriftHint": "Distance counted by the tracker's odometer while the engine was on. Another {drift} km it counted while parked (GPS drift, not real driving) is left out."
     },
     "playback": {
       "play": "Play",
@@ -335,15 +337,8 @@
       "fromTrackHint": "Worked out from this window's GPS data: the ignition held its new state for at least 45 seconds."
     },
     "map": {
-      "missingKeyTitle": "Google Maps API Key",
-      "missingKeyMessage": "Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to your web/.env.local file to enable Google Maps. An interactive route preview is displayed below.",
-      "startPoint": "Start Point",
-      "endPoint": "End Point",
-      "currentLocation": "Current Playback Position",
-      "plannedRoute": "Planned Route",
       "noPoints": "No tracking data found for the selected vehicle and time range.",
-      "tooManyPoints": "This range has {total} GPS points; the limit is {max}. Choose a shorter date range.",
-      "selectVehiclePrompt": "Select a vehicle plate number and date range above, then click Track Vehicle."
+      "tooManyPoints": "This range has {total} GPS points; the limit is {max}. Choose a shorter date range."
     },
     "panel": {
       "hide": "Hide tracking parameters",
@@ -360,7 +355,6 @@
       "all": "All",
       "cancel": "Cancel",
       "choose": "Choose…",
-      "clearFilters": "Clear filters",
       "close": "Close",
       "delete": "Delete",
       "deleting": "Deleting…",
@@ -475,7 +469,9 @@
         "distance": "Vehicle distance",
         "liveLocation": "Live location",
         "fuelCalibration": "Fuel calibration",
-        "types": "Types"
+        "types": "Types",
+        "geofences": "Geofences",
+        "notifications": "Notifications"
       },
       "moduleHints": {
         "vehicles": "The fleet list and each vehicle's full record, documents, sensors and fuel tanks.",
@@ -649,6 +645,11 @@
           "volume": "Tank volume (L)",
           "calibration": "Fuel calibration",
           "minRefill": "Minimum fuel refill (L)"
+        },
+        "tracker": {
+          "odometer": "Tracker reads {km} km",
+          "useThis": "Use this",
+          "engineHours": "Engine hours (tracker): {hours}"
         }
       },
       "allocations": {
@@ -733,7 +734,6 @@
         "editTitle": "Edit maintenance",
         "empty": "No maintenance records yet.",
         "needVehicles": "Add vehicles first, then record their maintenance here.",
-        "totalShown": "Total: {total}",
         "vehicleFixed": "The vehicle can't be changed after saving.",
         "addMaintenanceType": "Add maintenance type",
         "addServiceType": "Add service type",
@@ -874,7 +874,6 @@
         "distance": "Distance travelled (km)",
         "autoHint": "Worked out from the readings. You can change it.",
         "fixedOnEdit": "The vehicle and date can't be changed after saving.",
-        "totalShown": "Total: {km} km",
         "kpi": {
           "logs": "Log entries",
           "totalKm": "Total distance (km)",
@@ -972,6 +971,59 @@
         "all": "All companies (view only)",
         "platformHint": "You’re signed in as platform staff and can see every company.",
         "viewOnly": "You’re viewing all companies. Choose a company above to add or change records."
+      },
+      "geofences": {
+        "title": "Geofences",
+        "description": "Areas on the map that send an alert when an assigned vehicle enters or leaves them.",
+        "add": "Add geofence",
+        "editTitle": "Edit {name}",
+        "sheetHint": "Draw the area on the map and choose which vehicles and groups it watches.",
+        "empty": "No geofences yet. Add one to get alerts when vehicles enter or leave an area.",
+        "type": "Type",
+        "size": "Size",
+        "vehicles": "Vehicles",
+        "groups": "Groups",
+        "address": "Address",
+        "radius": "Radius (m)",
+        "activeLabel": "Active (sends alerts)",
+        "radiusValue": "{m} m",
+        "areaKm": "{km} km²",
+        "areaHa": "{ha} ha",
+        "types": {
+          "circle": "Circle",
+          "polygon": "Polygon",
+          "route": "Route"
+        },
+        "comingSoon": "coming soon",
+        "routeSoon": "Route corridors are coming once the backend can store a route path.",
+        "routeReadOnly": "Route geofences can't be edited here yet. You can still change the vehicles and groups.",
+        "kpi": {
+          "total": "Geofences",
+          "active": "Active",
+          "circles": "Circles",
+          "polygons": "Polygons"
+        },
+        "sections": {
+          "details": "Details",
+          "area": "Area on the map",
+          "vehicles": "Vehicles watched",
+          "groups": "Vehicle groups watched"
+        },
+        "circleHint": "Click the map to set the centre. Drag the centre to move the circle, or drag the white handle (or type the radius) to resize it.",
+        "polygonHint": "Click the map to add corner points, in order. Drag a point to move it. At least 3 points.",
+        "mapLabel": "Geofence map",
+        "mapUnavailable": "The map isn't available. Check the map settings or the Google Maps key.",
+        "pointCount": "{count, plural, one {# point} other {# points}}",
+        "undoPoint": "Undo last point",
+        "clearPoints": "Clear points",
+        "vehiclesHint": "Alerts fire for these vehicles, and for every vehicle in the groups below.",
+        "noGroups": "No vehicle groups yet. Create them under Groups.",
+        "deleteNotice": "The geofence and its vehicle and group assignments are deleted permanently. Alerts already recorded are kept.",
+        "errors": {
+          "centre": "Click the map to set the circle's centre.",
+          "radius": "Enter a radius between 1 and {max} km (in metres).",
+          "polygon": "Draw an area with at least 3 points that aren't all in a line."
+        }
       }
     },
     "am": {
@@ -1356,8 +1408,6 @@
         "noMatch": "No entries on this page match the filter.",
         "showChanges": "Show the changed values",
         "system": "System",
-        "newer": "Newer",
-        "older": "Older",
         "pageOf": "Page {page} of {last}",
         "kpi": {
           "total": "Total entries",
@@ -1450,7 +1500,6 @@
       "selectNone": "Clear",
       "noMatches": "No vehicles match.",
       "device": "device",
-      "loadingVehicles": "Loading vehicles…",
       "noVehicles": "Your company has no vehicles or tracking devices yet.",
       "fromDate": "From date",
       "fromTime": "From time",
@@ -1535,25 +1584,24 @@
       "title": "Multi Tracking",
       "description": "Simultaneous fleet multi-view, split monitoring, and multi-vehicle map surveillance."
     },
-    "sales": {
-      "title": "Sales Tracking",
-      "description": "Field sales visits, customer check-ins, and route coverage for sales teams."
-    },
-    "screen": {
-      "gpsStream": "GPS Stream",
-      "livePolling": "Live Polling",
-      "fleetTelemetry": "Fleet Telemetry",
-      "readyForPhase": "Ready for Phase {n}",
-      "mapRendering": "Map Rendering",
-      "mapEngine": "Google Maps JS API"
-    },
     "marker": {
       "moving": "Moving · {speed} km/h",
       "stopped": "Stopped",
       "offline": "Offline",
       "updated": "Last update",
       "heading": "Heading {deg}°",
-      "track": "Click to follow on the map"
+      "track": "Click to follow on the map",
+      "battery": "Battery",
+      "engineOn": "engine on",
+      "engineOff": "engine off",
+      "odometer": "Odometer",
+      "engineHours": "Engine hours",
+      "trip": "Trip",
+      "eco": "Eco score",
+      "ecoShort": "eco",
+      "signal": "Signal",
+      "gpsFix": "GPS fix",
+      "gpsNoFix": "no GPS fix"
     }
   },
   "multiTracking": {
@@ -1652,5 +1700,93 @@
       "reset": "Reset layout",
       "hint": "Drag a title bar to move · drag the corner to resize · double-click to maximize"
     }
+  },
+  "notifications": {
+    "push": {
+      "title": "Browser notifications",
+      "description": "Get alerts on this device, such as a vehicle entering or leaving a geofence, even when Klever Tracker is in a background tab or closed. Each browser and device is set up separately.",
+      "label": "Notifications on this device",
+      "stateOn": "On",
+      "stateOff": "Off",
+      "working": "Working…",
+      "onHint": "This browser receives alert notifications.",
+      "offHint": "Turn on to get alert notifications in this browser. Your browser will ask for permission.",
+      "unsupported": "This browser can't receive push notifications. On iPhone and iPad, add Klever Tracker to the Home Screen first (Share → Add to Home Screen) and open it from there.",
+      "denied": "Notifications are blocked for this site. To allow them, click the lock icon next to the address, set Notifications to Allow, then reload the page.",
+      "backend": "Available once the server supports browser notifications.",
+      "failed": "Couldn't change browser notifications. Try again."
+    },
+    "title": "Notifications",
+    "description": "Geofence entries and exits and other alerts for the vehicles you can see. Newest first.",
+    "bell": "Notifications",
+    "bellUnread": "{count, plural, one {Notifications, # unread} other {Notifications, # unread}}",
+    "markAllRead": "Mark all as read",
+    "markRead": "Mark as read",
+    "read": "Read",
+    "viewAll": "View all notifications",
+    "empty": "No notifications yet.",
+    "noUnread": "No unread notifications.",
+    "loadFailed": "Notifications couldn't be loaded. Try again shortly.",
+    "openOnMap": "Open on map",
+    "enteredTitle": "Vehicle entered geofence",
+    "exitedTitle": "Vehicle exited geofence",
+    "alertTitle": "Alert",
+    "entered": "{plate} entered {geofence}",
+    "exited": "{plate} left {geofence}",
+    "someVehicle": "A vehicle",
+    "someGeofence": "a geofence",
+    "filter": "Show",
+    "all": "All",
+    "unreadOnly": "Unread only",
+    "count": "{count, plural, one {# notification} other {# notifications}}",
+    "kpi": {
+      "unread": "Unread",
+      "total": "All notifications",
+      "open": "Open alerts",
+      "recent": "Recent alerts"
+    },
+    "alertsTitle": "Alerts",
+    "bellAlerts": "{count, plural, one {Alerts: # open} other {Alerts: # open}}",
+    "openAlerts": "{count, plural, =0 {None open} one {# open} other {# open}}",
+    "emptyAlerts": "No alerts yet.",
+    "alertsDescription": "The latest alerts for your vehicles: geofence enter and exit, overspeed, ignition and more. Open one to see the vehicle on the live map.",
+    "openOnly": "Open only",
+    "noOpenAlerts": "No open alerts.",
+    "acknowledged": "Acknowledged",
+    "openStatus": "Open",
+    "detail": {
+      "open": "Show details",
+      "subtitle": "Alert details",
+      "event": "Event",
+      "vehicle": "Vehicle",
+      "geofence": "Geofence",
+      "time": "Time",
+      "address": "Address",
+      "location": "Location",
+      "speed": "Speed",
+      "speedValue": "{speed} km/h",
+      "battery": "Vehicle battery",
+      "readAt": "Read at",
+      "acknowledgedAt": "Acknowledged at",
+      "reference": "Reference",
+      "statusOpen": "Open",
+      "statusAcknowledged": "Acknowledged",
+      "statusUnread": "Unread",
+      "statusRead": "Read",
+      "acknowledge": "Acknowledge",
+      "acknowledging": "Acknowledging…",
+      "acknowledgedToast": "Alert acknowledged.",
+      "acknowledgeFailed": "Couldn't acknowledge the alert. Try again."
+    },
+    "swipe": {
+      "remove": "Remove from this panel",
+      "clearAll": "Clear all",
+      "allCleared": "All caught up. Removed notifications are still on the Notifications page.",
+      "hint": "Swipe left or right to remove"
+    },
+    "enteredNamed": "Entered {geofence}",
+    "exitedNamed": "Left {geofence}",
+    "enteredThis": "{plate} entered this geofence",
+    "exitedThis": "{plate} left this geofence"
   }
 }
