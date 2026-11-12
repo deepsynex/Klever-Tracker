@@ -70,6 +70,25 @@ function median(values: number[]): number {
 }
 
 /** `points` must be sorted oldest first and have valid coordinates. */
+/**
+ * Each fix's ignition, with gaps filled: a fix with no reading (null, like the tracker's
+ * minute-by-minute beacon records) takes the last known state, or the next one at the start of
+ * the window. Null only when the window has no reading at all. Without this, beacon records
+ * with GPS-drift speed in the middle of a parked night counted as driving.
+ */
+export function effectiveIgnition(points: Array<Pick<TrackFix, "ignition">>): Array<boolean | null> {
+  const out: Array<boolean | null> = new Array(points.length).fill(null);
+  let last: boolean | null = null;
+  for (let k = 0; k < points.length; k++) {
+    const v = points[k].ignition;
+    if (typeof v === "boolean") last = v;
+    out[k] = last;
+  }
+  const firstKnown = out.findIndex((v) => v !== null);
+  for (let k = 0; k < firstKnown; k++) out[k] = out[firstKnown];
+  return out;
+}
+
 export function cleanTrack<T extends TrackFix>(points: T[]): CleanedTrack<T> {
   const out: T[] = [];
   const stops: Stop[] = [];
@@ -79,12 +98,13 @@ export function cleanTrack<T extends TrackFix>(points: T[]): CleanedTrack<T> {
   let i = 0;
 
   const ignitionOn = (members: number[]) => members.filter((k) => points[k].ignition === true).length;
-  const still = (k: number) => (points[k].speed ?? 0) < STILL_KMH && points[k].ignition !== true;
+  const ign = effectiveIgnition(points);
+  const still = (k: number) => (points[k].speed ?? 0) < STILL_KMH && ign[k] !== true;
   /**
    * Clearly driving: real speed with the ignition on (or unknown). Parked drift often reports
    * speed with the ignition off, so that alone doesn't count.
    */
-  const driving = (k: number) => (points[k].speed ?? 0) >= STILL_KMH && points[k].ignition !== false;
+  const driving = (k: number) => (points[k].speed ?? 0) >= STILL_KMH && ign[k] !== false;
 
   while (i < points.length) {
     // Grow a candidate stop from fix i around a running centre.

@@ -58,7 +58,15 @@ import { cleanTrack } from "@/lib/history/clean-track";
 import { calculateDistance, computeRouteLegs, formatDuration, tripTimes, type RouteLeg } from "@/lib/history/legs";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { useMapConfig } from "@/lib/map-settings";
-import { fetchHistoryFixes, fetchVehicleEventsSafely, MAX_HISTORY_FIXES, TooManyFixesError, type HistoryFix } from "@/lib/history/fetch-history";
+import {
+  fetchHistoryFixes,
+  fetchVehicleEventsSafely,
+  MAX_HISTORY_FIXES,
+  TooManyFixesError,
+  type HistoryFix,
+} from "@/lib/history/fetch-history";
+import { fetchWindowReadingsSafely, type WindowReadings } from "@/lib/history/fetch-readings";
+import { formatEngineTime } from "@/lib/telemetry/device-readings";
 import { IGNITION_OFF, IGNITION_ON, nearestFixIndex } from "@/lib/history/trip-events";
 import { useEventLabel, useTripEvents } from "@/lib/history/use-trip-events";
 import { cn } from "@/lib/utils";
@@ -96,6 +104,8 @@ export function TrackingHistoryView() {
   const [eventTypes, setEventTypes] = useState<EventTypeItem[]>([]);
   /** The window's stored alert events (alertEvents filtered by vehicle and time). */
   const [apiEvents, setApiEvents] = useState<AlertEventItem[]>([]);
+  /** The tracker's own totals for the window (a separate, lighter request; null when unavailable). */
+  const [readings, setReadings] = useState<WindowReadings | null>(null);
 
   // Telemetry Position History
   const [positions, setPositions] = useState<HistoryFix[]>([]);
@@ -149,14 +159,16 @@ export function TrackingHistoryView() {
         const from = companyTimeToUtcIso(fDate, fTime);
         const to = companyTimeToUtcIso(tDate, tTime, 59);
         // Every page of the window, oldest first (one `first: 1000` call dropped the start of busy windows).
-        const [sorted, events] = await Promise.all([
+        const [sorted, events, windowReadings] = await Promise.all([
           fetchHistoryFixes(historyFilter(target), from, to),
           fetchVehicleEventsSafely(target.vehicleId, from, to),
+          fetchWindowReadingsSafely(historyFilter(target), from, to),
         ]);
 
         if (request !== latestRequest.current) return;
         setPositions(sorted);
         setApiEvents(events);
+        setReadings(windowReadings);
         if (sorted.length === 0) {
           setErrorMsg(t("map.noPoints"));
         }
@@ -164,9 +176,13 @@ export function TrackingHistoryView() {
         if (request !== latestRequest.current) return;
         setPositions([]);
         setApiEvents([]);
+        setReadings(null);
         setErrorMsg(
           err instanceof TooManyFixesError
-            ? t("map.tooManyPoints", { total: err.total.toLocaleString("en"), max: MAX_HISTORY_FIXES.toLocaleString("en") })
+            ? t("map.tooManyPoints", {
+                total: err.total.toLocaleString("en"),
+                max: MAX_HISTORY_FIXES.toLocaleString("en"),
+              })
             : te(err instanceof ApiRequestError ? err.error.kind : "unknown"),
         );
       } finally {
@@ -370,13 +386,67 @@ export function TrackingHistoryView() {
 
   const statItems = [
     { key: "totalDistance", value: stats.totalDistance, unit: t("stats.unitKm"), tone: "text-primary" },
-    { key: "drivingTime", value: formatDuration(stats.drivingMs), tone: "text-foreground", title: t("stats.timeSpan", { value: formatDuration(stats.spanMs) }) },
-    { key: "stoppedTime", value: formatDuration(stats.stoppedMs), tone: "text-muted-foreground", title: t("stats.timeSpan", { value: formatDuration(stats.spanMs) }) },
+    {
+      key: "drivingTime",
+      value: formatDuration(stats.drivingMs),
+      tone: "text-foreground",
+      title: t("stats.timeSpan", { value: formatDuration(stats.spanMs) }),
+    },
+    {
+      key: "stoppedTime",
+      value: formatDuration(stats.stoppedMs),
+      tone: "text-muted-foreground",
+      title: t("stats.timeSpan", { value: formatDuration(stats.spanMs) }),
+    },
     { key: "maxSpeed", value: stats.maxSpeed, unit: t("stats.unitKmh"), tone: "text-destructive" },
     { key: "avgSpeed", value: stats.avgSpeed, unit: t("stats.unitKmh"), tone: "text-moving" },
     { key: "pointsCount", value: stats.pointsCount, tone: "text-foreground" },
     { key: "eventsCount", value: filteredEvents.length, tone: "text-sand" },
   ];
+
+  // The tracker's own totals for the window, in a second compact row (hidden when not reported).
+  const partialNote = readings?.partial ? t("stats.partial") : undefined;
+  const trackerItems = readings
+    ? [
+        readings.odometerKm !== null
+          ? {
+              key: "trackerDistance",
+              value: readings.odometerKm.toFixed(1),
+              unit: t("stats.unitKm"),
+              tone: "text-primary",
+              title:
+                readings.parkedDriftKm !== null && readings.parkedDriftKm >= 0.05
+                  ? t("stats.trackerDistanceDriftHint", { drift: readings.parkedDriftKm.toFixed(1) })
+                  : t("stats.trackerDistanceHint"),
+            }
+          : null,
+        readings.engineSeconds !== null
+          ? {
+              key: "engineTime",
+              value: formatEngineTime(readings.engineSeconds) ?? "—",
+              tone: "text-foreground",
+              title: t("stats.engineTimeHint"),
+            }
+          : null,
+        readings.lowestEco !== null
+          ? {
+              key: "lowestEco",
+              value: readings.lowestEco.toFixed(1),
+              unit: "/10",
+              tone: readings.lowestEco < 7 ? "text-idle" : "text-moving",
+              title: partialNote ?? t("stats.lowestEcoHint"),
+            }
+          : null,
+        readings.peakG !== null
+          ? {
+              key: "harshMoments",
+              value: readings.harshCount,
+              tone: readings.harshCount > 0 ? "text-destructive" : "text-moving",
+              title: [t("stats.harshHint", { peak: readings.peakG.toFixed(2) }), partialNote].filter(Boolean).join(" "),
+            }
+          : null,
+      ].filter((x): x is NonNullable<typeof x> => x !== null)
+    : [];
 
   return (
     <div className="relative h-full overflow-hidden">
@@ -644,7 +714,11 @@ export function TrackingHistoryView() {
       <div className="absolute inset-x-3 bottom-[8.5rem] z-10 grid gap-2 sm:inset-x-4 lg:inset-x-auto lg:bottom-auto lg:end-4 lg:top-4 lg:justify-items-end">
         <dl className="glass-panel flex divide-x divide-border overflow-x-auto rounded-2xl rtl:divide-x-reverse">
           {statItems.map((item) => (
-            <div key={item.key} className="min-w-[84px] px-3 py-2 text-center" title={"title" in item ? item.title : undefined}>
+            <div
+              key={item.key}
+              className="min-w-[84px] px-3 py-2 text-center"
+              title={"title" in item ? item.title : undefined}
+            >
               <dt className="whitespace-nowrap text-[10px] font-medium text-muted-foreground">
                 {t(`stats.${item.key}`)}
               </dt>
@@ -657,6 +731,27 @@ export function TrackingHistoryView() {
             </div>
           ))}
         </dl>
+
+        {trackerItems.length > 0 ? (
+          <dl
+            aria-label={t("stats.trackerTitle")}
+            className="glass-panel flex max-w-full divide-x divide-border overflow-x-auto rounded-xl rtl:divide-x-reverse"
+          >
+            {trackerItems.map((item) => (
+              <div key={item.key} className="min-w-[84px] px-3 py-1.5 text-center" title={item.title}>
+                <dt className="whitespace-nowrap text-[10px] font-medium text-muted-foreground">
+                  {t(`stats.${item.key}`)}
+                </dt>
+                <dd className={cn("font-mono text-sm font-bold", item.tone)}>
+                  {item.value}
+                  {"unit" in item && item.unit ? (
+                    <span className="ms-1 text-[10px] font-normal text-muted-foreground">{item.unit}</span>
+                  ) : null}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
 
         <div className="glass-panel flex flex-wrap items-center gap-1 rounded-xl p-1">
           <Button variant={activeTab === "legs" ? "secondary" : "ghost"} size="sm" onClick={() => toggleTab("legs")}>
@@ -757,7 +852,11 @@ export function TrackingHistoryView() {
                           <div className="flex items-center gap-1.5 text-muted-foreground">
                             <Clock className="size-3.5 text-subtle" />
                             <span>
-                              <span dir="ltr">{formatInCompanyTz(leg.startTime, displayZone, "HH:mm")} → {formatInCompanyTz(leg.endTime, displayZone, "HH:mm")}</span> ({formatDuration(leg.durationMs)})
+                              <span dir="ltr">
+                                {formatInCompanyTz(leg.startTime, displayZone, "HH:mm")} →{" "}
+                                {formatInCompanyTz(leg.endTime, displayZone, "HH:mm")}
+                              </span>{" "}
+                              ({formatDuration(leg.durationMs)})
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -824,12 +923,22 @@ export function TrackingHistoryView() {
                         }}
                       >
                         <td className="p-2 font-mono">{idx + 1}</td>
-                        <td className="p-2 font-mono" dir="ltr">{formatInCompanyTz(p.recordedAt, displayZone)}</td>
+                        <td className="p-2 font-mono" dir="ltr">
+                          {formatInCompanyTz(p.recordedAt, displayZone)}
+                        </td>
                         <td className="p-2 font-mono">{p.speed ?? 0} km/h</td>
                         <td className="p-2 font-mono">{p.locationLat?.toFixed(6)}</td>
                         <td className="p-2 font-mono">{p.locationLng?.toFixed(6)}</td>
                         <td className="p-2 text-end">
-                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => {
+                              setActiveIndex(idx);
+                              setActiveTab("map");
+                            }}
+                          >
                             Seek
                           </Button>
                         </td>
@@ -896,7 +1005,10 @@ export function TrackingHistoryView() {
                                 .filter(Boolean)
                                 .join(" · ") || "—"}
                             </td>
-                            <td className="p-2 whitespace-nowrap text-muted-foreground" title={ev.source === "track" ? t("events.fromTrackHint") : undefined}>
+                            <td
+                              className="p-2 whitespace-nowrap text-muted-foreground"
+                              title={ev.source === "track" ? t("events.fromTrackHint") : undefined}
+                            >
                               {ev.source === "api"
                                 ? ev.resolvedAt
                                   ? t("events.resolved")
@@ -1031,7 +1143,9 @@ export function TrackingHistoryView() {
         </div>
         {activePoint && (
           <div className="mt-2 flex items-center justify-end gap-3 font-mono text-[11px] text-muted-foreground">
-            <span dir="ltr">{t("playback.currentTime", { time: formatInCompanyTz(activePoint.recordedAt, displayZone) })}</span>
+            <span dir="ltr">
+              {t("playback.currentTime", { time: formatInCompanyTz(activePoint.recordedAt, displayZone) })}
+            </span>
             <span className="font-semibold text-primary">
               {t("playback.currentSpeed", { speed: activePoint.speed ?? 0 })}
             </span>

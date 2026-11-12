@@ -84,3 +84,24 @@ describe("formatDuration", () => {
     expect(formatDuration(NaN)).toBe("0m");
   });
 });
+
+describe("computeRouteLegs: windows that start parked", () => {
+  const at = (min: number) => new Date(Date.UTC(2026, 10, 12, 0, 0, 0) + min * 60_000).toISOString().replace("T", " ").slice(0, 19);
+  const p = (min: number, lat: number, speed: number) => ({ recordedAt: at(min), locationLat: lat, locationLng: 72.5, speed });
+
+  it("doesn't count a parked start as driving", () => {
+    // A stop's arrival + departure (8 h apart, speed 0), then a 10-minute drive.
+    const pts = [p(0, 23.08, 0), p(480, 23.08, 0), ...Array.from({ length: 10 }, (_, k) => p(481 + k, 23.08 + 0.003 * (k + 1), 40))];
+    const legs = computeRouteLegs(pts);
+    expect(legs).toHaveLength(1);
+    expect(legs[0].startTime).toBe(at(480));
+    expect(tripTimes(pts, legs).drivingMs).toBe(10 * 60_000);
+  });
+
+  it("drops a seconds-long drift 'leg' between two back-to-back stops", () => {
+    const pts = [p(0, 23.08, 0), p(300, 23.08, 0), { ...p(300, 23.0809, 0), recordedAt: at(300).slice(0, 17) + "27" }, p(320, 23.0809, 0), ...Array.from({ length: 5 }, (_, k) => p(321 + k, 23.081 + 0.003 * (k + 1), 40))];
+    const legs = computeRouteLegs(pts);
+    expect(legs).toHaveLength(1);
+    expect(legs[0].legNumber).toBe(1);
+  });
+});

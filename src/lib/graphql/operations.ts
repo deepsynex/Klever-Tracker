@@ -5,13 +5,6 @@
  * Then run `npm run codegen` and switch to the generated `graphql()` documents in src/gql.
  */
 
-export const PING = /* GraphQL */ `
-  query Ping {
-    ping
-  }
-`;
-export type PingResult = { ping: string };
-
 export const LOGIN = /* GraphQL */ `
   mutation Login($email: String!, $password: String!) {
     login(email: $email, password: $password) {
@@ -48,7 +41,6 @@ export const RESET_PASSWORD = /* GraphQL */ `
     resetPassword(token: $token, email: $email, password: $password)
   }
 `;
-export type ResetPasswordVariables = { token: string; email: string; password: string };
 export type ResetPasswordResult = { resetPassword: boolean };
 
 /**
@@ -246,6 +238,7 @@ export const GET_POSITION_HISTORY = /* GraphQL */ `
         locationLng
         speed
         heading
+        ignition
       }
       paginatorInfo {
         total
@@ -253,6 +246,30 @@ export const GET_POSITION_HISTORY = /* GraphQL */ `
     }
   }
 `;
+/**
+ * A vehicle's newest positions with the tracker's extra values (`attributes`, ~1.5 KB each), for
+ * Live and Vehicle details. Kept apart from GET_POSITION_HISTORY, which the heatmap runs over
+ * large windows.
+ */
+export const GET_LATEST_POSITIONS_WITH_READINGS = /* GraphQL */ `
+  query LatestPositionsWithReadings($vehicleId: ID, $first: Int) {
+    positionHistory(vehicleId: $vehicleId, first: $first) {
+      data {
+        deviceId
+        recordedAt
+        locationLat
+        locationLng
+        speed
+        heading
+        attributes
+      }
+    }
+  }
+`;
+export type LatestPositionsWithReadingsResult = {
+  positionHistory: { data: Array<PositionHistoryPoint & { attributes?: string | null }> };
+};
+
 export type PositionHistoryPoint = {
   deviceId: string;
   recordedAt: string;
@@ -261,6 +278,8 @@ export type PositionHistoryPoint = {
   speed: number | null;
   /** Compass degrees (0 = north, clockwise) reported by the device; null when it didn't send one. */
   heading?: number | null;
+  /** The tracker's ignition reading; null on records without one (beacon records). */
+  ignition?: boolean | null;
 };
 export type PositionHistoryResult = {
   positionHistory: {

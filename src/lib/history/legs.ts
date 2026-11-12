@@ -121,14 +121,25 @@ export function computeRouteLegs(points: LegPoint[]): RouteLeg[] {
   const legs: RouteLeg[] = [];
   let start = 0;
   for (let i = 1; i < points.length; i++) {
-    if (isStop(points[i - 1], points[i]) && i - start >= 2) {
-      legs.push(makeLeg(points, start, i - 1, legs.length + 1));
+    if (isStop(points[i - 1], points[i])) {
+      // A stop always ends the current leg. Before it there may be a single fix only (a window
+      // that starts parked: the stop's arrival fix): that's no leg, but the next one still has to
+      // start after the stop, or the whole parked time is counted as driving.
+      if (i - start >= 2) legs.push(makeLeg(points, start, i - 1, legs.length + 1));
       start = i;
     }
   }
   if (points.length - start >= 2) legs.push(makeLeg(points, start, points.length - 1, legs.length + 1));
-  return legs;
+  // A "leg" under a minute and under 200 m sits between two stops at the same place (GPS drift
+  // between back-to-back parked stretches): not a drive. Renumber what's left.
+  return legs
+    .filter((l) => l.durationMs >= MIN_LEG_MS || l.distanceKm >= MIN_LEG_KM)
+    .map((l, k) => ({ ...l, id: `leg-${k + 1}`, legNumber: k + 1 }));
 }
+
+/** Shorter and less far than both of these, a leg is drift between two stops. */
+export const MIN_LEG_MS = 60_000;
+export const MIN_LEG_KM = 0.2;
 
 /** Driving, stopped and total time over `points`, given the legs found in them. */
 export function tripTimes(points: LegPoint[], legs: RouteLeg[]): TripTimes {
