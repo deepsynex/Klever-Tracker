@@ -1514,7 +1514,7 @@
         "title": "Audit log",
         "description": "An append-only record of changes: who made them, when, and what changed.",
         "filter": "Filter by action, record, user, company or IP…",
-        "total": "{n, plural, =0 {No entries} one {# entry} other {# entries}}",
+        "total": "{n, plural, =0 {No changes} one {# change} other {# changes}}",
         "when": "When",
         "who": "User",
         "action": "Action",
@@ -1533,7 +1533,10 @@
         },
         "company": "Company",
         "platform": "Platform",
-        "newestOnly": "newest {n} shown"
+        "newestOnly": "newest {n} shown",
+        "mapSettings": "Map settings",
+        "unknownUser": "Unknown user",
+        "moreRecords": "and {count, plural, one {# more record} other {# more records}}"
       },
       "profile": {
         "title": "My profile",

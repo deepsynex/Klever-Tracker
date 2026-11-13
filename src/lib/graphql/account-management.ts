@@ -575,7 +575,7 @@ export const AUDIT_LOGS = /* GraphQL */ `
       paginatorInfo { total currentPage lastPage }
     }
     users(first: 500) {
-      data { id name email }
+      data { id name email username }
     }
   }
 `;
@@ -593,7 +593,7 @@ export type AuditLogEntry = {
 };
 export type AuditLogsResult = {
   auditLogs: { data: AuditLogEntry[]; paginatorInfo: { total: number; currentPage: number; lastPage: number } };
-  users: Paginated<{ id: string; name: string; email: string }>;
+  users: Paginated<{ id: string; name: string; email: string; username: string | null }>;
 };
 
 /**
