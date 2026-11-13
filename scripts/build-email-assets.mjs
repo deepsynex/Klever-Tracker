@@ -8,6 +8,7 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import { chromium } from "playwright";
 
 const require = createRequire(import.meta.url);
@@ -22,6 +23,17 @@ const TEAL = "#0b6e69";
 const TEAL_DARK = "#08524e";
 const GREEN = "#1f9d55";
 const SOFT = "#dcefec";
+// The brand logo in its original colours (email has no light/dark theme); the pin's centre filled white.
+const LOGO = readFileSync(new URL("../src/components/brand.tsx", import.meta.url), "utf8");
+const logoPaths = [...LOGO.matchAll(/d="([^"]+)"/g)].map((m) => m[1]);
+const [pinPath, kleverPath, trackerPath] = logoPaths;
+const logoSvg = (height) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="9 10.9 335.2 98.1" style="height:${height}px;width:auto;display:block">
+  <g fill="#5bbfb4"><circle cx="27.79" cy="92.44" r="3.6"/><circle cx="32.97" cy="83.31" r="3.6"/><circle cx="40.68" cy="76.5" r="3.6"/><circle cx="50.74" cy="78.01" r="3.6"/><circle cx="57.95" cy="85.56" r="3.6"/><circle cx="64.5" cy="93.75" r="3.6"/><circle cx="73.8" cy="98" r="3.6"/></g>
+  <circle cx="18" cy="100" r="9" fill="#0b6e69"/><circle cx="18" cy="100" r="3.6" fill="#fff"/>
+  <path d="${pinPath}" fill="#0b6e69"/><circle cx="82" cy="40" r="11" fill="#fff"/><circle cx="82" cy="40" r="5" fill="#f5a623"/>
+  <path d="${kleverPath}" fill="#0f2f2d"/><path d="${trackerPath}" fill="#0b6e69"/>
+</svg>`;
+
 const svg = (name, color, size, extra = {}) => renderToStaticMarkup(React.createElement(icons[name], { color, size, strokeWidth: 2.2, ...extra }));
 
 /** [file, width, height, html] — sizes are 2x the size shown in the email. */
@@ -78,12 +90,9 @@ ASSETS.push([
     </svg>
     <div style="position:absolute;left:880px;top:30px">${svg("MapPin", TEAL, 58, { fill: SOFT })}</div>
     <div style="position:absolute;left:940px;top:120px;width:180px;height:140px;display:grid;place-items:center;border-radius:36px;background:#fff;box-shadow:0 18px 40px rgba(16,36,34,.18)">${svg("CarFront", TEAL, 104, { strokeWidth: 1.8 })}</div>
-    <div style="position:absolute;left:64px;top:64px;display:flex;align-items:center;gap:22px">
-      <div style="width:118px;height:118px;border-radius:34px;background:linear-gradient(135deg,${GREEN},${TEAL});display:grid;place-items:center;box-shadow:0 12px 28px rgba(11,110,105,.3)">${svg("CarFront", "#fff", 66, { strokeWidth: 2 })}</div>
-      <div>
-        <div style="font-size:60px;font-weight:800;letter-spacing:-1.5px;color:#102422;line-height:1">Klever <span style="color:${TEAL}">Tracker</span></div>
-        <div style="margin-top:14px;font-size:27px;color:#334155;letter-spacing:.3px">Track &nbsp;·&nbsp; Monitor &nbsp;·&nbsp; Stay Alert</div>
-      </div>
+    <div style="position:absolute;left:56px;top:40px">
+      ${logoSvg(150)}
+      <div style="margin:14px 0 0 6px;font-size:26px;color:#334155;letter-spacing:.3px">Track &nbsp;·&nbsp; Monitor &nbsp;·&nbsp; Stay Alert</div>
     </div>
   </div>`,
 ]);

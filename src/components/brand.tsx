@@ -2,36 +2,62 @@ import { cn } from "@/lib/utils";
 
 export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Klever Tracker";
 
-export function BrandMark({ className }: { className?: string }) {
+/**
+ * The Klever Tracker logo (from Klever-Tracker-logo-transparent.svg): a map pin on a dotted route,
+ * and the "Klever / TRACKER" wordmark. The pin and route keep the brand colours; "Klever" follows
+ * the page's text colour and "TRACKER" the primary colour, so the logo reads in light and dark
+ * mode. The pin's centre is filled white (it's a cut-out in the source) so it doesn't show the
+ * page behind it on a dark background.
+ */
+
+/** Pin and route only: for square spots (tab icon, small marks). */
+function Icon() {
   return (
-    <span className={cn("grid size-8 shrink-0 place-items-center rounded-lg bg-primary", className)} aria-hidden>
-      <svg
-        viewBox="0 0 24 24"
-        className="size-[18px]"
-        fill="none"
-        stroke="var(--primary-fg)"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M12 2.5 19 20l-7-3.6L5 20Z" />
-      </svg>
-    </span>
+    <>
+      <g fill="#5bbfb4">
+        <circle cx="27.79" cy="92.44" r="3.6" />
+        <circle cx="32.97" cy="83.31" r="3.6" />
+        <circle cx="40.68" cy="76.5" r="3.6" />
+        <circle cx="50.74" cy="78.01" r="3.6" />
+        <circle cx="57.95" cy="85.56" r="3.6" />
+        <circle cx="64.5" cy="93.75" r="3.6" />
+        <circle cx="73.8" cy="98" r="3.6" />
+      </g>
+      <circle cx="18" cy="100" r="9" fill="#0b6e69" />
+      <circle cx="18" cy="100" r="3.6" fill="#ffffff" />
+      <path d="M56.89 54.5A29 29 0 1 1 107.11 54.5L83.5 95.4Q82 98 80.5 95.4Z" fill="#0b6e69" />
+      <circle cx="82" cy="40" r="11" fill="#ffffff" />
+      <circle cx="82" cy="40" r="5" fill="#f5a623" />
+    </>
   );
 }
 
-export function Brand({ subtitle }: { subtitle?: string }) {
+export function BrandIcon({ className }: { className?: string }) {
   return (
-    <span className="flex items-center gap-2.5">
-      <BrandMark className={subtitle ? "size-10 rounded-xl shadow-[0_8px_18px_-8px_rgb(11_110_105/0.7)]" : undefined} />
-      <span className="grid leading-tight">
-        <span className={subtitle ? "text-lg font-bold tracking-tight" : "text-[15px] font-bold"}>{APP_NAME}</span>
-        {subtitle ? (
-          <span className="hidden text-[9px] font-semibold uppercase tracking-[0.08em] text-subtle sm:block">
-            {subtitle}
-          </span>
-        ) : null}
-      </span>
-    </span>
+    <svg viewBox="7 10 106 100" className={cn("size-8 shrink-0", className)} role="img" aria-label={APP_NAME}>
+      <Icon />
+    </svg>
   );
+}
+
+/** The full logo: pin and route, then "Klever" above a spaced-out "TRACKER". */
+export function BrandLogo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="9 10.9 335.2 98.1" className={cn("h-9 w-auto shrink-0", className)} role="img" aria-label={APP_NAME}>
+      <Icon />
+      <path
+        className="fill-foreground"
+        d="M171.23 68.67 156.6 49.45V68.67H146V25.14H156.6V44.24L171.11 25.14H183.57L166.71 46.47L184.19 68.67ZM199.82 22.79V68.67H189.21V22.79ZM239.93 53.91H215.94Q216.18 57.13 218.01 58.84Q219.84 60.54 222.51 60.54Q226.48 60.54 228.03 57.2H239.31Q238.44 60.61 236.18 63.33Q233.92 66.06 230.51 67.61Q227.1 69.16 222.88 69.16Q217.8 69.16 213.83 66.99Q209.86 64.82 207.63 60.79Q205.4 56.76 205.4 51.37Q205.4 45.97 207.6 41.94Q209.8 37.91 213.77 35.74Q217.73 33.57 222.88 33.57Q227.9 33.57 231.81 35.68Q235.71 37.79 237.91 41.7Q240.12 45.6 240.12 50.81Q240.12 52.3 239.93 53.91ZM229.27 48.02Q229.27 45.29 227.41 43.68Q225.55 42.07 222.76 42.07Q220.09 42.07 218.26 43.62Q216.43 45.17 216 48.02ZM261.26 58.75 268.76 34.07H280.04L267.77 68.67H254.69L242.41 34.07H253.76ZM316.93 53.91H292.94Q293.19 57.13 295.02 58.84Q296.85 60.54 299.51 60.54Q303.48 60.54 305.03 57.2H316.31Q315.45 60.61 313.18 63.33Q310.92 66.06 307.51 67.61Q304.1 69.16 299.88 69.16Q294.8 69.16 290.83 66.99Q286.86 64.82 284.63 60.79Q282.4 56.76 282.4 51.37Q282.4 45.97 284.6 41.94Q286.8 37.91 290.77 35.74Q294.74 33.57 299.88 33.57Q304.91 33.57 308.81 35.68Q312.72 37.79 314.92 41.7Q317.12 45.6 317.12 50.81Q317.12 52.3 316.93 53.91ZM306.27 48.02Q306.27 45.29 304.41 43.68Q302.55 42.07 299.76 42.07Q297.09 42.07 295.26 43.62Q293.44 45.17 293 48.02ZM344.15 33.7V44.92H341.24Q337.27 44.92 335.29 46.62Q333.3 48.33 333.3 52.61V68.67H322.7V34.07H333.3V39.84Q335.16 36.98 337.95 35.34Q340.74 33.7 344.15 33.7Z"
+      />
+      <path
+        className="fill-primary"
+        d="M157.13 81.27V83.41H152.88V97.21H150.27V83.41H146V81.27ZM184.42 97.21 180.75 90.84H178.75V97.21H176.13V81.27H181.64Q183.48 81.27 184.75 81.91Q186.02 82.56 186.65 83.63Q187.28 84.71 187.28 86.04Q187.28 87.6 186.38 88.88Q185.47 90.15 183.59 90.61L187.54 97.21ZM178.75 88.75H181.64Q183.11 88.75 183.85 88.02Q184.6 87.28 184.6 86.04Q184.6 84.8 183.87 84.1Q183.13 83.41 181.64 83.41H178.75ZM216.62 93.96H209.94L208.79 97.21H206.06L211.78 81.25H214.8L220.52 97.21H217.76ZM215.88 91.82 213.29 84.41 210.67 91.82ZM246.64 81.07Q249.18 81.07 251.17 82.32Q253.15 83.57 254.05 85.86H250.9Q250.28 84.6 249.18 83.98Q248.08 83.36 246.64 83.36Q245.05 83.36 243.81 84.07Q242.58 84.78 241.88 86.11Q241.18 87.44 241.18 89.21Q241.18 90.98 241.88 92.31Q242.58 93.64 243.81 94.36Q245.05 95.08 246.64 95.08Q248.08 95.08 249.18 94.46Q250.28 93.84 250.9 92.58H254.05Q253.15 94.88 251.17 96.11Q249.18 97.35 246.64 97.35Q244.39 97.35 242.53 96.31Q240.67 95.26 239.58 93.41Q238.49 91.55 238.49 89.21Q238.49 86.87 239.58 85.01Q240.67 83.15 242.54 82.11Q244.41 81.07 246.64 81.07ZM282.25 97.21 276.08 90.08V97.21H273.47V81.27H276.08V88.54L282.28 81.27H285.56L278.63 89.25L285.67 97.21ZM306.97 83.38V88.06H312.48V90.2H306.97V95.08H313.17V97.21H304.36V81.25H313.17V83.38ZM341.03 97.21 337.36 90.84H335.37V97.21H332.75V81.27H338.26Q340.09 81.27 341.36 81.91Q342.64 82.56 343.27 83.63Q343.9 84.71 343.9 86.04Q343.9 87.6 342.99 88.88Q342.09 90.15 340.21 90.61L344.15 97.21ZM335.37 88.75H338.26Q339.72 88.75 340.47 88.02Q341.22 87.28 341.22 86.04Q341.22 84.8 340.48 84.1Q339.75 83.41 338.26 83.41H335.37Z"
+      />
+    </svg>
+  );
+}
+
+/** The logo where the app shows its brand (top bar, public tracking page). */
+export function Brand({ className }: { className?: string }) {
+  return <BrandLogo className={className} />;
 }
