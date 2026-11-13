@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { gqlRequest } from "@/lib/graphql/client";
+import { GEOFENCES, type GeofencesResult } from "@/lib/graphql/geofences";
 import {
   GET_ALERT_EVENTS,
   GET_EVENT_TYPES,
@@ -32,17 +33,20 @@ export function useOpenAlerts({ enabled }: { enabled: boolean }): {
     queryKey: ["alerts", "bell"],
     enabled,
     queryFn: async () => {
-      const [events, types, vehicles] = await Promise.all([
+      const [events, types, vehicles, geofences] = await Promise.all([
         gqlRequest<AlertEventsResult>(GET_ALERT_EVENTS, { first: ALERTS_WINDOW, page: 1 }),
         gqlRequest<EventTypesResult>(GET_EVENT_TYPES).catch(() => null),
         gqlRequest<VehiclesResult>(GET_VEHICLES, { first: 500 }).catch(() => null),
+        // Real alerts carry only the geofence id: names for "Entered Dubai Marina depot".
+        gqlRequest<GeofencesResult>(GEOFENCES, { first: 500 }).catch(() => null),
       ]);
       const typeById = new Map((types?.eventTypes.data ?? []).map((t) => [t.id, t]));
       const plateById = new Map((vehicles?.vehicles.data ?? []).map((v) => [v.id, v.plateNo]));
+      const geofenceNameById = new Map((geofences?.geofences.data ?? []).map((g) => [g.id, g.name]));
       const list = events.alertEvents.data;
       return {
         count: list.filter(isOpenAlert).length,
-        items: newestFirst(list.map((a) => alertToNotification(a, typeById, plateById))),
+        items: newestFirst(list.map((a) => alertToNotification(a, typeById, plateById, geofenceNameById))),
       };
     },
     refetchInterval: ALERTS_POLL_MS,
