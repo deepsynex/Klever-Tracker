@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Map, { Layer, Marker, NavigationControl, Source, useMap } from "react-map-gl/maplibre";
 import { boundsOf, DEFAULT_VIEW, fitPadding, maptilerStyleUrl } from "@/lib/maplibre";
+import type { MapView } from "@/lib/map-settings";
+import { OsmMapViewControl } from "./map-view-switch";
 import { clusterPoints } from "@/lib/live/cluster";
 import { GeofenceLabel, geofenceBounds, type LiveGeofence } from "./live-geofences";
 import { ClusterBubble, type LiveStatus } from "./vehicle-marker";
@@ -27,7 +29,12 @@ export function LiveOsmMap<V extends OsmVehicle>({
   geofenceFitKey = 0,
   clusterLabel,
   panelPx,
+  mapView = "map",
+  onMapView,
 }: {
+  /** Map or satellite (MapTiler's hybrid style), and the switch's handler. */
+  mapView?: MapView;
+  onMapView?: (view: MapView) => void;
   /** Tooltip for a bubble of nearby vehicles ("5 vehicles"). */
   clusterLabel: (count: number) => string;
   /** Room to leave on the start side when fitting, for the Vehicles & Drivers panel (0 when closed). */
@@ -47,11 +54,12 @@ export function LiveOsmMap<V extends OsmVehicle>({
   return (
     <Map
       initialViewState={DEFAULT_VIEW}
-      mapStyle={maptilerStyleUrl(maptilerKey)}
+      mapStyle={maptilerStyleUrl(maptilerKey, mapView)}
       style={{ width: "100%", height: "100%" }}
       attributionControl={{ compact: true }}
     >
       <NavigationControl position="bottom-right" showCompass={false} />
+      {onMapView ? <OsmMapViewControl view={mapView} onView={onMapView} /> : null}
       <FollowController selected={selected} vehicles={vehicles} panelPx={panelPx} />
       <OsmGeofences geofences={geofences} fitKey={geofenceFitKey} />
       <OsmVehicles

@@ -87,9 +87,12 @@ export function resolveMapSettings(stored: Partial<StoredMapSettings> | null | u
   return merged;
 }
 
-/** MapTiler's OpenStreetMap-based street style for MapLibre. */
-export function maptilerStyleUrl(key: string): string {
-  return `https://api.maptiler.com/maps/streets-v2/style.json?key=${encodeURIComponent(key)}`;
+/** Map or satellite view (satellite keeps road and place labels). */
+export type MapView = "map" | "satellite";
+
+/** MapTiler's OpenStreetMap-based style for MapLibre: streets, or satellite with labels ("hybrid"). */
+export function maptilerStyleUrl(key: string, view: MapView = "map"): string {
+  return `https://api.maptiler.com/maps/${view === "satellite" ? "hybrid" : "streets-v2"}/style.json?key=${encodeURIComponent(key)}`;
 }
 
 export type MapConfig = PlatformMapSettings & {

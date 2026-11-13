@@ -17,7 +17,7 @@ import {
 import { DUBAI_CENTER } from "@/lib/heatmap/client";
 import { bearing, metres } from "@/lib/history/road-path";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
-import { useMapConfig } from "@/lib/map-settings";
+import { useMapConfig, type MapView } from "@/lib/map-settings";
 import { takeLiveFocus } from "@/lib/notifications/api";
 import { engineCharging, formatEngineTime, latestReadings, type DeviceReadings } from "@/lib/telemetry/device-readings";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,7 @@ import { liveStatus, type LiveStatus } from "@/lib/live/status";
 import { parseApiDateTime } from "@/lib/vehicle-management/helpers";
 import { FleetPanel, type FleetPanelMode } from "./fleet-panel";
 import { IdlingPanel } from "./idling-panel";
+import { GoogleMapViewControl } from "./map-view-switch";
 import { GeofenceToolbar, GoogleGeofenceLayer, ToolbarButton, useLiveGeofences } from "./live-geofences";
 import { CarTopDown, ClusterBubble, PlateTag } from "./vehicle-marker";
 
@@ -60,7 +61,6 @@ const KM = new Intl.NumberFormat("en", { maximumFractionDigits: 1, minimumFracti
 /** A focus request taken from storage but not applied yet (see the effect in LiveTrackingView). */
 let pendingFocus: string | null = null;
 
-
 /**
  * Direction for the arrow: the device's own heading for the newest fix, or else the bearing from
  * the previous fix that is far enough away to give a direction (newest first).
@@ -93,7 +93,11 @@ function VehicleArrow({ vehicle, selected, hovered }: { vehicle: LiveVehicle; se
   return (
     <div className="relative grid size-11 cursor-pointer place-items-center">
       {selected ? <span className="absolute inset-0 animate-ping rounded-full bg-primary/30" aria-hidden /> : null}
-      <CarTopDown status={vehicle.status} heading={vehicle.heading} className={cn((hovered || selected) && "scale-125")} />
+      <CarTopDown
+        status={vehicle.status}
+        heading={vehicle.heading}
+        className={cn((hovered || selected) && "scale-125")}
+      />
       {/* The plate, always shown (the hover card replaces it) */}
       {!hovered ? (
         <span className="absolute bottom-[calc(100%-4px)] start-1/2 -translate-x-1/2 rtl:translate-x-1/2">
@@ -291,7 +295,15 @@ function getCategory(plate: string, name?: string | null): "truck" | "van" | "bi
   return "car";
 }
 
-function MapController({ selected, vehicles, panelPx }: { selected: LiveVehicle | null; vehicles: LiveVehicle[]; panelPx: () => number }) {
+function MapController({
+  selected,
+  vehicles,
+  panelPx,
+}: {
+  selected: LiveVehicle | null;
+  vehicles: LiveVehicle[];
+  panelPx: () => number;
+}) {
   const map = useMap();
 
   useEffect(() => {
@@ -336,6 +348,8 @@ export function LiveTrackingView() {
   const tFleet = useTranslations("tracking.live.fleet");
   const [hoveredVehicleId, setHoveredVehicleId] = useState<string | null>(null);
   const [showGeofences, setShowGeofences] = useState(false);
+  // Map or satellite view (both providers).
+  const [mapView, setMapView] = useState<MapView>("map");
   // Bumped each time geofences are switched on, so the map fits them once.
   const [geofenceFitKey, setGeofenceFitKey] = useState(0);
   // Excessive idling: engine on, standing still past the vehicle's idle limit (refreshed every 30 s).
@@ -371,7 +385,11 @@ export function LiveTrackingView() {
         gqlRequest<LastStatusResult>(LAST_STATUS).catch(() => null),
       ]);
       const vList = vRes.vehicles?.data ?? [];
-      const backendStatus = new globalThis.Map((lastRes?.deviceLastPositions.data ?? []).flatMap((p) => (p.vehicleId ? [[p.vehicleId, p.status] as const] : [])));
+      const backendStatus = new globalThis.Map(
+        (lastRes?.deviceLastPositions.data ?? []).flatMap((p) =>
+          p.vehicleId ? [[p.vehicleId, p.status] as const] : [],
+        ),
+      );
       const now = Date.now();
 
       const items: LiveVehicle[] = await Promise.all(
@@ -402,7 +420,13 @@ export function LiveTrackingView() {
               lng = valid.locationLng;
               speed = Math.round(valid.speed ?? 0);
               recordedAt = valid.recordedAt;
-              status = liveStatus(backendStatus.get(v.id), speed, parseApiDateTime(valid.recordedAt)?.getTime() ?? null, now, valid.ignition ?? null);
+              status = liveStatus(
+                backendStatus.get(v.id),
+                speed,
+                parseApiDateTime(valid.recordedAt)?.getTime() ?? null,
+                now,
+                valid.ignition ?? null,
+              );
               heading = headingFor(fixes);
             }
           } catch {
@@ -453,6 +477,8 @@ export function LiveTrackingView() {
           geofenceFitKey={geofenceFitKey}
           clusterLabel={(count) => tMarker("cluster", { count })}
           panelPx={panelPx}
+          mapView={mapView}
+          onMapView={setMapView}
           onSelect={setSelectedVehicleId}
           onHover={(id) => setHoveredVehicleId((current) => (id === null && current !== null ? null : id))}
           renderMarker={(v) => (
@@ -467,12 +493,14 @@ export function LiveTrackingView() {
             defaultCenter={DUBAI_CENTER}
             defaultZoom={11}
             gestureHandling="greedy"
+            mapTypeId={mapView === "satellite" ? "hybrid" : "roadmap"}
             streetViewControl={false}
             mapTypeControl={false}
             fullscreenControl={false}
             zoomControl={true}
           >
             <MapController selected={selectedVehicle} vehicles={vehicles} panelPx={panelPx} />
+            <GoogleMapViewControl view={mapView} onView={setMapView} />
             {showGeofences ? <GoogleGeofenceLayer geofences={shownGeofences} fitKey={geofenceFitKey} /> : null}
             <GoogleVehicles
               vehicles={vehicles}
@@ -498,8 +526,18 @@ export function LiveTrackingView() {
           setShowGeofences((v) => !v);
         }}
       >
-        <ToolbarButton icon={<CarFront />} label={tFleet("buttons.vehicles")} pressed={fleetPanel === "vehicles"} onClick={() => setFleetPanel((p) => (p === "vehicles" ? null : "vehicles"))} />
-        <ToolbarButton icon={<UserSearch />} label={tFleet("buttons.drivers")} pressed={fleetPanel === "drivers"} onClick={() => setFleetPanel((p) => (p === "drivers" ? null : "drivers"))} />
+        <ToolbarButton
+          icon={<CarFront />}
+          label={tFleet("buttons.vehicles")}
+          pressed={fleetPanel === "vehicles"}
+          onClick={() => setFleetPanel((p) => (p === "vehicles" ? null : "vehicles"))}
+        />
+        <ToolbarButton
+          icon={<UserSearch />}
+          label={tFleet("buttons.drivers")}
+          pressed={fleetPanel === "drivers"}
+          onClick={() => setFleetPanel((p) => (p === "drivers" ? null : "drivers"))}
+        />
         <ToolbarButton
           icon={<Timer />}
           label={tIdling("button")}
