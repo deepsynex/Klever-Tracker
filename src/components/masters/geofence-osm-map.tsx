@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import Map, { Layer, Marker, NavigationControl, Source, useMap } from "react-map-gl/maplibre";
 import { boundsOf, circleRing, closeRing, haversineM, radiusHandle, roundPoint, type LatLng } from "@/lib/geofences/geometry";
 import { DEFAULT_VIEW, maptilerStyleUrl } from "@/lib/maplibre";
-import { FRAME, viewPoints, type GeofenceMapProps } from "./geofence-map";
+import { MAP_HEIGHT, viewPoints, type GeofenceMapProps } from "./geofence-map";
 
 const PRIMARY = "#0B6E69";
 
@@ -13,7 +13,7 @@ const PRIMARY = "#0B6E69";
  * the centre, drag the centre or the radius handle (due east). Polygon: click to add points, drag
  * points to move them. Same behaviour as the Google version in geofence-map.tsx.
  */
-export function GeofenceOsmMap({ draft, onChange, others, disabled, label, frameClassName = FRAME, maptilerKey }: GeofenceMapProps & { maptilerKey: string }) {
+export function GeofenceOsmMap({ draft, onChange, others, disabled, label, maptilerKey }: GeofenceMapProps & { maptilerKey: string }) {
   const shape = useMemo(() => {
     if (draft.type === "circle" && draft.centre) return circleRing(draft.centre, draft.radiusM);
     if (draft.type === "polygon" && draft.points.length >= 2) return closeRing(draft.points);
@@ -46,7 +46,7 @@ export function GeofenceOsmMap({ draft, onChange, others, disabled, label, frame
   const handle = draft.type === "circle" && draft.centre ? radiusHandle(draft.centre, draft.radiusM) : null;
 
   return (
-    <div className={`${frameClassName} w-full overflow-hidden bg-surface-2`} role="application" aria-label={label}>
+    <div className={`${MAP_HEIGHT} w-full overflow-hidden rounded-ctl border border-border bg-surface-2`} role="application" aria-label={label}>
       <Map
         initialViewState={DEFAULT_VIEW}
         mapStyle={maptilerStyleUrl(maptilerKey)}

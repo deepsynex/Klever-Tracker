@@ -204,24 +204,6 @@ export function GeofencesScreen() {
   );
 }
 
-/**
- * "Add geofence" outside this screen (the live map's Draw Geofence): loads the company's geofences
- * and groups itself, then opens the same editor. With `preset`, the area was already drawn on the
- * full-screen map, so the form skips its own map.
- */
-export function NewGeofenceSheet({ preset, onSaved, onClose }: { preset?: GeofenceDraft; onSaved?: () => void; onClose: () => void }) {
-  const lookups = useVmLookups();
-  const list = useVmQuery<GeofencesResult>("geofences", GEOFENCES);
-  const groupsQuery = useVmQuery<GroupsResult>("groups", GROUPS);
-  const all = useMemo(() => (list.data?.geofences.data ?? []).filter((g) => lookups.inScope(g.companyId)), [list.data, lookups]);
-  const groups = useMemo(
-    () => (groupsQuery.data?.vehicleGroups.data ?? []).filter((g) => lookups.inScope(g.companyId)).map((g) => ({ id: g.id, name: g.name })),
-    [groupsQuery.data, lookups],
-  );
-  if (list.isPending || groupsQuery.isPending) return null;
-  return <GeofenceSheet geofence={null} geofences={all} groups={groups} preset={preset} onSaved={onSaved} onClose={onClose} />;
-}
-
 type Form = {
   name: string;
   address: string;
@@ -234,9 +216,9 @@ type Form = {
   groups: string[];
 };
 
-function initialForm(g: Geofence | null, preset?: GeofenceDraft): Form {
+function initialForm(g: Geofence | null): Form {
   const isPolygon = g?.type === "polygon";
-  const form: Form = {
+  return {
     name: g?.name ?? "",
     address: g?.address ?? "",
     type: isPolygon ? "polygon" : "circle",
@@ -247,32 +229,24 @@ function initialForm(g: Geofence | null, preset?: GeofenceDraft): Form {
     vehicles: [...new Set(g?.vehicleMemberships.map((m) => m.vehicleId) ?? [])].sort(),
     groups: [...new Set(g?.vehicleGroupMemberships.map((m) => m.vehicleGroupId) ?? [])].sort(),
   };
-  return preset
-    ? { ...form, type: preset.type, centre: preset.centre, radius: String(preset.radiusM), points: preset.points }
-    : form;
 }
 
 function GeofenceSheet({
   geofence,
   geofences,
   groups,
-  preset,
-  onSaved,
   onClose,
 }: {
   geofence: Geofence | null;
   geofences: Geofence[];
   groups: Array<{ id: string; name: string }>;
-  /** An area already drawn elsewhere: used as-is, and the form's own map is hidden. */
-  preset?: GeofenceDraft;
-  onSaved?: () => void;
   onClose: () => void;
 }) {
   const t = useTranslations("masters.vm.geofences");
   const tc = useTranslations("masters.common");
   const lookups = useVmLookups();
   const { run, refresh, failInto } = useVmMutations();
-  const [initial] = useState(() => initialForm(geofence, preset));
+  const [initial] = useState(() => initialForm(geofence));
   const [form, setForm] = useState<Form>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
@@ -340,7 +314,6 @@ function GeofenceSheet({
       ]);
       await refresh();
       toast.success(tc("saved"));
-      onSaved?.();
       onClose();
     } catch (err) {
       failInto(err, setErrors, { centre: "shape", area: "shape", radiusM: "radius" });
@@ -356,7 +329,7 @@ function GeofenceSheet({
       onOpenChange={(open) => !open && guard.requestClose()}
       size="xl"
       title={geofence ? t("editTitle", { name: geofence.name }) : t("add")}
-      description={preset ? t("sheetHintDrawn") : t("sheetHint")}
+      description={t("sheetHint")}
       footer={
         <>
           <Button variant="secondary" onClick={guard.requestClose}>
@@ -387,8 +360,7 @@ function GeofenceSheet({
             <Select
               id="gf-type"
               value={isRoute ? "route" : form.type}
-              // A preset area's type was picked while drawing it.
-              disabled={isRoute || Boolean(preset)}
+              disabled={isRoute}
               onChange={(e) => {
                 const type = e.target.value as Form["type"];
                 setErrors((x) => ({ ...x, shape: "" }));
@@ -407,9 +379,7 @@ function GeofenceSheet({
           </div>
         </FormSection>
 
-        {/* With a preset area there's no map section, so a rejected shape is reported here. */}
-        {preset && errors.shape ? <p className="text-xs font-medium text-destructive">{errors.shape.replace(/^server:/, "")}</p> : null}
-        {!isRoute && !preset ? (
+        {!isRoute ? (
           <FormSection title={t("sections.area")} columns={1}>
             <p className="-mt-1 text-xs text-muted-foreground">{form.type === "circle" ? t("circleHint") : t("polygonHint")}</p>
             <GeofenceMap

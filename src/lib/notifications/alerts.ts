@@ -12,11 +12,15 @@ export function isOpenAlert(a: Pick<AlertEventItem, "acknowledgedAt" | "resolved
   return !a.acknowledgedAt && !a.resolvedAt;
 }
 
-/** One alert as a notification row: title = the event type's name, body = the vehicle. */
+/**
+ * One alert as a notification row: title = the event type's name, body = the vehicle. The engine
+ * stores only the geofence's id on a real alert, so its name comes from `geofenceNameById`.
+ */
 export function alertToNotification(
   a: AlertEventItem,
   typeById: Map<string, Pick<EventTypeItem, "name" | "code">>,
   plateById: Map<string, string>,
+  geofenceNameById: Map<string, string> = new Map(),
 ): AppNotification {
   let params: Record<string, unknown> = {};
   try {
@@ -37,7 +41,7 @@ export function alertToNotification(
       vehicle_id: a.vehicleId,
       plate_no: plate,
       geofence_id: params.geofence_id ?? null,
-      geofence_name: params.geofence_name ?? null,
+      geofence_name: params.geofence_name ?? (params.geofence_id != null ? geofenceNameById.get(String(params.geofence_id)) : undefined) ?? null,
       lat: params.lat ?? null,
       lng: params.lng ?? null,
       occurred_at: a.occurredAt,

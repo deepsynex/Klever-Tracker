@@ -1,5 +1,5 @@
 import type { PermissionModule } from "@/lib/permissions";
-import { Building2, CircleUserRound, Gauge, IdCard, KeyRound, Map, Network, ScrollText, ShieldCheck, Users, type LucideIcon } from "lucide-react";
+import { BellRing, Building2, CircleUserRound, Gauge, IdCard, KeyRound, Map, Network, ScrollText, ShieldCheck, Users, type LucideIcon } from "lucide-react";
 
 // Short top-level addresses (/accounts, /users …): the pages live in the (account) route group.
 export const CHANGE_PASSWORD_HREF = "/change-password";
@@ -18,6 +18,7 @@ export const AM_MODULES: Array<{ key: string; href: string; icon: LucideIcon; pe
   { key: "drivers", href: "/drivers", icon: IdCard, perm: ["drivers"] },
   { key: "roles", href: "/roles", icon: ShieldCheck, perm: ["core"] },
   { key: "departments", href: "/departments", icon: Network, perm: ["department"] },
+  { key: "notificationRules", href: "/notification-rules", icon: BellRing, perm: ["alerts"] },
   { key: "auditLog", href: AUDIT_HREF, icon: ScrollText, perm: ["admin"] },
   { key: "profile", href: PROFILE_HREF, icon: CircleUserRound },
   { key: "changePassword", href: CHANGE_PASSWORD_HREF, icon: KeyRound },

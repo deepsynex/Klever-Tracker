@@ -1022,8 +1022,124 @@
           "centre": "Click the map to set the circle's centre.",
           "radius": "Enter a radius between 1 and {max} km (in metres).",
           "polygon": "Draw an area with at least 3 points that aren't all in a line."
+        }
+      },
+      "notificationRules": {
+        "title": "Notification rules",
+        "description": "Choose who is told when an alert happens, and how: in the app, by email or by browser push.",
+        "add": "Add vehicle alerts",
+        "editTitle": "Alerts for {name}",
+        "sheetHint": "One row per vehicle: pick its alerts, how to send them and who gets them. Email goes to the To recipients, with CC recipients copied.",
+        "empty": "No notification rules yet. Add a vehicle's alerts to tell people when something happens.",
+        "event": "Alert",
+        "appliesTo": "Applies to",
+        "allVehicles": "All vehicles",
+        "oneVehicle": "One vehicle",
+        "oneGroup": "A vehicle group",
+        "vehicle": "Vehicle",
+        "group": "Vehicle group",
+        "groupValue": "Group: {name}",
+        "sendBy": "Send by",
+        "recipients": "Recipients",
+        "toCount": "{to} To",
+        "toCcCount": "{to} To · {cc} CC",
+        "repeat": "Don't repeat within (minutes)",
+        "repeatHint": "Optional. Leave empty to notify every time.",
+        "activeLabel": "Active (sends notifications)",
+        "channels": {
+          "inApp": "In the app",
+          "email": "Email",
+          "push": "Browser push"
         },
-        "sheetHintDrawn": "Area drawn. Give it a name and choose which vehicles and groups it watches."
+        "sections": {
+          "when": "When",
+          "how": "How",
+          "who": "Who"
+        },
+        "whoHint": "Pick users or type email addresses. Choose To or CC for each one.",
+        "whoHintNoCc": "Pick users or type email addresses. CC will be available once the backend supports it; for now everyone is a To recipient.",
+        "recipientType": "Recipient type",
+        "kind": {
+          "user": "User",
+          "email": "Email address"
+        },
+        "chooseUser": "Choose a user…",
+        "sendAs": "Send as",
+        "to": "To",
+        "cc": "CC",
+        "ccPending": "CC needs a backend update (B10). Until then, recipients are To only.",
+        "addUser": "Add user",
+        "addEmail": "Add email address",
+        "userNoEmail": "This user has no email address, so they won't get the email.",
+        "kpi": {
+          "total": "Vehicles & groups",
+          "active": "Active",
+          "email": "Send email",
+          "recipients": "People notified"
+        },
+        "deleteNotice": "{count, plural, one {Its alert and recipients are} other {All # alerts and their recipients are}} deleted permanently. Alerts already recorded are kept.",
+        "errors": {
+          "repeat": "Enter whole minutes, up to 10,080 (one week).",
+          "channel": "Choose at least one way to send.",
+          "noRecipients": "Add at least one recipient.",
+          "fixRecipients": "Fix the highlighted recipients.",
+          "needTo": "An email needs at least one To recipient. Change one recipient from CC to To.",
+          "row": {
+            "userRequired": "Choose a user.",
+            "emailRequired": "Enter an email address.",
+            "emailInvalid": "Enter a valid email address.",
+            "duplicate": "This recipient is already in the list."
+          },
+          "rowExists": "{name} already has a row. Edit that row to change its alerts."
+        },
+        "alerts": "Alerts",
+        "alertsHint": "Tick every alert this vehicle should send. Untick one to stop it.",
+        "clearAlerts": "Clear",
+        "preview": {
+          "title": "Email preview",
+          "hint": "How the email will look, with sample data. The real email uses the alert's own details.",
+          "from": "From",
+          "to": "To",
+          "cc": "Cc",
+          "subject": "Subject",
+          "nobody": "No one yet. Add a To recipient.",
+          "vehicle": "Vehicle",
+          "geofence": "Geofence",
+          "speed": "Speed",
+          "location": "Location",
+          "button": "View Vehicle Live",
+          "why": "You're receiving this because you're a recipient of the notification rule “{rule}”.",
+          "sampleAlert": "Alert",
+          "sampleRule": "This rule",
+          "sampleLocation": "Sheikh Zayed Road, Dubai",
+          "sampleGeofence": "Dubai Marina depot",
+          "headline": {
+            "geofence_enter": "A vehicle entered {geofence}.",
+            "geofence_exit": "A vehicle left {geofence}.",
+            "overspeed": "A vehicle went over the speed limit at {speed}.",
+            "ignition_on": "A vehicle's engine was switched on.",
+            "ignition_off": "A vehicle's engine was switched off.",
+            "low_battery": "A vehicle's battery is low.",
+            "device_offline": "A vehicle's tracker stopped reporting.",
+            "idling": "A vehicle is standing still with the engine running.",
+            "working_hours_violation": "A vehicle was used outside its working hours.",
+            "other": "{alert}."
+          },
+          "alertTitle": "Alert Notification",
+          "details": "Vehicle Alert Details",
+          "map": "View on map",
+          "headerAlt": "Klever Tracker – Track · Monitor · Stay Alert",
+          "features": {
+            "tracking": "Real-Time Tracking",
+            "alerts": "Instant Alerts",
+            "security": "Enhanced Security"
+          },
+          "closing": "Stay connected. Drive safely!",
+          "team": "– Klever Tracker Team"
+        },
+        "emailTemplateHint": "Emails use the standard Klever Tracker alert template. See the preview below.",
+        "partlyActive": "Partly active",
+        "settingsDiffer": "These alerts had different settings or recipients. Saving applies the settings below to all of them."
       }
     },
     "am": {
@@ -1040,7 +1156,8 @@
         "departments": "Departments",
         "auditLog": "Audit log",
         "profile": "My profile",
-        "mapSettings": "Map settings"
+        "mapSettings": "Map settings",
+        "notificationRules": "Notification rules"
       },
       "moduleHints": {
         "accounts": "Company details, contacts, billing and limits.",
@@ -1577,14 +1694,46 @@
       "description": "Real-time GPS fleet positions, live movement alerts, and active vehicle telemetry.",
       "geofences": {
         "toolbar": "Geofence tools",
-        "draw": "Draw Geofence",
         "show": "Show Geofence",
         "hide": "Hide Geofence",
-        "count": "{count, plural, =0 {No geofences yet} one {# geofence shown} other {# geofences shown}}",
-        "pickCompany": "Choose a company first (Vehicle Management > Company) to add geofences.",
-        "noPermission": "Your role can't add geofences.",
-        "continue": "Continue",
-        "drawing": "Drawing a geofence"
+        "count": "{count, plural, =0 {No geofences yet} one {# geofence shown} other {# geofences shown}}"
+      },
+      "idling": {
+        "button": "Excessive Idling",
+        "title": "Excessive Idling",
+        "count": "{count, plural, =0 {No vehicle idling too long} one {# vehicle idling too long} other {# vehicles idling too long}}",
+        "hint": "Engine on and standing still for longer than the vehicle's idle limit (10 min by default). Parked vehicles with the engine off are never listed.",
+        "vehicle": "Vehicle No",
+        "since": "Idle Since",
+        "location": "Location",
+        "empty": "No vehicle is idling with its engine on right now.",
+        "loading": "Checking vehicles…",
+        "atLeast": "Idling since before the oldest point checked: at least this long.",
+        "close": "Close"
+      },
+      "fleet": {
+        "searchVehicles": "Search plate, name or driver…",
+        "searchDrivers": "Search driver, mobile or vehicle…",
+        "refresh": "Refresh",
+        "close": "Close",
+        "loading": "Loading vehicles…",
+        "noVehicles": "No vehicles found.",
+        "noDrivers": "No drivers found.",
+        "gpsConnected": "GPS connected",
+        "noFix": "No recent GPS fix",
+        "stopped": "Stopped",
+        "offline": "Offline",
+        "noVehicleAssigned": "No vehicle",
+        "lastSeen": "Last seen {ago}",
+        "idle": "Idle",
+        "buttons": {
+          "vehicles": "Search Vehicle",
+          "drivers": "Search Driver"
+        },
+        "panels": {
+          "vehicles": "Search Vehicle",
+          "drivers": "Search Driver"
+        }
       }
     },
     "detailed": {
@@ -1597,7 +1746,7 @@
     },
     "marker": {
       "moving": "Moving · {speed} km/h",
-      "stopped": "Stopped",
+      "stopped": "Stopped · engine off",
       "offline": "Offline",
       "updated": "Last update",
       "heading": "Heading {deg}°",
@@ -1612,7 +1761,11 @@
       "ecoShort": "eco",
       "signal": "Signal",
       "gpsFix": "GPS fix",
-      "gpsNoFix": "no GPS fix"
+      "gpsNoFix": "no GPS fix",
+      "vehicleCount": "{count, plural, one {# vehicle} other {# vehicles}}",
+      "cluster": "{count} vehicles here. Click to zoom in.",
+      "offlineLastSeen": "Offline · last seen {ago}",
+      "idle": "Idle · engine on"
     }
   },
   "multiTracking": {

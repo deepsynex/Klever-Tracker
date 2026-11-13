@@ -305,7 +305,7 @@ export function Select({
                       >
                         <span className="grid size-5 shrink-0 place-items-center [&>svg]:size-[18px]">
                           {selected ? (
-                            <span className="grid size-5 place-items-center rounded-full bg-primary text-primary-fg">
+                            <span className="grid size-5 place-items-center rounded-full bg-primary text-primary-foreground">
                               <Check className="size-3" strokeWidth={3.25} aria-hidden />
                             </span>
                           ) : (

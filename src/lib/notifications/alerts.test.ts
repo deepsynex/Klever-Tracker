@@ -21,6 +21,16 @@ describe("alertToNotification", () => {
     expect(n.details).toMatchObject({ vehicleId: "1", plateNo: "GJ-01-KY-5144", geofenceId: "3", geofenceName: "Depot", lat: 23.1 });
   });
 
+  it("finds the geofence's name when the engine stored only its id", () => {
+    const n = alertToNotification(
+      { id: "29", eventTypeId: "7", vehicleId: "1", occurredAt: "2026-11-13 06:08:39", parameters: '{"geofence_id": 8}' },
+      types,
+      plates,
+      new Map([["8", "TEST QA – Dubai Marina depot"]]),
+    );
+    expect(n.details).toMatchObject({ geofenceId: "8", geofenceName: "TEST QA – Dubai Marina depot" });
+  });
+
   it("uses the event type name as the title for other alerts, and counts acknowledged ones as read", () => {
     const n = alertToNotification(
       { id: "10", eventTypeId: "2", vehicleId: "1", occurredAt: "2026-11-12 06:00:00", acknowledgedAt: "2026-11-12 06:05:00" },
