@@ -1150,7 +1150,7 @@
         "accounts": "Account",
         "users": "User",
         "drivers": "Driver",
-        "roles": "Menu setting",
+        "roles": "User permissions",
         "changePassword": "Change password",
         "driverBehaviour": "Driver behaviour",
         "departments": "Departments",
@@ -1257,7 +1257,7 @@
         "assignVehicles": "Assign vehicles",
         "assignDrivers": "Assign drivers",
         "addDepartment": "Add department",
-        "noRoles": "No roles yet. Add one under Menu setting first.",
+        "noRoles": "No roles yet. Add one under User permissions first.",
         "passwordKeepHint": "Leave the password empty to keep the current one.",
         "isAdminHint": "Admins see every vehicle in the company without assigning them.",
         "sections": {
@@ -1390,7 +1390,7 @@
         }
       },
       "roles": {
-        "title": "Menu setting",
+        "title": "User permissions",
         "description": "Roles, and what each role can view, add, edit and delete in every part of the system.",
         "add": "Add role",
         "empty": "No roles yet.",
@@ -1513,7 +1513,7 @@
       "audit": {
         "title": "Audit log",
         "description": "An append-only record of changes: who made them, when, and what changed.",
-        "filter": "Filter this page by action, record, user or IP…",
+        "filter": "Filter by action, record, user, company or IP…",
         "total": "{n, plural, =0 {No entries} one {# entry} other {# entries}}",
         "when": "When",
         "who": "User",
@@ -1522,16 +1522,18 @@
         "ip": "IP address",
         "loading": "Loading the audit log…",
         "empty": "No changes have been recorded yet.",
-        "noMatch": "No entries on this page match the filter.",
+        "noMatch": "No entries match the filter.",
         "showChanges": "Show the changed values",
         "system": "System",
-        "pageOf": "Page {page} of {last}",
         "kpi": {
-          "total": "Total entries",
-          "created": "Created (this page)",
-          "updated": "Updated (this page)",
-          "deleted": "Deleted (this page)"
-        }
+          "total": "Entries",
+          "created": "Created",
+          "updated": "Updated",
+          "deleted": "Deleted"
+        },
+        "company": "Company",
+        "platform": "Platform",
+        "newestOnly": "newest {n} shown"
       },
       "profile": {
         "title": "My profile",
@@ -1734,6 +1736,11 @@
           "vehicles": "Search Vehicle",
           "drivers": "Search Driver"
         }
+      },
+      "mapView": {
+        "label": "Map view",
+        "map": "Map",
+        "satellite": "Satellite"
       }
     },
     "detailed": {
