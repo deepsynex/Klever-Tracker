@@ -1,6 +1,7 @@
 "use client";
 
 import { classifyHttpResponse, type ApiError } from "./errors";
+import { STORAGE_KEY } from "@/lib/vehicle-management/company-scope";
 
 export class ApiRequestError extends Error {
   constructor(public readonly error: ApiError) {
@@ -13,13 +14,26 @@ export class ApiRequestError extends Error {
  * Browser-side GraphQL call through the same-origin /api/graphql proxy.
  * Use it as the queryFn / mutationFn of TanStack Query hooks.
  */
+/**
+ * The company a platform account picked in the app, sent along so the audit trail can file a
+ * change under it (the server ignores anything that isn't a plain id).
+ */
+function pickedCompanyHeader(): Record<string, string> {
+  try {
+    const picked = typeof window !== "undefined" ? window.sessionStorage.getItem(STORAGE_KEY) : null;
+    return picked && /^\d+$/.test(picked) ? { "x-kt-company": picked } : {};
+  } catch {
+    return {};
+  }
+}
+
 export async function gqlRequest<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
   let status = 0;
   let text = "";
   try {
     const res = await fetch("/api/graphql", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...pickedCompanyHeader() },
       credentials: "same-origin",
       body: JSON.stringify({ query, variables }),
     });

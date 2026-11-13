@@ -8,7 +8,8 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
  * Kept for the browser session so it stays the same across the Vehicle Management tabs.
  */
 export const ALL_COMPANIES = "all";
-const STORAGE_KEY = "vm.company";
+/** Session storage key of the picked company (also sent with app requests, for the audit trail). */
+export const STORAGE_KEY = "vm.company";
 
 type Scope = { selected: string; setSelected: (companyId: string) => void };
 

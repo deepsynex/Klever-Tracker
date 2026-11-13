@@ -11,7 +11,8 @@ import { auditChanges, auditSubject } from "@/lib/account-management/audit";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { gqlRequestPartial } from "@/lib/graphql/client";
 import { AUDIT_LOGS, type AuditLogsResult } from "@/lib/graphql/account-management";
-import { useErrorText } from "@/lib/vehicle-management/use-vm";
+import { gqlRequest } from "@/lib/graphql/client";
+import { useErrorText, useVmLookups } from "@/lib/vehicle-management/use-vm";
 import { cn } from "@/lib/utils";
 
 function actionTone(action: string): "ok" | "info" | "warn" | "muted" {
@@ -23,39 +24,76 @@ function actionTone(action: string): "ok" | "info" | "warn" | "muted" {
 }
 
 /**
- * Audit log (API Doc §6.13): an append-only trail of who changed what, newest first, paged on the
- * server. Each entry expands to its changed fields (before → after).
+ * Audit log (API Doc §6.13): an append-only trail of who changed what, newest first, per company
+ * (the company picker above; platform staff can also see all companies, with a Company column).
+ * Each entry expands to its changed fields (before → after). Changes made in the app are recorded
+ * by the GraphQL proxy (lib/audit); the backend adds its own.
+ *
+ * The API pages oldest first and can't filter by company, so the newest MAX_ENTRIES are read from
+ * the last pages and filtered and paged here.
  */
+const MAX_ENTRIES = 1000;
+const API_PAGE = 250;
+
+const AUDIT_TOTAL = /* GraphQL */ `
+  query AuditTotal {
+    auditLogs(first: 1) {
+      paginatorInfo {
+        total
+      }
+    }
+  }
+`;
+
+/** The newest entries (up to MAX_ENTRIES), newest first, plus the user names. */
+async function loadNewest(): Promise<{ entries: AuditLogsResult["auditLogs"]["data"]; users: AuditLogsResult["users"]["data"]; total: number }> {
+  const { auditLogs } = await gqlRequest<{ auditLogs: { paginatorInfo: { total: number } } }>(AUDIT_TOTAL);
+  const total = auditLogs.paginatorInfo.total;
+  const last = Math.max(1, Math.ceil(total / API_PAGE));
+  const entries: AuditLogsResult["auditLogs"]["data"] = [];
+  let users: AuditLogsResult["users"]["data"] = [];
+  for (let page = last; page >= 1 && entries.length < MAX_ENTRIES; page--) {
+    const res = await gqlRequestPartial<AuditLogsResult>(AUDIT_LOGS, { first: API_PAGE, page });
+    entries.push(...res.auditLogs.data);
+    if (!users.length) users = res.users.data;
+  }
+  entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || Number(b.id) - Number(a.id));
+  return { entries: entries.slice(0, MAX_ENTRIES), users, total };
+}
 export function AuditLogScreen() {
   const t = useTranslations("masters.am.audit");
   const errorText = useErrorText();
   const zone = useCompanyTimeZone();
-  const [page, setPage] = useState(1);
+  const lookups = useVmLookups();
+  const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(50);
   const [filter, setFilter] = useState("");
   const [open, setOpen] = useState<string | null>(null);
 
   const query = useQuery({
-    queryKey: ["vm", "am-audit", page, pageSize],
-    queryFn: () => gqlRequestPartial<AuditLogsResult>(AUDIT_LOGS, { first: pageSize, page }),
+    queryKey: ["vm", "am-audit"],
+    queryFn: loadNewest,
     placeholderData: keepPreviousData,
   });
-  const info = query.data?.auditLogs.paginatorInfo;
-  const userName = useMemo(() => new Map((query.data?.users.data ?? []).map((u) => [u.id, u.name])), [query.data]);
+  const userName = useMemo(() => new Map((query.data?.users ?? []).map((u) => [u.id, u.name])), [query.data]);
+  /** "All companies" (platform staff): show which company each entry belongs to. */
+  const showCompany = lookups.isPlatform && lookups.companyId === null;
 
+  // The chosen company's entries (platform-wide entries, e.g. map settings, only under All companies).
+  const companyRows = useMemo(() => (query.data?.entries ?? []).filter((r) => lookups.inScope(r.companyId)), [query.data, lookups]);
   const rows = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    const all = [...(query.data?.auditLogs.data ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    if (!q) return all;
-    return all.filter((r) =>
-      `${r.action} ${auditSubject(r.auditableType)} ${r.auditableId ?? ""} ${userName.get(r.userId ?? "") ?? ""} ${r.ipAddress ?? ""}`
+    if (!q) return companyRows;
+    return companyRows.filter((r) =>
+      `${r.action} ${auditSubject(r.auditableType)} ${r.auditableId ?? ""} ${userName.get(r.userId ?? "") ?? ""} ${r.ipAddress ?? ""} ${showCompany ? lookups.companyName(r.companyId) : ""}`
         .toLowerCase()
         .includes(q),
     );
-  }, [query.data, filter, userName]);
-
-  const pageRows = query.data?.auditLogs.data ?? [];
-  const countAction = (word: string) => pageRows.filter((r) => r.action.toLowerCase().includes(word)).length;
+  }, [companyRows, filter, userName, showCompany, lookups]);
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const shownPage = Math.min(page, pageCount - 1);
+  const pageRows = rows.slice(shownPage * pageSize, (shownPage + 1) * pageSize);
+  const countAction = (word: string) => companyRows.filter((r) => r.action.toLowerCase().includes(word)).length;
 
   return (
     <div className="grid gap-6">
@@ -64,7 +102,7 @@ export function AuditLogScreen() {
       <KpiCards
         loading={query.isPending}
         items={[
-          { key: "total", label: t("kpi.total"), value: info?.total ?? 0, icon: <History />, tone: "primary" },
+          { key: "total", label: t("kpi.total"), value: companyRows.length, icon: <History />, tone: "primary" },
           { key: "created", label: t("kpi.created"), value: countAction("create"), icon: <FilePlus2 />, tone: "ok" },
           { key: "updated", label: t("kpi.updated"), value: countAction("update"), icon: <FilePen />, tone: "warn" },
           { key: "deleted", label: t("kpi.deleted"), value: countAction("delete"), icon: <Trash2 />, tone: "muted" },
@@ -80,15 +118,19 @@ export function AuditLogScreen() {
           <input
             type="search"
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setPage(0);
+            }}
             placeholder={t("filter")}
             aria-label={t("filter")}
             className="h-11 w-full rounded-xl border border-border/80 bg-surface ps-10 pe-3 text-sm text-foreground shadow-2xs placeholder:text-muted-foreground/70 focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
           />
         </div>
-        {info ? (
-          <span className="ms-auto text-sm font-medium text-muted-foreground" dir="ltr">
-            {t("total", { n: info.total })}
+        {query.data ? (
+          <span className="ms-auto text-sm font-medium text-muted-foreground">
+            {t("total", { n: rows.length })}
+            {query.data.total > MAX_ENTRIES ? ` · ${t("newestOnly", { n: MAX_ENTRIES })}` : ""}
           </span>
         ) : null}
       </div>
@@ -106,6 +148,11 @@ export function AuditLogScreen() {
                   <th scope="col" className="px-3 py-3.5 text-start font-semibold whitespace-nowrap">
                     {t("when")}
                   </th>
+                  {showCompany ? (
+                    <th scope="col" className="px-3 py-3.5 text-start font-semibold whitespace-nowrap">
+                      {t("company")}
+                    </th>
+                  ) : null}
                   <th scope="col" className="px-3 py-3.5 text-start font-semibold whitespace-nowrap">
                     {t("who")}
                   </th>
@@ -123,18 +170,18 @@ export function AuditLogScreen() {
               <tbody>
                 {query.isPending ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-12 text-center text-muted-foreground">
+                    <td colSpan={showCompany ? 7 : 6} className="px-3 py-12 text-center text-muted-foreground">
                       {t("loading")}
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-12 text-center text-muted-foreground">
+                    <td colSpan={showCompany ? 7 : 6} className="px-3 py-12 text-center text-muted-foreground">
                       {filter ? t("noMatch") : t("empty")}
                     </td>
                   </tr>
                 ) : (
-                  rows.map((r) => {
+                  pageRows.map((r) => {
                     const changes = auditChanges(r.oldValues, r.newValues);
                     const expanded = open === r.id;
                     return (
@@ -164,6 +211,9 @@ export function AuditLogScreen() {
                           <td className="whitespace-nowrap px-3 py-3.5" dir="ltr">
                             {formatInCompanyTz(r.createdAt, zone)}
                           </td>
+                          {showCompany ? (
+                            <td className="px-3 py-3.5 whitespace-nowrap">{r.companyId ? lookups.companyName(r.companyId) : t("platform")}</td>
+                          ) : null}
                           <td className="px-3 py-3.5">
                             {r.userId ? (userName.get(r.userId) ?? `#${r.userId}`) : t("system")}
                           </td>
@@ -186,7 +236,7 @@ export function AuditLogScreen() {
                         {expanded ? (
                           <tr className="border-t border-border/60 bg-surface-2/30">
                             <td />
-                            <td colSpan={5} className="px-3 py-3">
+                            <td colSpan={showCompany ? 6 : 5} className="px-3 py-3">
                               <dl className="grid gap-1 text-xs sm:grid-cols-[minmax(120px,auto)_1fr]">
                                 {changes.map((c) => (
                                   <Fragment key={c.field}>
@@ -213,15 +263,15 @@ export function AuditLogScreen() {
               </tbody>
             </table>
           </div>
-          {info && info.total > 0 ? (
+          {rows.length > 0 ? (
             <Pager
-              page={page - 1}
-              pageCount={Math.max(1, info.lastPage)}
+              page={shownPage}
+              pageCount={pageCount}
               pageSize={pageSize}
-              onPage={(p) => setPage(p + 1)}
+              onPage={setPage}
               onPageSize={(size) => {
                 setPageSize(size);
-                setPage(1);
+                setPage(0);
               }}
             />
           ) : null}

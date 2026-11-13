@@ -65,10 +65,11 @@ export function ChangePasswordScreen() {
   );
 
   return (
-    <div className="grid gap-6">
+    // Centred on the page: the title and the form share one column.
+    <div className="mx-auto grid w-full max-w-md gap-6 pt-2 sm:pt-8">
       <PageHeader title={t("title")} description={t("description")} />
       <form
-        className="grid max-w-md gap-4 rounded-2xl border border-border/70 bg-surface shadow-sm p-6"
+        className="grid gap-4 rounded-2xl border border-border/70 bg-surface shadow-sm p-6"
         noValidate
         onSubmit={(e) => {
           e.preventDefault();
