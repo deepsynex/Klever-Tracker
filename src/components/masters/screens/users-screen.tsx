@@ -246,17 +246,18 @@ export function UsersScreen() {
               </span>
             ),
           },
-          { key: "address", header: t("f.address"), cell: (u) => u.address ?? "—", className: "max-w-56 truncate" },
-          { key: "mobile", header: t("f.mobile"), cell: (u) => <span dir="ltr">{u.mobile ?? "—"}</span> },
+          // Shown next to the name: the username is what people sign in with.
+          { key: "username", header: t("f.username"), sortValue: (u) => u.username, cell: (u) => <span dir="ltr" className="font-mono text-[13px]">{u.username}</span> },
           { key: "email", header: t("f.email"), sortValue: (u) => u.email, cell: (u) => u.email },
+          { key: "mobile", header: t("f.mobile"), cell: (u) => <span dir="ltr" className="whitespace-nowrap">{u.mobile ?? "—"}</span> },
           { key: "role", header: t("f.role"), sortValue: (u) => roleName.get(u.roleId), cell: (u) => roleName.get(u.roleId) ?? `#${u.roleId}` },
+          { key: "address", header: t("f.address"), cell: (u) => u.address ?? "—", className: "max-w-32 truncate" },
           {
             key: "department",
             header: t("f.department"),
             sortValue: (u) => (u.departmentId ? deptName.get(u.departmentId) : null),
             cell: (u) => (u.departmentId ? (deptName.get(u.departmentId) ?? "—") : "—"),
           },
-          { key: "username", header: t("f.username"), sortValue: (u) => u.username, cell: (u) => <span dir="ltr">{u.username}</span> },
           {
             key: "status",
             header: tc("status"),

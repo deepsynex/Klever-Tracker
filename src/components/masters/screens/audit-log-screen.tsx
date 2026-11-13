@@ -7,11 +7,12 @@ import { Fragment, useMemo, useState } from "react";
 import { PANEL, Pager } from "@/components/masters/data-table";
 import { KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Alert } from "@/components/ui/alert";
-import { auditChanges, auditSubject } from "@/lib/account-management/audit";
+import { auditChanges, auditSubject, groupAuditEntries, nameFromValues, subjectLabel } from "@/lib/account-management/audit";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { gqlRequestPartial } from "@/lib/graphql/client";
 import { AUDIT_LOGS, type AuditLogsResult } from "@/lib/graphql/account-management";
 import { gqlRequest } from "@/lib/graphql/client";
+import { parseApiDateTime } from "@/lib/vehicle-management/helpers";
 import { useErrorText, useVmLookups } from "@/lib/vehicle-management/use-vm";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,45 @@ const AUDIT_TOTAL = /* GraphQL */ `
   }
 `;
 
+/** Names of the records entries point at, for the Record column (lists the role may not read come back empty). */
+const AUDIT_NAMES = /* GraphQL */ `
+  query AuditRecordNames {
+    alertRules(first: 1000) {
+      data {
+        id
+        name
+      }
+    }
+    geofences(first: 1000) {
+      data {
+        id
+        name
+      }
+    }
+    roles(first: 1000) {
+      data {
+        id
+        name
+      }
+    }
+    departments(first: 1000) {
+      data {
+        id
+        name
+      }
+    }
+    vehicleGroups(first: 1000) {
+      data {
+        id
+        name
+      }
+    }
+  }
+`;
+type Named = { data: Array<{ id: string; name: string }> } | null;
+type AuditNamesResult = { alertRules: Named; geofences: Named; roles: Named; departments: Named; vehicleGroups: Named };
+const byId = (list: Named) => new Map((list?.data ?? []).map((x) => [x.id, x.name]));
+
 /** The newest entries (up to MAX_ENTRIES), newest first, plus the user names. */
 async function loadNewest(): Promise<{ entries: AuditLogsResult["auditLogs"]["data"]; users: AuditLogsResult["users"]["data"]; total: number }> {
   const { auditLogs } = await gqlRequest<{ auditLogs: { paginatorInfo: { total: number } } }>(AUDIT_TOTAL);
@@ -76,6 +116,41 @@ export function AuditLogScreen() {
     placeholderData: keepPreviousData,
   });
   const userName = useMemo(() => new Map((query.data?.users ?? []).map((u) => [u.id, u.name])), [query.data]);
+  /** The User column shows the username people sign in with (the name as a tooltip), never a bare id. */
+  const users = useMemo(() => new Map((query.data?.users ?? []).map((u) => [u.id, u])), [query.data]);
+  const namesQuery = useQuery({
+    queryKey: ["vm", "am-audit-names"],
+    queryFn: () => gqlRequestPartial<AuditNamesResult>(AUDIT_NAMES),
+  });
+  /**
+   * The record an entry is about, by name: "Alert rule · Geofence Enter – TEST-QA-001". Looked up by
+   * type and id; a deleted record falls back to a name in the entry's own values, then to its id.
+   */
+  const recordName = useMemo(() => {
+    const n = namesQuery.data;
+    const tables: Record<string, Map<string, string>> = {
+      AlertRule: byId(n?.alertRules ?? null),
+      Geofence: byId(n?.geofences ?? null),
+      Role: byId(n?.roles ?? null),
+      RolePermission: byId(n?.roles ?? null),
+      Department: byId(n?.departments ?? null),
+      VehicleGroup: byId(n?.vehicleGroups ?? null),
+    };
+    return (r: { auditableType: string | null; auditableId: string | null; newValues: string | null; oldValues: string | null }): string | null => {
+      const type = auditSubject(r.auditableType);
+      const id = r.auditableId;
+      let found: string | null | undefined = null;
+      if (id) {
+        if (tables[type]) found = tables[type].get(id);
+        else if (type === "Vehicle") found = lookups.vehicleById.has(id) ? lookups.vehicleLabel(id) : null;
+        else if (type === "Driver") found = lookups.driverById.get(id)?.name;
+        else if (type === "User") found = userName.get(id);
+        else if (type === "Company") found = lookups.companies.find((c) => c.id === id)?.name;
+        else if (type === "PlatformSettings") found = t("mapSettings");
+      }
+      return found || nameFromValues(r.newValues, r.oldValues);
+    };
+  }, [namesQuery.data, lookups, userName, t]);
   /** "All companies" (platform staff): show which company each entry belongs to. */
   const showCompany = lookups.isPlatform && lookups.companyId === null;
 
@@ -85,14 +160,16 @@ export function AuditLogScreen() {
     const q = filter.trim().toLowerCase();
     if (!q) return companyRows;
     return companyRows.filter((r) =>
-      `${r.action} ${auditSubject(r.auditableType)} ${r.auditableId ?? ""} ${userName.get(r.userId ?? "") ?? ""} ${r.ipAddress ?? ""} ${showCompany ? lookups.companyName(r.companyId) : ""}`
+      `${r.action} ${subjectLabel(r.auditableType)} ${recordName(r) ?? ""} ${r.auditableId ?? ""} ${userName.get(r.userId ?? "") ?? ""} ${users.get(r.userId ?? "")?.username ?? ""} ${r.ipAddress ?? ""} ${showCompany ? lookups.companyName(r.companyId) : ""}`
         .toLowerCase()
         .includes(q),
     );
-  }, [companyRows, filter, userName, showCompany, lookups]);
-  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  }, [companyRows, filter, userName, users, showCompany, lookups, recordName]);
+  // One row per save: entries by the same user and company, seconds apart, are shown together.
+  const groups = useMemo(() => groupAuditEntries(rows, (at) => parseApiDateTime(at)?.getTime() ?? 0), [rows]);
+  const pageCount = Math.max(1, Math.ceil(groups.length / pageSize));
   const shownPage = Math.min(page, pageCount - 1);
-  const pageRows = rows.slice(shownPage * pageSize, (shownPage + 1) * pageSize);
+  const pageGroups = groups.slice(shownPage * pageSize, (shownPage + 1) * pageSize);
   const countAction = (word: string) => companyRows.filter((r) => r.action.toLowerCase().includes(word)).length;
 
   return (
@@ -129,7 +206,7 @@ export function AuditLogScreen() {
         </div>
         {query.data ? (
           <span className="ms-auto text-sm font-medium text-muted-foreground">
-            {t("total", { n: rows.length })}
+            {t("total", { n: groups.length })}
             {query.data.total > MAX_ENTRIES ? ` · ${t("newestOnly", { n: MAX_ENTRIES })}` : ""}
           </span>
         ) : null}
@@ -181,9 +258,15 @@ export function AuditLogScreen() {
                     </td>
                   </tr>
                 ) : (
-                  pageRows.map((r) => {
-                    const changes = auditChanges(r.oldValues, r.newValues);
+                  pageGroups.map((group) => {
+                    const r = group[0];
                     const expanded = open === r.id;
+                    const canExpand = group.length > 1 || group.some((e) => auditChanges(e.oldValues, e.newValues).length > 0);
+                    // "update_alert_rule ×2": each action once, with how many records it touched.
+                    const actions = [...group.reduce((m, e) => m.set(e.action, (m.get(e.action) ?? 0) + 1), new Map<string, number>())];
+                    const recordLabel = (e: typeof r) => recordName(e) ?? (e.auditableId ? `#${e.auditableId}` : "—");
+                    // The row names the main record (the alert rule), not one of its recipients or assignments.
+                    const head = group.find((e) => !/(Recipient|Vehicle|VehicleGroup|Permission)$/.test(auditSubject(e.auditableType)) || auditSubject(e.auditableType) === "Vehicle" || auditSubject(e.auditableType) === "VehicleGroup") ?? r;
                     return (
                       <Fragment key={r.id}>
                         <tr
@@ -193,7 +276,7 @@ export function AuditLogScreen() {
                           )}
                         >
                           <td className="ps-3 pe-1">
-                            {changes.length > 0 ? (
+                            {canExpand ? (
                               <button
                                 type="button"
                                 onClick={() => setOpen(expanded ? null : r.id)}
@@ -215,19 +298,42 @@ export function AuditLogScreen() {
                             <td className="px-3 py-3.5 whitespace-nowrap">{r.companyId ? lookups.companyName(r.companyId) : t("platform")}</td>
                           ) : null}
                           <td className="px-3 py-3.5">
-                            {r.userId ? (userName.get(r.userId) ?? `#${r.userId}`) : t("system")}
-                          </td>
-                          <td className="px-3 py-3.5">
-                            <StatusBadge tone={actionTone(r.action)}>{r.action}</StatusBadge>
-                          </td>
-                          <td className="px-3 py-3.5">
-                            {auditSubject(r.auditableType) || "—"}
-                            {r.auditableId ? (
-                              <span className="text-muted-foreground" dir="ltr">
-                                {" "}
-                                #{r.auditableId}
+                            {r.userId ? (
+                              <span dir="ltr" className="font-mono text-[13px]" title={users.get(r.userId)?.name}>
+                                {users.get(r.userId)?.username || users.get(r.userId)?.name || t("unknownUser")}
                               </span>
-                            ) : null}
+                            ) : (
+                              t("system")
+                            )}
+                          </td>
+                          <td className="px-3 py-3.5">
+                            <span className="flex flex-wrap gap-1">
+                              {actions.map(([action, count]) => (
+                                <StatusBadge key={action} tone={actionTone(action)}>
+                                  {action}
+                                  {count > 1 ? ` ×${count}` : ""}
+                                </StatusBadge>
+                              ))}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3.5">
+                            {head.auditableType || head.auditableId ? (
+                              <span className="grid">
+                                <span className="font-medium">{recordLabel(head)}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {group.length > 1 ? (
+                                    t("moreRecords", { count: group.length - 1 })
+                                  ) : (
+                                    <>
+                                      {subjectLabel(head.auditableType)}
+                                      {head.auditableId ? <span dir="ltr"> #{head.auditableId}</span> : null}
+                                    </>
+                                  )}
+                                </span>
+                              </span>
+                            ) : (
+                              "—"
+                            )}
                           </td>
                           <td className="px-3 py-3.5 pe-5 text-muted-foreground" dir="ltr">
                             {r.ipAddress ?? "—"}
@@ -237,22 +343,41 @@ export function AuditLogScreen() {
                           <tr className="border-t border-border/60 bg-surface-2/30">
                             <td />
                             <td colSpan={showCompany ? 6 : 5} className="px-3 py-3">
-                              <dl className="grid gap-1 text-xs sm:grid-cols-[minmax(120px,auto)_1fr]">
-                                {changes.map((c) => (
-                                  <Fragment key={c.field}>
-                                    <dt className="font-semibold" dir="ltr">
-                                      {c.field}
-                                    </dt>
-                                    <dd className="break-all" dir="ltr">
-                                      <span className="text-stopped line-through decoration-stopped/50">
-                                        {c.before || "∅"}
-                                      </span>
-                                      <span className="mx-1.5 text-muted-foreground">→</span>
-                                      <span className="text-moving">{c.after || "∅"}</span>
-                                    </dd>
-                                  </Fragment>
-                                ))}
-                              </dl>
+                              <div className="grid gap-3">
+                                {group.map((e) => {
+                                  const changes = auditChanges(e.oldValues, e.newValues);
+                                  return (
+                                    <div key={e.id} className={cn("grid gap-1.5", group.length > 1 && "rounded-xl border border-border/70 bg-surface p-2.5")}>
+                                      {group.length > 1 ? (
+                                        <p className="flex flex-wrap items-center gap-2 text-xs">
+                                          <span className="font-semibold">{recordLabel(e)}</span>
+                                          <span className="text-muted-foreground">
+                                            {subjectLabel(e.auditableType)}
+                                            {e.auditableId ? <span dir="ltr"> #{e.auditableId}</span> : null}
+                                          </span>
+                                          <StatusBadge tone={actionTone(e.action)}>{e.action}</StatusBadge>
+                                        </p>
+                                      ) : null}
+                                      {changes.length > 0 ? (
+                                        <dl className="grid gap-1 text-xs sm:grid-cols-[minmax(120px,auto)_1fr]">
+                                          {changes.map((c) => (
+                                            <Fragment key={c.field}>
+                                              <dt className="font-semibold" dir="ltr">
+                                                {c.field}
+                                              </dt>
+                                              <dd className="break-all" dir="ltr">
+                                                <span className="text-stopped line-through decoration-stopped/50">{c.before || "∅"}</span>
+                                                <span className="mx-1.5 text-muted-foreground">→</span>
+                                                <span className="text-moving">{c.after || "∅"}</span>
+                                              </dd>
+                                            </Fragment>
+                                          ))}
+                                        </dl>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </td>
                           </tr>
                         ) : null}
@@ -263,7 +388,7 @@ export function AuditLogScreen() {
               </tbody>
             </table>
           </div>
-          {rows.length > 0 ? (
+          {groups.length > 0 ? (
             <Pager
               page={shownPage}
               pageCount={pageCount}
