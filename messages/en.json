@@ -123,7 +123,6 @@
       "tagline": "Sign in to access your fleet tracking dashboard",
       "showPassword": "Show password",
       "hidePassword": "Hide password",
-      "brandTagline": "Vehicle tracking system",
       "rememberMe": "Remember me",
       "orContinue": "or continue with",
       "secureTitle": "Secure & reliable",
@@ -194,7 +193,6 @@
     "signOut": "Sign out",
     "signedInAs": "Signed in as {email}",
     "changePassword": "Change password",
-    "tagline": "Vehicle tracking system",
     "forbidden": {
       "title": "You don't have permission",
       "body": "Your role can't open this screen. Ask your administrator if you need access.",
