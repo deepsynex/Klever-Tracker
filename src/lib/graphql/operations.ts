@@ -261,6 +261,7 @@ export const GET_LATEST_POSITIONS_WITH_READINGS = /* GraphQL */ `
         locationLng
         speed
         heading
+        ignition
         attributes
       }
     }

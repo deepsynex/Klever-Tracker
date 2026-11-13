@@ -38,8 +38,8 @@ import { cn } from "@/lib/utils";
 const MAX_RADIUS_M = 100_000;
 const DEFAULT_RADIUS_M = 150;
 
-/** A geofence's outline as a closed [lng, lat] ring (for context shapes and sizes), or null. */
-function ringOf(g: Geofence) {
+/** A geofence's outline as a closed [lng, lat] ring (for context shapes, sizes and the live map), or null. */
+export function ringOf(g: Geofence) {
   if (g.type === "circle" && g.centreLat != null && g.centreLng != null && g.radiusM) {
     return circleRing({ lat: g.centreLat, lng: g.centreLng }, g.radiusM, 48);
   }

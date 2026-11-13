@@ -2,13 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { AdvancedMarker, useMap } from "@vis.gl/react-google-maps";
-import { Check, CircleDashed, Hexagon, MapPinned, PencilRuler, Trash2, Undo2, X } from "lucide-react";
+import { MapPinned } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { GeofenceMap, type GeofenceDraft } from "@/components/masters/geofence-map";
-import { NewGeofenceSheet, ringOf } from "@/components/masters/screens/geofences-screen";
-import { Button } from "@/components/ui/button";
-import { isValidPolygon, type LatLng, type Position } from "@/lib/geofences/geometry";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { ringOf } from "@/components/masters/screens/geofences-screen";
+import type { LatLng, Position } from "@/lib/geofences/geometry";
 import { gqlRequestPartial } from "@/lib/graphql/client";
 import { GEOFENCES, type GeofencesResult } from "@/lib/graphql/geofences";
 import { LIST_PAGE_SIZE } from "@/lib/graphql/vehicle-management";
@@ -17,10 +15,9 @@ import { useVmLookups, VM_KEY } from "@/lib/vehicle-management/use-vm";
 import { cn } from "@/lib/utils";
 
 /**
- * Geofences on the live map: the toolbar (Draw / Show), the geofence shapes for both map
- * providers, and full-screen drawing. Drawing happens on the whole map; Continue then opens the
- * geofence form (name, vehicles…) without its own small map. Everything shares Vehicle
- * Management's cached geofence list, so a new geofence appears on the map straight away.
+ * Geofences on the live map: the toolbar (Show Geofence, then any other live-map tools) and the
+ * geofence shapes for both map providers. They share Vehicle Management's cached geofence list.
+ * Geofences are drawn on the Geofences page.
  */
 
 export type LiveGeofence = {
@@ -133,178 +130,60 @@ export function GoogleGeofenceLayer({ geofences, fitKey }: { geofences: LiveGeof
   );
 }
 
-/** The toolbar over the live map. */
+/** The toolbar over the live map: Show Geofence (for roles that may see geofences), then `children`. */
 export function GeofenceToolbar({
   showing,
   loading,
   count,
   onToggle,
-  onDraw,
+  children,
 }: {
   showing: boolean;
   loading: boolean;
   count: number;
   onToggle: () => void;
-  onDraw: () => void;
+  /** More buttons after Show Geofence (Excessive Idling). */
+  children?: ReactNode;
 }) {
   const t = useTranslations("tracking.live.geofences");
   const lookups = useVmLookups();
 
-  if (!lookups.isSuccess || !lookups.can("geofences", "view")) return null;
-  const canAdd = lookups.allow("geofences", "add");
-  const addBlocked = canAdd ? undefined : lookups.companyId ? t("noPermission") : t("pickCompany");
+  const geofencesAllowed = lookups.isSuccess && lookups.can("geofences", "view");
+  if (!geofencesAllowed && !children) return null;
 
   return (
     <div
         role="toolbar"
         aria-label={t("toolbar")}
-        className="absolute end-4 top-4 z-10 flex gap-1 rounded-3xl border border-border/70 bg-surface/95 p-1.5 text-foreground shadow-xl backdrop-blur-md max-sm:start-4 max-sm:top-auto max-sm:bottom-4"
+        className="absolute end-4 top-4 z-10 flex gap-1 rounded-3xl border border-border/70 bg-surface/95 p-1.5 text-foreground shadow-xl backdrop-blur-md max-sm:end-2 max-sm:top-2 max-sm:scale-90 max-sm:origin-top-right rtl:max-sm:origin-top-left"
       >
-        <ToolbarButton icon={<PencilRuler />} label={t("draw")} title={addBlocked} disabled={!canAdd} onClick={onDraw} />
-        <ToolbarButton
-          icon={<MapPinned />}
-          label={showing ? t("hide") : t("show")}
-          title={showing && !loading ? t("count", { count }) : undefined}
-          pressed={showing}
-          busy={loading}
-          onClick={onToggle}
-        />
+        {geofencesAllowed ? (
+          <ToolbarButton
+            icon={<MapPinned />}
+            label={showing ? t("hide") : t("show")}
+            title={showing && !loading ? t("count", { count }) : undefined}
+            pressed={showing}
+            busy={loading}
+            onClick={onToggle}
+          />
+        ) : null}
+        {children}
     </div>
   );
 }
 
-const MAX_RADIUS_M = 100_000;
-const START_DRAFT: GeofenceDraft = { type: "circle", centre: null, radiusM: 150, points: [] };
-
-/**
- * Full-screen drawing over the live map: pick Circle or Polygon, draw on the map, then Continue to
- * the geofence form (which skips its own map). Cancelling the form comes back here with the shape
- * kept; saving calls onDone(true).
- */
-export function GeofenceDrawMode({ onDone }: { onDone: (saved: boolean) => void }) {
-  const t = useTranslations("tracking.live.geofences");
-  const tg = useTranslations("masters.vm.geofences");
-  const tc = useTranslations("masters.common");
-  const { geofences } = useLiveGeofences(true);
-  const others = useMemo(() => geofences.map((g) => ({ id: g.id, name: g.name, ring: g.ring })), [geofences]);
-  const [draft, setDraft] = useState<GeofenceDraft>(START_DRAFT);
-  const [radiusText, setRadiusText] = useState(String(START_DRAFT.radiusM));
-  const [details, setDetails] = useState(false);
-
-  const radiusOk = draft.radiusM > 0 && draft.radiusM <= MAX_RADIUS_M && Number(radiusText) === draft.radiusM;
-  const ready = draft.type === "circle" ? draft.centre !== null && radiusOk : isValidPolygon(draft.points);
-
-  return (
-    <div className="absolute inset-0 z-20" role="region" aria-label={t("drawing")}>
-      <GeofenceMap
-        draft={draft}
-        others={others}
-        label={tg("mapLabel")}
-        unavailable={tg("mapUnavailable")}
-        frameClassName="h-full"
-        onChange={(next) => {
-          if (next.radiusM !== draft.radiusM) setRadiusText(String(next.radiusM));
-          setDraft(next);
-        }}
-      />
-
-      <div className="pointer-events-none absolute inset-x-4 top-4 flex flex-col items-center gap-2">
-        <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-3xl border border-border/70 bg-surface/95 p-1.5 text-foreground shadow-xl backdrop-blur-md">
-          <div role="radiogroup" aria-label={tg("type")} className="flex gap-1">
-            {(["circle", "polygon"] as const).map((type) => (
-              <button
-                key={type}
-                type="button"
-                role="radio"
-                aria-checked={draft.type === type}
-                onClick={() => setDraft((d) => ({ ...d, type }))}
-                className={cn(
-                  "flex h-9 cursor-pointer items-center gap-1.5 rounded-[18px] px-3.5 text-[13px] font-semibold transition-colors [&_svg]:size-4 [&_svg]:text-primary",
-                  draft.type === type ? "bg-primary-soft text-primary" : "hover:bg-surface-2",
-                )}
-              >
-                {type === "circle" ? <CircleDashed aria-hidden /> : <Hexagon aria-hidden />}
-                {tg(`types.${type}`)}
-              </button>
-            ))}
-          </div>
-
-          <span className="h-6 w-px bg-border" aria-hidden />
-
-          {draft.type === "circle" ? (
-            <label className="flex items-center gap-2 px-1 text-[13px] text-muted-foreground">
-              {tg("radius")}
-              <input
-                inputMode="numeric"
-                dir="ltr"
-                value={radiusText}
-                aria-invalid={!radiusOk || undefined}
-                onChange={(e) => {
-                  const text = e.target.value.replace(/[^\d]/g, "");
-                  setRadiusText(text);
-                  const n = Number(text);
-                  if (n > 0 && n <= MAX_RADIUS_M) setDraft((d) => ({ ...d, radiusM: n }));
-                }}
-                className="h-9 w-24 rounded-[18px] border border-border-strong bg-surface px-3 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none aria-invalid:border-destructive"
-              />
-            </label>
-          ) : (
-            <>
-              <span className="px-1 text-[13px] text-muted-foreground tabular-nums">{tg("pointCount", { count: draft.points.length })}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-[18px]"
-                disabled={draft.points.length === 0}
-                onClick={() => setDraft((d) => ({ ...d, points: d.points.slice(0, -1) }))}
-              >
-                <Undo2 />
-                {tg("undoPoint")}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-[18px] hover:text-destructive"
-                disabled={draft.points.length === 0}
-                onClick={() => setDraft((d) => ({ ...d, points: [] }))}
-              >
-                <Trash2 />
-                {tg("clearPoints")}
-              </Button>
-            </>
-          )}
-
-          <span className="h-6 w-px bg-border" aria-hidden />
-
-          <Button variant="secondary" size="sm" className="rounded-[18px]" onClick={() => onDone(false)}>
-            <X />
-            {tc("cancel")}
-          </Button>
-          <Button size="sm" className="rounded-[18px]" disabled={!ready} onClick={() => setDetails(true)}>
-            <Check />
-            {t("continue")}
-          </Button>
-        </div>
-        <p className="pointer-events-auto max-w-xl rounded-full bg-foreground/80 px-3 py-1 text-center text-xs text-background shadow">
-          {draft.type === "circle" ? tg("circleHint") : tg("polygonHint")}
-        </p>
-      </div>
-
-      {details ? <NewGeofenceSheet preset={draft} onSaved={() => onDone(true)} onClose={() => setDetails(false)} /> : null}
-    </div>
-  );
-}
-
-
-function ToolbarButton({
+export function ToolbarButton({
   icon,
   label,
   title,
   pressed,
   busy,
   disabled,
+  badge,
   onClick,
 }: {
+  /** A count on the icon (hidden at 0). */
+  badge?: number;
   icon: ReactNode;
   label: string;
   title?: string;
@@ -327,8 +206,13 @@ function ToolbarButton({
         pressed && "bg-primary-soft text-primary hover:bg-primary-soft",
       )}
     >
-      <span className={cn("grid place-items-center text-primary [&_svg]:size-5", busy && "animate-pulse")} aria-hidden>
+      <span className={cn("relative grid place-items-center text-primary [&_svg]:size-5", busy && "animate-pulse")} aria-hidden>
         {icon}
+        {badge ? (
+          <span className="absolute -end-2.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-amber-500 px-1 text-[10px] leading-none font-bold text-white ring-2 ring-surface">
+            {badge > 99 ? "99+" : badge}
+          </span>
+        ) : null}
       </span>
       {label}
     </button>

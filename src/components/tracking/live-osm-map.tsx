@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Map, { Layer, Marker, NavigationControl, Source, useMap } from "react-map-gl/maplibre";
 import { boundsOf, DEFAULT_VIEW, fitPadding, maptilerStyleUrl } from "@/lib/maplibre";
+import { clusterPoints } from "@/lib/live/cluster";
 import { GeofenceLabel, geofenceBounds, type LiveGeofence } from "./live-geofences";
+import { ClusterBubble, type LiveStatus } from "./vehicle-marker";
 
 /**
  * Live map on OpenStreetMap (MapTiler tiles, drawn with MapLibre): the same arrows, hover cards
  * and follow behaviour as the Google version in live-tracking-view.tsx.
  */
 
-export type OsmVehicle = { id: string; plateNo: string; lat: number | null; lng: number | null };
+export type OsmVehicle = { id: string; plateNo: string; lat: number | null; lng: number | null; status: LiveStatus };
 
 export function LiveOsmMap<V extends OsmVehicle>({
   maptilerKey,
@@ -23,7 +25,13 @@ export function LiveOsmMap<V extends OsmVehicle>({
   renderMarker,
   geofences = [],
   geofenceFitKey = 0,
+  clusterLabel,
+  panelPx,
 }: {
+  /** Tooltip for a bubble of nearby vehicles ("5 vehicles"). */
+  clusterLabel: (count: number) => string;
+  /** Room to leave on the start side when fitting, for the Vehicles & Drivers panel (0 when closed). */
+  panelPx: () => number;
   maptilerKey: string;
   /** Geofence outlines to draw (empty when hidden), and a counter that fits the map to them when bumped. */
   geofences?: LiveGeofence[];
@@ -44,38 +52,23 @@ export function LiveOsmMap<V extends OsmVehicle>({
       attributionControl={{ compact: true }}
     >
       <NavigationControl position="bottom-right" showCompass={false} />
-      <FollowController selected={selected} vehicles={vehicles} />
+      <FollowController selected={selected} vehicles={vehicles} panelPx={panelPx} />
       <OsmGeofences geofences={geofences} fitKey={geofenceFitKey} />
-      {vehicles
-        .filter((v) => v.lat && v.lng)
-        .map((v) => {
-          const isSelected = v.id === selectedId;
-          const isHovered = v.id === hoveredId;
-          return (
-            <Marker
-              key={v.id}
-              latitude={v.lat!}
-              longitude={v.lng!}
-              anchor="center"
-              // The hovered arrow's card, then the followed vehicle, sit above the others.
-              style={{ zIndex: isHovered ? 3 : isSelected ? 2 : 1 }}
-              onClick={(e) => {
-                e.originalEvent.stopPropagation();
-                onSelect(v.id);
-              }}
-            >
-              <div title={v.plateNo} onMouseEnter={() => onHover(v.id)} onMouseLeave={() => onHover(null)}>
-                {renderMarker(v)}
-              </div>
-            </Marker>
-          );
-        })}
+      <OsmVehicles
+        vehicles={vehicles}
+        selectedId={selectedId}
+        hoveredId={hoveredId}
+        onSelect={onSelect}
+        onHover={onHover}
+        renderMarker={renderMarker}
+        clusterLabel={clusterLabel}
+      />
     </Map>
   );
 }
 
 /** Follows the selected vehicle, or fits every vehicle when none is selected. */
-function FollowController({ selected, vehicles }: { selected: OsmVehicle | null; vehicles: OsmVehicle[] }) {
+function FollowController({ selected, vehicles, panelPx }: { selected: OsmVehicle | null; vehicles: OsmVehicle[]; panelPx: () => number }) {
   const { current: map } = useMap();
 
   useEffect(() => {
@@ -88,10 +81,10 @@ function FollowController({ selected, vehicles }: { selected: OsmVehicle | null;
     if (valid.length === 1) {
       map.flyTo({ center: [valid[0].lng!, valid[0].lat!], zoom: 13, duration: 0 });
     } else if (valid.length > 1) {
-      // The vehicles panel (340px + gap) floats over the start side.
-      map.fitBounds(boundsOf(valid.map((v) => ({ lat: v.lat!, lng: v.lng! })))!, { padding: fitPadding(380), duration: 0, maxZoom: 15 });
+      // The Vehicles & Drivers panel (340px + gap), when open, floats over the start side.
+      map.fitBounds(boundsOf(valid.map((v) => ({ lat: v.lat!, lng: v.lng! })))!, { padding: fitPadding(panelPx()), duration: 0, maxZoom: 15 });
     }
-  }, [map, selected, vehicles]);
+  }, [map, selected, vehicles, panelPx]);
 
   return null;
 }
@@ -133,6 +126,86 @@ function OsmGeofences({ geofences, fitKey }: { geofences: LiveGeofence[]; fitKey
           <GeofenceLabel geofence={g} />
         </Marker>
       ))}
+    </>
+  );
+}
+
+/** Each vehicle as its marker, or nearby vehicles as one numbered bubble; clicking a bubble zooms to them. */
+function OsmVehicles<V extends OsmVehicle>({
+  vehicles,
+  selectedId,
+  hoveredId,
+  onSelect,
+  onHover,
+  renderMarker,
+  clusterLabel,
+}: {
+  vehicles: V[];
+  selectedId: string | null;
+  hoveredId: string | null;
+  onSelect: (id: string) => void;
+  onHover: (id: string | null) => void;
+  renderMarker: (v: V) => ReactNode;
+  clusterLabel: (count: number) => string;
+}) {
+  const { current: map } = useMap();
+  const [zoom, setZoom] = useState(DEFAULT_VIEW.zoom);
+  useEffect(() => {
+    if (!map) return;
+    const update = () => setZoom(map.getZoom());
+    map.on("zoomend", update);
+    return () => {
+      map.off("zoomend", update);
+    };
+  }, [map]);
+  const groups = useMemo(
+    () => clusterPoints(vehicles.filter((v) => v.lat && v.lng).map((v) => ({ ...v, lat: v.lat!, lng: v.lng! })), Math.round(zoom), selectedId),
+    [vehicles, zoom, selectedId],
+  );
+
+  return (
+    <>
+      {groups.map((g) => {
+        if (g.kind === "cluster") {
+          return (
+            <Marker
+              key={g.id}
+              latitude={g.lat}
+              longitude={g.lng}
+              anchor="center"
+              style={{ zIndex: 0 }}
+              onClick={(e) => {
+                e.originalEvent.stopPropagation();
+                const b = boundsOf(g.points);
+                if (b) map?.fitBounds(b, { padding: 96, duration: 600, maxZoom: 16 });
+              }}
+            >
+              <ClusterBubble counts={g.counts} label={clusterLabel(g.points.length)} />
+            </Marker>
+          );
+        }
+        const v = g.point;
+        const isSelected = v.id === selectedId;
+        const isHovered = v.id === hoveredId;
+        return (
+          <Marker
+            key={v.id}
+            latitude={v.lat}
+            longitude={v.lng}
+            anchor="center"
+            // The hovered car's card, then the followed vehicle, sit above the others.
+            style={{ zIndex: isHovered ? 3 : isSelected ? 2 : 1 }}
+            onClick={(e) => {
+              e.originalEvent.stopPropagation();
+              onSelect(v.id);
+            }}
+          >
+            <div title={v.plateNo} onMouseEnter={() => onHover(v.id)} onMouseLeave={() => onHover(null)}>
+              {renderMarker(v)}
+            </div>
+          </Marker>
+        );
+      })}
     </>
   );
 }

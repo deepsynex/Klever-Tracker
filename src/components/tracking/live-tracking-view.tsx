@@ -1,9 +1,9 @@
 "use client";
 
 import { AdvancedMarker, AdvancedMarkerAnchorPoint, APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
-import { Bike, CarFront, Navigation, RefreshCw, Search, Truck } from "lucide-react";
-import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { Bike, CarFront, Timer, Truck, UserSearch } from "lucide-react";
+import { useFormatter, useNow, useTranslations } from "next-intl";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { gqlRequest } from "@/lib/graphql/client";
@@ -21,7 +21,14 @@ import { useMapConfig } from "@/lib/map-settings";
 import { takeLiveFocus } from "@/lib/notifications/api";
 import { engineCharging, formatEngineTime, latestReadings, type DeviceReadings } from "@/lib/telemetry/device-readings";
 import { cn } from "@/lib/utils";
-import { GeofenceDrawMode, GeofenceToolbar, GoogleGeofenceLayer, useLiveGeofences } from "./live-geofences";
+import { useExcessiveIdling } from "@/lib/idling/use-excessive-idling";
+import { clusterPoints } from "@/lib/live/cluster";
+import { liveStatus, type LiveStatus } from "@/lib/live/status";
+import { parseApiDateTime } from "@/lib/vehicle-management/helpers";
+import { FleetPanel, type FleetPanelMode } from "./fleet-panel";
+import { IdlingPanel } from "./idling-panel";
+import { GeofenceToolbar, GoogleGeofenceLayer, ToolbarButton, useLiveGeofences } from "./live-geofences";
+import { CarTopDown, ClusterBubble, PlateTag } from "./vehicle-marker";
 
 // MapLibre is only downloaded when the platform uses OpenStreetMap.
 const LiveOsmMap = dynamic(() => import("./live-osm-map").then((m) => m.LiveOsmMap), {
@@ -41,7 +48,7 @@ type LiveVehicle = {
   lng: number | null;
   speed: number;
   recordedAt: string | null;
-  status: "moving" | "stopped" | "offline";
+  status: LiveStatus;
   /** Compass degrees the arrow points (0 = north); null when unknown. */
   heading: number | null;
   /** The tracker's newest readings (battery, odometer, engine hours…); null without tracker data. */
@@ -50,22 +57,9 @@ type LiveVehicle = {
 
 const KM = new Intl.NumberFormat("en", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
 
-/** "14.1 V · 1,071.2 km · eco 8.3" for the vehicle list; null when there's nothing to show. */
-function readingsLine(r: DeviceReadings | null, ecoLabel: string): string | null {
-  if (!r) return null;
-  const parts = [
-    r.vehicleBatteryV !== null ? `${r.vehicleBatteryV.toFixed(1)} V` : null,
-    r.odometerKm !== null ? `${KM.format(r.odometerKm)} km` : null,
-    r.ecoScore !== null ? `${ecoLabel} ${r.ecoScore.toFixed(1)}` : null,
-  ].filter(Boolean);
-  return parts.length ? parts.join(" · ") : null;
-}
-
 /** A focus request taken from storage but not applied yet (see the effect in LiveTrackingView). */
 let pendingFocus: string | null = null;
 
-/** Same arrow colour as the public /track page. */
-const ARROW_FILL = "#0B6E69";
 
 /**
  * Direction for the arrow: the device's own heading for the newest fix, or else the bearing from
@@ -80,37 +74,32 @@ function headingFor(fixes: PositionHistoryPoint[]): number | null {
   return previous ? bearing({ lat: previous.locationLat!, lng: previous.locationLng! }, here) : null;
 }
 
-/** The /track page's navigation arrow, turned to the vehicle's heading, with its details on hover. */
+/** A top-down car in its status colour, turned to its heading, with its plate above and its details on hover. */
 function VehicleArrow({ vehicle, selected, hovered }: { vehicle: LiveVehicle; selected: boolean; hovered: boolean }) {
   const t = useTranslations("tracking.marker");
+  const format = useFormatter();
+  const now = useNow({ updateInterval: 60_000 });
   const zone = useCompanyTimeZone();
+  const lastSeen = parseApiDateTime(vehicle.recordedAt);
   const status =
     vehicle.status === "moving"
       ? t("moving", { speed: vehicle.speed })
-      : vehicle.status === "stopped"
-        ? t("stopped")
-        : t("offline");
+      : vehicle.status === "idle" || vehicle.status === "stopped"
+        ? t(vehicle.status)
+        : lastSeen
+          ? t("offlineLastSeen", { ago: format.relativeTime(lastSeen, now) })
+          : t("offline");
 
   return (
-    <div className="relative grid size-9 cursor-pointer place-items-center">
+    <div className="relative grid size-11 cursor-pointer place-items-center">
       {selected ? <span className="absolute inset-0 animate-ping rounded-full bg-primary/30" aria-hidden /> : null}
-      <svg
-        viewBox="0 0 24 24"
-        className={cn(
-          "relative size-7 drop-shadow-md transition-transform duration-500",
-          (hovered || selected) && "scale-125",
-        )}
-        style={{ transform: `rotate(${vehicle.heading ?? 0}deg)` }}
-        aria-hidden
-      >
-        <path
-          d="M12 2.5 20 21 12 16.8 4 21Z"
-          fill={ARROW_FILL}
-          stroke="#ffffff"
-          strokeWidth="2"
-          strokeLinejoin="round"
-        />
-      </svg>
+      <CarTopDown status={vehicle.status} heading={vehicle.heading} className={cn((hovered || selected) && "scale-125")} />
+      {/* The plate, always shown (the hover card replaces it) */}
+      {!hovered ? (
+        <span className="absolute bottom-[calc(100%-4px)] start-1/2 -translate-x-1/2 rtl:translate-x-1/2">
+          <PlateTag plate={vehicle.plateNo} selected={selected} />
+        </span>
+      ) : null}
 
       {hovered ? (
         <div
@@ -202,6 +191,98 @@ function ReadingsGrid({ r }: { r: DeviceReadings | null }) {
   );
 }
 
+/**
+ * Google Maps: each vehicle as a car, or nearby vehicles as one numbered bubble (regrouped on every
+ * zoom). Clicking a bubble zooms to its vehicles.
+ */
+function GoogleVehicles({
+  vehicles,
+  selectedId,
+  hoveredId,
+  onSelect,
+  onHover,
+  clusterLabel,
+}: {
+  vehicles: LiveVehicle[];
+  selectedId: string | null;
+  hoveredId: string | null;
+  onSelect: (id: string) => void;
+  onHover: (update: (current: string | null) => string | null) => void;
+  clusterLabel: (count: number) => string;
+}) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(11);
+  useEffect(() => {
+    if (!map) return;
+    const listener = map.addListener("zoom_changed", () => setZoom(map.getZoom() ?? 11));
+    return () => listener.remove();
+  }, [map]);
+  const groups = useMemo(
+    () =>
+      clusterPoints(
+        vehicles.filter((v) => v.lat && v.lng).map((v) => ({ ...v, lat: v.lat!, lng: v.lng! })),
+        Math.round(zoom),
+        selectedId,
+      ),
+    [vehicles, zoom, selectedId],
+  );
+
+  return (
+    <>
+      {groups.map((g) => {
+        if (g.kind === "cluster") {
+          return (
+            <AdvancedMarker
+              key={g.id}
+              position={{ lat: g.lat, lng: g.lng }}
+              anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
+              zIndex={0}
+              onClick={() => {
+                const bounds = new google.maps.LatLngBounds();
+                g.points.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
+                map?.fitBounds(bounds, 96);
+              }}
+            >
+              <ClusterBubble counts={g.counts} label={clusterLabel(g.points.length)} />
+            </AdvancedMarker>
+          );
+        }
+        const v = g.point;
+        const isSelected = v.id === selectedId;
+        const isHovered = v.id === hoveredId;
+        return (
+          <AdvancedMarker
+            key={v.id}
+            position={{ lat: v.lat, lng: v.lng }}
+            title={v.plateNo}
+            // Centre the car on the fix (the default anchor is bottom-centre, for pins).
+            anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
+            // The hovered car's card, then the followed vehicle, sit above the others.
+            zIndex={isHovered ? 3 : isSelected ? 2 : 1}
+            onClick={() => onSelect(v.id)}
+            onMouseEnter={() => onHover(() => v.id)}
+            onMouseLeave={() => onHover((id) => (id === v.id ? null : id))}
+          >
+            <VehicleArrow vehicle={v} selected={isSelected} hovered={isHovered} />
+          </AdvancedMarker>
+        );
+      })}
+    </>
+  );
+}
+
+const LAST_STATUS = /* GraphQL */ `
+  query LiveLastStatus {
+    deviceLastPositions(first: 500) {
+      data {
+        vehicleId
+        status
+      }
+    }
+  }
+`;
+type LastStatusResult = { deviceLastPositions: { data: Array<{ vehicleId: string | null; status: string | null }> } };
+
 function getCategory(plate: string, name?: string | null): "truck" | "van" | "bike" | "car" {
   const combined = `${plate} ${name || ""}`.toLowerCase();
   if (combined.includes("bike") || combined.includes("motorcycle")) return "bike";
@@ -210,7 +291,7 @@ function getCategory(plate: string, name?: string | null): "truck" | "van" | "bi
   return "car";
 }
 
-function MapController({ selected, vehicles }: { selected: LiveVehicle | null; vehicles: LiveVehicle[] }) {
+function MapController({ selected, vehicles, panelPx }: { selected: LiveVehicle | null; vehicles: LiveVehicle[]; panelPx: () => number }) {
   const map = useMap();
 
   useEffect(() => {
@@ -228,29 +309,39 @@ function MapController({ selected, vehicles }: { selected: LiveVehicle | null; v
     } else if (valid.length > 1) {
       const bounds = new google.maps.LatLngBounds();
       valid.forEach((v) => bounds.extend({ lat: v.lat!, lng: v.lng! }));
-      // Extra room on the side the vehicles panel covers (same rule as the OpenStreetMap map).
-      const panel = window.innerWidth >= 640 ? 380 : 0;
+      // Extra room on the side the Vehicles & Drivers panel covers, while it's open (same rule as the OpenStreetMap map).
+      const panel = panelPx();
       const rtl = document.documentElement.dir === "rtl";
       map.fitBounds(bounds, { top: 64, bottom: 64, left: rtl ? 64 : 64 + panel, right: rtl ? 64 + panel : 64 });
     }
-  }, [map, selected, vehicles]);
+  }, [map, selected, vehicles, panelPx]);
 
   return null;
 }
 
 export function LiveTrackingView() {
-  const tNav = useTranslations("nav");
   const tMarker = useTranslations("tracking.marker");
-  const zone = useCompanyTimeZone();
   const mapConfig = useMapConfig();
   const apiKey = mapConfig.googleMapsApiKey ?? "";
-  const [search, setSearch] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  // Search Vehicle / Search Driver open from the toolbar, one at a time (closed at first, so the map shows).
+  const [fleetPanel, setFleetPanel] = useState<FleetPanelMode | null>(null);
+  const fleetOpen = fleetPanel !== null;
+  const fleetOpenRef = useRef(fleetOpen);
+  useEffect(() => {
+    fleetOpenRef.current = fleetOpen;
+  });
+  /** Map fits leave room for the open panel on the start side (desktop only; on phones it's a bottom sheet). */
+  const panelPx = useCallback(() => (fleetOpenRef.current && window.innerWidth >= 640 ? 380 : 0), []);
+  const tFleet = useTranslations("tracking.live.fleet");
   const [hoveredVehicleId, setHoveredVehicleId] = useState<string | null>(null);
   const [showGeofences, setShowGeofences] = useState(false);
   // Bumped each time geofences are switched on, so the map fits them once.
   const [geofenceFitKey, setGeofenceFitKey] = useState(0);
-  const [drawingGeofence, setDrawingGeofence] = useState(false);
+  // Excessive idling: engine on, standing still past the vehicle's idle limit (refreshed every 30 s).
+  const [showIdling, setShowIdling] = useState(false);
+  const idling = useExcessiveIdling();
+  const tIdling = useTranslations("tracking.live.idling");
   const liveGeofences = useLiveGeofences(showGeofences);
   const shownGeofences = showGeofences ? liveGeofences.geofences : [];
 
@@ -274,8 +365,14 @@ export function LiveTrackingView() {
   const vehiclesQuery = useQuery({
     queryKey: ["live-tracking", "vehicles"],
     queryFn: async () => {
-      const vRes = await gqlRequest<VehiclesResult>(GET_VEHICLES, { first: 100 });
+      // The backend's own live status per device: offline once a tracker has gone silent.
+      const [vRes, lastRes] = await Promise.all([
+        gqlRequest<VehiclesResult>(GET_VEHICLES, { first: 100 }),
+        gqlRequest<LastStatusResult>(LAST_STATUS).catch(() => null),
+      ]);
       const vList = vRes.vehicles?.data ?? [];
+      const backendStatus = new globalThis.Map((lastRes?.deviceLastPositions.data ?? []).flatMap((p) => (p.vehicleId ? [[p.vehicleId, p.status] as const] : [])));
+      const now = Date.now();
 
       const items: LiveVehicle[] = await Promise.all(
         vList.map(async (v) => {
@@ -284,7 +381,7 @@ export function LiveTrackingView() {
           let lng: number | null = null;
           let speed = 0;
           let recordedAt: string | null = null;
-          let status: "moving" | "stopped" | "offline" = "offline";
+          let status: LiveStatus = "offline";
           let heading: number | null = null;
           let readings: DeviceReadings | null = null;
 
@@ -305,7 +402,7 @@ export function LiveTrackingView() {
               lng = valid.locationLng;
               speed = Math.round(valid.speed ?? 0);
               recordedAt = valid.recordedAt;
-              status = speed > 3 ? "moving" : "stopped";
+              status = liveStatus(backendStatus.get(v.id), speed, parseApiDateTime(valid.recordedAt)?.getTime() ?? null, now, valid.ignition ?? null);
               heading = headingFor(fixes);
             }
           } catch {
@@ -334,13 +431,6 @@ export function LiveTrackingView() {
   });
 
   const vehicles = useMemo(() => vehiclesQuery.data ?? [], [vehiclesQuery.data]);
-  const filteredVehicles = useMemo(() => {
-    if (!search.trim()) return vehicles;
-    const q = search.toLowerCase();
-    return vehicles.filter(
-      (v) => v.plateNo.toLowerCase().includes(q) || (v.vehicleName || "").toLowerCase().includes(q),
-    );
-  }, [vehicles, search]);
 
   const selectedVehicle = useMemo(
     () => vehicles.find((v) => v.id === selectedVehicleId) ?? null,
@@ -361,6 +451,8 @@ export function LiveTrackingView() {
           hoveredId={hoveredVehicleId}
           geofences={shownGeofences}
           geofenceFitKey={geofenceFitKey}
+          clusterLabel={(count) => tMarker("cluster", { count })}
+          panelPx={panelPx}
           onSelect={setSelectedVehicleId}
           onHover={(id) => setHoveredVehicleId((current) => (id === null && current !== null ? null : id))}
           renderMarker={(v) => (
@@ -380,169 +472,72 @@ export function LiveTrackingView() {
             fullscreenControl={false}
             zoomControl={true}
           >
-            <MapController selected={selectedVehicle} vehicles={vehicles} />
+            <MapController selected={selectedVehicle} vehicles={vehicles} panelPx={panelPx} />
             {showGeofences ? <GoogleGeofenceLayer geofences={shownGeofences} fitKey={geofenceFitKey} /> : null}
-            {vehicles
-              .filter((v) => v.lat && v.lng)
-              .map((v) => {
-                const isSelected = v.id === selectedVehicleId;
-                const isHovered = v.id === hoveredVehicleId;
-                return (
-                  <AdvancedMarker
-                    key={v.id}
-                    position={{ lat: v.lat!, lng: v.lng! }}
-                    title={v.plateNo}
-                    // Centre the arrow on the fix (the default anchor is bottom-centre, for pins).
-                    anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
-                    // The hovered arrow's card, then the followed vehicle, sit above the others.
-                    zIndex={isHovered ? 3 : isSelected ? 2 : 1}
-                    onClick={() => setSelectedVehicleId(v.id)}
-                    onMouseEnter={() => setHoveredVehicleId(v.id)}
-                    onMouseLeave={() => setHoveredVehicleId((id) => (id === v.id ? null : id))}
-                  >
-                    <VehicleArrow vehicle={v} selected={isSelected} hovered={isHovered} />
-                  </AdvancedMarker>
-                );
-              })}
+            <GoogleVehicles
+              vehicles={vehicles}
+              selectedId={selectedVehicleId}
+              hoveredId={hoveredVehicleId}
+              onSelect={setSelectedVehicleId}
+              onHover={setHoveredVehicleId}
+              clusterLabel={(count) => tMarker("cluster", { count })}
+            />
           </Map>
         </APIProvider>
       ) : (
         <div className="grid size-full place-items-center">Google Maps API Key not configured</div>
       )}
 
-      {drawingGeofence ? (
-        <GeofenceDrawMode
-          onDone={(saved) => {
-            setDrawingGeofence(false);
-            // Show the new geofence on the live map.
-            if (saved) {
-              setShowGeofences(true);
-              setGeofenceFitKey((k) => k + 1);
-            }
-          }}
+      {/* Toolbar: Show Geofence, Search Vehicle, Search Driver, Excessive Idling. */}
+      <GeofenceToolbar
+        showing={showGeofences}
+        loading={liveGeofences.loading}
+        count={liveGeofences.geofences.length}
+        onToggle={() => {
+          if (!showGeofences) setGeofenceFitKey((k) => k + 1);
+          setShowGeofences((v) => !v);
+        }}
+      >
+        <ToolbarButton icon={<CarFront />} label={tFleet("buttons.vehicles")} pressed={fleetPanel === "vehicles"} onClick={() => setFleetPanel((p) => (p === "vehicles" ? null : "vehicles"))} />
+        <ToolbarButton icon={<UserSearch />} label={tFleet("buttons.drivers")} pressed={fleetPanel === "drivers"} onClick={() => setFleetPanel((p) => (p === "drivers" ? null : "drivers"))} />
+        <ToolbarButton
+          icon={<Timer />}
+          label={tIdling("button")}
+          title={tIdling("count", { count: idling.data?.length ?? 0 })}
+          pressed={showIdling}
+          badge={idling.data?.length}
+          onClick={() => setShowIdling((open) => !open)}
         />
-      ) : (
-        <GeofenceToolbar
-          showing={showGeofences}
-          loading={liveGeofences.loading}
-          count={liveGeofences.geofences.length}
-          onToggle={() => {
-            if (!showGeofences) setGeofenceFitKey((k) => k + 1);
-            setShowGeofences((v) => !v);
+      </GeofenceToolbar>
+      {showIdling ? (
+        <IdlingPanel
+          vehicles={idling.data ?? []}
+          loading={idling.isPending}
+          selectedId={selectedVehicleId}
+          onSelect={(id) => {
+            setSelectedVehicleId(id); // the map follows it
+            if (window.innerWidth < 640) setFleetPanel(null);
           }}
-          onDraw={() => setDrawingGeofence(true)}
+          onClose={() => setShowIdling(false)}
         />
-      )}
+      ) : null}
 
-      {/* Floating Vehicles Panel on Left */}
-      <div className="absolute start-4 top-4 z-10 w-[300px] sm:w-[340px] max-h-[calc(100%-2rem)] flex flex-col rounded-3xl border border-border/70 bg-surface/95 backdrop-blur-md p-3 shadow-xl text-foreground overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between ps-1 pb-3 border-b border-border/50">
-          <div className="flex items-center gap-2">
-            <Navigation className="size-4.5 text-primary" />
-            <span className="font-bold text-sm text-foreground">{tNav("liveTracking")}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => vehiclesQuery.refetch()}
-            title="Refresh fleet data"
-            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-surface-2 transition-colors cursor-pointer"
-          >
-            <RefreshCw className={cn("size-3.5", vehiclesQuery.isFetching && "animate-spin text-primary")} />
-          </button>
-        </div>
-
-        {/* Search */}
-        <div className="relative py-3">
-          <Search className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search vehicles..."
-            className="h-8.5 w-full rounded-xl border border-border/80 bg-surface ps-8 pe-3 text-xs text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
-          />
-        </div>
-
-        {/* Vehicles list */}
-        <div className="-me-3 flex-1 overflow-y-auto space-y-1.5 pe-3 max-h-[380px] [scrollbar-width:thin]">
-          {filteredVehicles.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-6">
-              {vehiclesQuery.isPending ? "Loading real fleet data..." : "No vehicles found"}
-            </p>
-          ) : (
-            filteredVehicles.map((v) => {
-              const isSelected = v.id === selectedVehicleId;
-              const hasFix = v.lat !== null && v.lng !== null;
-              return (
-                <div
-                  key={v.id}
-                  onClick={() => hasFix && setSelectedVehicleId(v.id)}
-                  className={cn(
-                    "flex flex-col gap-1 p-2.5 rounded-xl border transition-all text-xs",
-                    hasFix ? "cursor-pointer" : "opacity-75 cursor-default",
-                    isSelected
-                      ? "border-primary bg-primary/5 shadow-xs"
-                      : "border-border/60 bg-surface hover:bg-surface-2/60",
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-bold">
-                      {v.kind === "bike" ? (
-                        <Bike className="size-3.5 text-slate-700" />
-                      ) : v.kind === "truck" ? (
-                        <Truck className="size-3.5 text-slate-700" />
-                      ) : (
-                        <CarFront className="size-3.5 text-slate-700" />
-                      )}
-                      <span dir="ltr">{v.plateNo}</span>
-                      {v.vehicleName && (
-                        <span className="font-normal text-muted-foreground truncate">({v.vehicleName})</span>
-                      )}
-                    </div>
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border",
-                        v.status === "moving"
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : v.status === "stopped"
-                            ? "bg-amber-50 text-amber-700 border-amber-200"
-                            : "bg-slate-50 text-slate-600 border-slate-200",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "size-1.5 rounded-full",
-                          v.status === "moving"
-                            ? "bg-emerald-500 animate-pulse"
-                            : v.status === "stopped"
-                              ? "bg-amber-500"
-                              : "bg-slate-400",
-                        )}
-                      />
-                      {v.status === "moving" ? `${v.speed} km/h` : v.status === "stopped" ? "Stopped" : "Offline"}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
-                    <span>{hasFix ? "GPS Connected" : "No recent GPS fix"}</span>
-                    {v.recordedAt && (
-                      <span className="font-mono text-[10px]" dir="ltr">
-                        {formatInCompanyTz(v.recordedAt, zone, TIME_PATTERN)}
-                      </span>
-                    )}
-                  </div>
-                  {readingsLine(v.readings, tMarker("ecoShort")) ? (
-                    <div className="text-[11px] text-muted-foreground tabular-nums" dir="ltr">
-                      {readingsLine(v.readings, tMarker("ecoShort"))}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
+      {fleetPanel ? (
+        <FleetPanel
+          key={fleetPanel}
+          mode={fleetPanel}
+          vehicles={vehicles}
+          loading={vehiclesQuery.isPending}
+          fetching={vehiclesQuery.isFetching}
+          selectedId={selectedVehicleId}
+          onRefresh={() => void vehiclesQuery.refetch()}
+          onSelect={(id) => {
+            setSelectedVehicleId(id); // the map follows it
+            if (window.innerWidth < 640) setFleetPanel(null); // phones: show the map again
+          }}
+          onClose={() => setFleetPanel(null)}
+        />
+      ) : null}
     </div>
   );
 }
