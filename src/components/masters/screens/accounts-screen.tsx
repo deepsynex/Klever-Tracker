@@ -1,7 +1,7 @@
 "use client";
 
 import { Building2, CircleCheck, Contact, FlaskConical, Plus, RotateCcw } from "lucide-react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ChildRowsEditor } from "@/components/masters/child-rows";
@@ -26,10 +26,8 @@ import {
   PAYMENT_MODES,
   type AccountForm,
 } from "@/lib/account-management/forms";
-import { emptyFirstAdmin, randomPassword, validateFirstAdmin, type FirstAdmin } from "@/lib/account-management/first-admin";
+import { emptyFirstAdmin, validateFirstAdmin, type FirstAdmin } from "@/lib/account-management/first-admin";
 import { MAX_CONTACTS, MAX_LENGTH, validateAccount, validateContact } from "@/lib/account-management/validation";
-import { gqlRequest } from "@/lib/graphql/client";
-import { FORGOT_PASSWORD, type ForgotPasswordResult } from "@/lib/graphql/operations";
 import {
   ACCOUNTS,
   CREATE_COMPANY,
@@ -231,7 +229,6 @@ function AccountSheet({
   users: Array<{ email?: string | null; username?: string | null }>;
   onClose: () => void;
 }) {
-  const locale = useLocale();
   const t = useTranslations("masters.am.accounts");
   const tc = useTranslations("masters.common");
   const tv = useTranslations("validation");
@@ -277,21 +274,13 @@ function AccountSheet({
               adminName: admin.adminName.trim(),
               adminEmail: admin.adminEmail.trim(),
               adminUsername: admin.adminUsername.trim(),
-              adminPassword: randomPassword(),
             }
           : {};
         const res = await run<{ createCompany: { id: string } }>(CREATE_COMPANY, { ...vars, ...firstAdmin, createdBy: lookups.meId });
         setCompanyId(res.createCompany.id);
         toast.success(t("createdNext"));
-        if (withFirstAdmin) {
-          // The admin's password is random and unknown: email them a link to set their own.
-          try {
-            await gqlRequest<ForgotPasswordResult>(FORGOT_PASSWORD, { email: admin.adminEmail.trim(), locale });
-            toast.success(t("firstAdmin.emailSent", { email: admin.adminEmail.trim() }));
-          } catch {
-            toast.warning(t("firstAdmin.emailFailed", { email: admin.adminEmail.trim() }));
-          }
-        }
+        // The backend emails the first admin a welcome with a set-password link (A5, valid 7 days).
+        if (withFirstAdmin) toast.success(t("firstAdmin.emailSent", { email: admin.adminEmail.trim() }));
       }
       savedRef.current = vars;
       setSavedForm(form);

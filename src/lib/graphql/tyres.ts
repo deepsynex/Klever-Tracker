@@ -12,7 +12,6 @@
 export const CUSTOMER_STATUSES = ["active", "inactive"] as const;
 /** How the vehicle is used: drives the tyre recommendations in later phases. */
 export const VEHICLE_APPLICATIONS = ["city", "regional", "long_haul", "on_off", "off_road"] as const;
-export type VehicleApplication = (typeof VEHICLE_APPLICATIONS)[number];
 
 export type Customer = {
   id: string;
@@ -50,6 +49,10 @@ export type CustomerVehicle = {
   dailyAvgRunningKm: number | null;
   photoPath: string | null;
   status: string;
+  /** Spares carried (0–4); positions SP1, SP2, … */
+  spareTyreCount: number;
+  /** Tyre size per axle (T5); axle 0 is the spare. */
+  axleTyreSizes: Array<{ axleNo: number; tyreSizeId: string | null }>;
 };
 
 export type TyreNamed = { id: string; companyId: string; name: string };
@@ -121,7 +124,7 @@ export const DELETE_CUSTOMER = /* GraphQL */ `
 // ---------------------------------------------------------------------------------------------
 
 const CUSTOMER_VEHICLE_FIELDS = `id companyId customerId plateNo vehicleName vehicleTypeId axleConfigurationId application createdAt updatedAt
-  dailyAvgRunningKm photoPath status`;
+  dailyAvgRunningKm photoPath status spareTyreCount axleTyreSizes { axleNo tyreSizeId }`;
 
 /** Customer trucks only (`ownFleet: false`), tracker or not. The GPS screens ask for `hasDevice: true`. */
 export const CUSTOMER_VEHICLES = /* GraphQL */ `
@@ -134,9 +137,10 @@ export const CUSTOMER_VEHICLES = /* GraphQL */ `
 export type CustomerVehiclesResult = { vehicles: { data: CustomerVehicle[] } };
 
 const CV_ARGS = `$vehicleName: String, $customerId: ID, $axleConfigurationId: ID, $application: String,
-  $dailyAvgRunningKm: Float, $photoPath: String, $status: String`;
+  $dailyAvgRunningKm: Float, $photoPath: String, $status: String, $spareTyreCount: Int`;
 const CV_PASS = `vehicleName: $vehicleName, customerId: $customerId, axleConfigurationId: $axleConfigurationId,
-  application: $application, dailyAvgRunningKm: $dailyAvgRunningKm, photoPath: $photoPath, status: $status`;
+  application: $application, dailyAvgRunningKm: $dailyAvgRunningKm, photoPath: $photoPath, status: $status,
+  spareTyreCount: $spareTyreCount`;
 
 /** A customer vehicle: no GPS fields (install date, payment type, limits are optional now). */
 export const CREATE_CUSTOMER_VEHICLE = /* GraphQL */ `
@@ -180,21 +184,27 @@ export type AxleConfigurationsResult = { axleConfigurations: AxleConfiguration[]
 export const TYRE_MASTERS = /* GraphQL */ `
   query TyreMasters($first: Int!) {
     tyreSizes(first: $first) {
-      data { createdAt updatedAt
+      data {
+        createdAt
+        updatedAt
         id
         companyId
         name
       }
     }
     tyreBrands(first: $first) {
-      data { createdAt updatedAt
+      data {
+        createdAt
+        updatedAt
         id
         companyId
         name
       }
     }
     tyreProducts(first: $first) {
-      data { createdAt updatedAt
+      data {
+        createdAt
+        updatedAt
         id
         companyId
         tyreSizeId
@@ -209,7 +219,9 @@ export const TYRE_MASTERS = /* GraphQL */ `
       }
     }
     tyreRecommendations(first: $first) {
-      data { createdAt updatedAt
+      data {
+        createdAt
+        updatedAt
         id
         companyId
         code
@@ -228,21 +240,14 @@ export type TyreMastersResult = {
 
 export type TyreNamedKind = "size" | "brand";
 
-/** Create / update / delete for the two name-only masters. */
-export const TYRE_NAMED_OPS: Record<
-  TyreNamedKind,
-  { create: string; update: string; remove: string; createField: string }
-> = {
+/** Create for the two name-only masters (added from the product form and the axle tyre sizes). */
+export const TYRE_NAMED_OPS: Record<TyreNamedKind, { create: string; createField: string }> = {
   size: {
     create: `mutation CreateTyreSize($companyId: ID!, $name: String!) { createTyreSize(companyId: $companyId, name: $name) { id } }`,
-    update: `mutation UpdateTyreSize($id: ID!, $name: String) { updateTyreSize(id: $id, name: $name) { id } }`,
-    remove: `mutation DeleteTyreSize($id: ID!) { deleteTyreSize(id: $id) { id } }`,
     createField: "createTyreSize",
   },
   brand: {
     create: `mutation CreateTyreBrand($companyId: ID!, $name: String!) { createTyreBrand(companyId: $companyId, name: $name) { id } }`,
-    update: `mutation UpdateTyreBrand($id: ID!, $name: String) { updateTyreBrand(id: $id, name: $name) { id } }`,
-    remove: `mutation DeleteTyreBrand($id: ID!) { deleteTyreBrand(id: $id) { id } }`,
     createField: "createTyreBrand",
   },
 };
@@ -288,6 +293,100 @@ export const UPDATE_TYRE_RECOMMENDATION = /* GraphQL */ `
 export const DELETE_TYRE_RECOMMENDATION = /* GraphQL */ `
   mutation DeleteTyreRecommendation($id: ID!) {
     deleteTyreRecommendation(id: $id) {
+      id
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------------------------
+// Tyre size per axle (T5), tyres and fitments (T6)
+// ---------------------------------------------------------------------------------------------
+
+/** Replaces a vehicle's tyre size per axle (axle 0 = spare; null clears one). */
+export const SET_VEHICLE_AXLE_TYRE_SIZES = /* GraphQL */ `
+  mutation SetVehicleAxleTyreSizes($vehicleId: ID!, $sizes: [AxleTyreSizeInput!]!) {
+    setVehicleAxleTyreSizes(vehicleId: $vehicleId, sizes: $sizes) {
+      id
+    }
+  }
+`;
+
+/** What happened to a tyre taken off the vehicle. */
+export const TYRE_DISPOSITIONS = ["retreaded", "repaired", "scrapped", "store", "sold", "other"] as const;
+export type TyreDisposition = (typeof TYRE_DISPOSITIONS)[number];
+
+/** Every tyre position of a vehicle (spares included) with its axle's size and the tyre on it now. */
+export const VEHICLE_TYRE_POSITIONS = /* GraphQL */ `
+  query VehicleTyrePositions($id: ID!) {
+    vehicle(id: $id) {
+      id
+      spareTyreCount
+      tyrePositions {
+        code
+        axleNo
+        side
+        placement
+        isSpare
+        sortOrder
+        fitted
+        tyreSizeId
+        tyreSize {
+          id
+          name
+        }
+        tyre {
+          id
+          serialNo
+          status
+          treadDepthMm
+          product {
+            displayName
+          }
+        }
+        fitment {
+          id
+          fittedAt
+        }
+      }
+    }
+  }
+`;
+export type VehicleTyrePosition = {
+  code: string;
+  axleNo: number;
+  side: "left" | "right" | null;
+  placement: "single" | "inner" | "outer" | null;
+  isSpare: boolean;
+  sortOrder: number;
+  /** Whether the position has a tyre (saved with saveVehicleTyrePlan; true by default where the axle has a size). */
+  fitted: boolean;
+  tyreSizeId: string | null;
+  tyreSize: { id: string; name: string } | null;
+  tyre: {
+    id: string;
+    serialNo: string;
+    status: string;
+    treadDepthMm: number | null;
+    product: { displayName: string } | null;
+  } | null;
+  fitment: { id: string; fittedAt: string } | null;
+};
+export type VehicleTyrePositionsResult = {
+  vehicle: { id: string; spareTyreCount: number; tyrePositions: VehicleTyrePosition[] } | null;
+};
+
+/**
+ * Saves the tyre plan from the axle drawing in one go (API Doc §6.23): every position (spares included)
+ * and whether it has a tyre, plus what happened to each tyre that came off. A position that goes from
+ * fitted to empty needs a removal; a removal on a position that stays fitted counts as a replacement.
+ */
+export const SAVE_VEHICLE_TYRE_PLAN = /* GraphQL */ `
+  mutation SaveVehicleTyrePlan(
+    $vehicleId: ID!
+    $positions: [TyrePlanPositionInput!]!
+    $removals: [TyrePlanRemovalInput!]
+  ) {
+    saveVehicleTyrePlan(vehicleId: $vehicleId, positions: $positions, removals: $removals) {
       id
     }
   }

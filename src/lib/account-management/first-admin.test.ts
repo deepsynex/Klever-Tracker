@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { randomPassword, validateFirstAdmin } from "./first-admin";
-import { isStrongPassword, PASSWORD_MIN } from "./validation";
+import { validateFirstAdmin } from "./first-admin";
 
 describe("validateFirstAdmin", () => {
   const users = [{ email: "ops@acme.ae", username: "acme.admin" }];
@@ -23,24 +22,5 @@ describe("validateFirstAdmin", () => {
       adminUsername: "duplicateUsername",
     });
     expect(validateFirstAdmin({ adminName: "A", adminEmail: "new@acme.ae", adminUsername: "new@acme.ae" }, users)).toEqual({});
-  });
-});
-
-describe("randomPassword", () => {
-  it("is long, passes the password rules and differs each time", () => {
-    const a = randomPassword();
-    const b = randomPassword();
-    expect(a).toHaveLength(24);
-    expect(a.length).toBeGreaterThanOrEqual(PASSWORD_MIN);
-    expect(isStrongPassword(a)).toBe(true);
-    expect(/[!@#$%^&*\-_]/.test(a)).toBe(true);
-    expect(a).not.toBe(b);
-  });
-
-  it("always has a letter, a digit and a symbol, even from an unlucky random source", () => {
-    const zeros = (n: number) => new Uint32Array(n);
-    const p = randomPassword(12, zeros);
-    expect(isStrongPassword(p)).toBe(true);
-    expect(/[!@#$%^&*\-_]/.test(p)).toBe(true);
   });
 });

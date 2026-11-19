@@ -5,6 +5,7 @@ import {
   validateCustomerVehicle,
   validateRecommendation,
   validateTyreProduct,
+  validateTyreSettings,
 } from "./validation";
 
 describe("validateCustomer", () => {
@@ -93,5 +94,24 @@ describe("validateRecommendation", () => {
   it("suggests a code from the title", () => {
     expect(codeFromTitle("Check Wheel Balance")).toBe("check_wheel_balance");
     expect(codeFromTitle("  3 axle — check! ")).toBe("r_3_axle_check");
+  });
+});
+
+describe("validateTyreSettings", () => {
+  const ok = { treadCriticalMm: "6", treadReplaceMm: "3", pressureTolerancePct: "10" };
+  it("accepts the defaults", () => {
+    expect(validateTyreSettings(ok)).toEqual({});
+  });
+  it("needs every value, in range, with the replace depth below the critical one", () => {
+    expect(validateTyreSettings({ treadCriticalMm: "", treadReplaceMm: "0", pressureTolerancePct: "" })).toEqual({
+      treadCriticalMm: "required",
+      treadReplaceMm: "positive",
+      pressureTolerancePct: "required",
+    });
+    expect(validateTyreSettings({ ...ok, treadReplaceMm: "6" })).toEqual({ treadReplaceMm: "replaceBelowCritical" });
+    expect(validateTyreSettings({ ...ok, treadCriticalMm: "45", pressureTolerancePct: "150" })).toEqual({
+      treadCriticalMm: "treadRange",
+      pressureTolerancePct: "percent",
+    });
   });
 });

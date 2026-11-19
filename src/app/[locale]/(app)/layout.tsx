@@ -15,7 +15,7 @@ export default function AppLayout({ children }: LayoutProps<"/[locale]">) {
   return (
     <div className="flex min-h-dvh flex-col">
       {/* Exactly 4rem tall including the border: the full-screen map pages size themselves as 100dvh - 4rem. */}
-      <header className="sticky top-0 z-20 h-16 border-b border-border/70 bg-surface/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-20 h-16 border-b border-border/70 bg-surface/80 backdrop-blur-xl print:hidden">
         <div className="flex h-full items-center gap-3 px-4 sm:px-6 xl:gap-6">
           <Link href="/dashboard" className="shrink-0 rounded-lg">
             <Brand className="h-10 sm:h-11" />
@@ -38,7 +38,7 @@ export default function AppLayout({ children }: LayoutProps<"/[locale]">) {
       {/* Live notification socket and toasts, once for the whole signed-in app. */}
       <NotificationsRealtime />
       <PushHeal />
-      <main id="main" className="flex-1 px-4 py-6 sm:px-6">
+      <main id="main" className="flex-1 px-4 py-6 sm:px-6 print:p-0">
         <TimeZoneSync>
           <RouteGuard>{children}</RouteGuard>
         </TimeZoneSync>

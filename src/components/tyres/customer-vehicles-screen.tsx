@@ -17,16 +17,20 @@ import { Select } from "@/components/ui/select";
 import { Sheet } from "@/components/ui/sheet";
 import {
   CREATE_CUSTOMER_VEHICLE,
+  SET_VEHICLE_AXLE_TYRE_SIZES,
+  TYRE_NAMED_OPS,
   UPDATE_CUSTOMER_VEHICLE,
   VEHICLE_APPLICATIONS,
   type CustomerVehicle,
 } from "@/lib/graphql/tyres";
 import { DELETE_VEHICLE, LOOKUP_OPS } from "@/lib/graphql/vehicle-management";
-import { useAxleConfigurations, useCustomers, useCustomerVehicles } from "@/lib/tyres/use-tyres";
+import { axleSizeSlots, MAX_SPARES, SPARE_AXLE } from "@/lib/tyres/axle-layout";
+import { useAxleConfigurations, useCustomers, useCustomerVehicles, useTyreMasters } from "@/lib/tyres/use-tyres";
 import { validateCustomerVehicle } from "@/lib/tyres/validation";
-import { numberOrNull, numText, textOrNull } from "@/lib/vehicle-management/helpers";
+import { intOrNull, numberOrNull, numText, textOrNull } from "@/lib/vehicle-management/helpers";
 import { useErrorText, useVmLookups, useVmMutations } from "@/lib/vehicle-management/use-vm";
 import { validateLookupName } from "@/lib/vehicle-management/validation";
+import { AxleConfigSheet } from "./axle-diagram";
 import { useTyreLabels } from "./tyre-labels";
 
 const FIELDS = [
@@ -39,6 +43,7 @@ const FIELDS = [
   "dailyAvgRunningKm",
   "photoPath",
   "status",
+  "spareTyreCount",
 ] as const;
 type VehicleForm = Record<(typeof FIELDS)[number], string>;
 
@@ -54,6 +59,7 @@ function toForm(v: CustomerVehicle | null, customerId = ""): VehicleForm {
       dailyAvgRunningKm: "",
       photoPath: "",
       status: "active",
+      spareTyreCount: "1",
     };
   return Object.fromEntries(
     FIELDS.map((k) => [k, k === "dailyAvgRunningKm" ? numText(v.dailyAvgRunningKm) : String(v[k] ?? "")]),
@@ -72,8 +78,14 @@ function toVariables(form: VehicleForm): Record<string, unknown> {
     dailyAvgRunningKm: numberOrNull(form.dailyAvgRunningKm),
     photoPath: textOrNull(form.photoPath),
     status: form.status,
+    spareTyreCount: intOrNull(form.spareTyreCount),
   };
 }
+
+type AxleTyreSizes = Record<number, string>;
+/** The vehicle's saved tyre size per axle (T5), as form values. */
+const sizesOf = (v: CustomerVehicle | null): AxleTyreSizes =>
+  Object.fromEntries((v?.axleTyreSizes ?? []).filter((s) => s.tyreSizeId).map((s) => [s.axleNo, s.tyreSizeId!]));
 
 /** Customer vehicles: the trucks whose tyres are managed for a customer. They have no GPS device. */
 export function CustomerVehiclesScreen() {
@@ -91,6 +103,8 @@ export function CustomerVehiclesScreen() {
   const [applicationFilter, setApplicationFilter] = useState("");
   const [editing, setEditing] = useState<CustomerVehicle | "new" | null>(null);
   const [deleting, setDeleting] = useState<CustomerVehicle | null>(null);
+  // The vehicle whose axle configuration is open (clicked in the table).
+  const [axleOf, setAxleOf] = useState<CustomerVehicle | null>(null);
 
   const customerList = useMemo(
     () =>
@@ -101,6 +115,7 @@ export function CustomerVehiclesScreen() {
   );
   const customerById = useMemo(() => new Map(customerList.map((c) => [c.id, c])), [customerList]);
   const axleById = useMemo(() => new Map((axles.data ?? []).map((a) => [a.id, a])), [axles.data]);
+  const axleConfig = axleOf?.axleConfigurationId ? axleById.get(axleOf.axleConfigurationId) : undefined;
   const allRows = useMemo(
     () =>
       [...(list.data?.vehicles?.data ?? [])]
@@ -246,7 +261,21 @@ export function CustomerVehiclesScreen() {
             key: "axle",
             header: t("f.axle"),
             sortValue: (v) => (v.axleConfigurationId ? labels.axle(axleById.get(v.axleConfigurationId)) : ""),
-            cell: (v) => (v.axleConfigurationId ? labels.axle(axleById.get(v.axleConfigurationId)) : "—"),
+            // Opens the vehicle's axle layout with its tyre positions.
+            cell: (v) => {
+              const cfg = v.axleConfigurationId ? axleById.get(v.axleConfigurationId) : undefined;
+              if (!cfg) return v.axleConfigurationId ? labels.axle(cfg) : "—";
+              return (
+                <button
+                  type="button"
+                  onClick={() => setAxleOf(v)}
+                  title={t("showAxles")}
+                  className="rounded-md px-1.5 py-0.5 text-start font-medium text-primary underline-offset-2 hover:bg-primary-soft hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                >
+                  {labels.axle(cfg)}
+                </button>
+              );
+            },
           },
           {
             key: "application",
@@ -283,6 +312,19 @@ export function CustomerVehiclesScreen() {
             .filter((v) => editing === "new" || v.id !== editing.id)
             .map((v) => v.plateNo)}
           onClose={() => setEditing(null)}
+        />
+      ) : null}
+
+      {axleOf && axleConfig ? (
+        <AxleConfigSheet
+          vehicleId={axleOf.id}
+          plate={axleOf.plateNo}
+          vehicleName={axleOf.vehicleName}
+          customerName={customerName(axleOf.customerId)}
+          application={axleOf.application}
+          dailyKm={axleOf.dailyAvgRunningKm}
+          config={axleConfig}
+          onClose={() => setAxleOf(null)}
         />
       ) : null}
 
@@ -324,9 +366,32 @@ function CustomerVehicleSheet({
   const { run, refresh, failInto } = useVmMutations();
   const [saved, setSaved] = useState(() => toForm(vehicle, defaultCustomerId));
   const [form, setForm] = useState(saved);
+  // Tyre size per axle (kept in this browser until the backend stores it, request T5).
+  const [savedSizes] = useState<AxleTyreSizes>(() => sizesOf(vehicle));
+  const [axleSizes, setAxleSizes] = useState<AxleTyreSizes>(savedSizes);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
-  const guard = useDiscardGuard(isDirty(form, saved), onClose);
+  const guard = useDiscardGuard(isDirty(form, saved) || isDirty(axleSizes, savedSizes), onClose);
+  const masters = useTyreMasters();
+  const tyreSizes = useMemo(
+    () =>
+      (masters.data?.tyreSizes?.data ?? [])
+        .filter((s) => lookups.inScope(s.companyId))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
+    [masters.data, lookups],
+  );
+  const selectedAxle = (axles.data ?? []).find((a) => a.id === form.axleConfigurationId);
+  const sizeSlots = selectedAxle ? axleSizeSlots(selectedAxle.positions, Number(form.spareTyreCount) || 0) : [];
+  const slotName = (slot: (typeof sizeSlots)[number]) =>
+    slot.kind === "spare"
+      ? t("sizes.spare")
+      : slot.kind === "steer"
+        ? t("sizes.steer")
+        : slot.kind === "drive"
+          ? t("sizes.drive", { n: slot.kindNo })
+          : slot.kind === "trailer"
+            ? t("sizes.trailer", { n: slot.kindNo })
+            : t("sizes.axle", { n: slot.axleNo });
 
   const set = (key: keyof VehicleForm, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -341,8 +406,22 @@ function CustomerVehicleSheet({
     setPending(true);
     try {
       const vars = toVariables(form);
+      let id = vehicle?.id;
       if (vehicle) await run(UPDATE_CUSTOMER_VEHICLE, { id: vehicle.id, ...vars }, { previous: toVariables(saved) });
-      else await run(CREATE_CUSTOMER_VEHICLE, { companyId: lookups.companyId, ...vars });
+      else
+        id = (
+          await run<{ createVehicle: { id: string } }>(CREATE_CUSTOMER_VEHICLE, {
+            companyId: lookups.companyId,
+            ...vars,
+          })
+        ).createVehicle.id;
+      // Tyre size per axle (T5): saved with the vehicle when there's an axle layout and something changed.
+      if (id && sizeSlots.length && (!vehicle || isDirty(axleSizes, savedSizes))) {
+        await run(SET_VEHICLE_AXLE_TYRE_SIZES, {
+          vehicleId: id,
+          sizes: sizeSlots.map((s) => ({ axleNo: s.axleNo, tyreSizeId: axleSizes[s.axleNo] || null })),
+        });
+      }
       setSaved(form);
       await refresh();
       toast.success(tc("saved"));
@@ -485,7 +564,66 @@ function CustomerVehicleSheet({
             </Select>
           </Field>
           {text("dailyAvgRunningKm", t("f.dailyAvgKm"), { type: "number" })}
+          <Field id="cv-spareTyreCount" label={t("f.spares")} hint={t("f.sparesHint")}>
+            <Select
+              id="cv-spareTyreCount"
+              value={form.spareTyreCount}
+              onChange={(e) => set("spareTyreCount", e.target.value)}
+            >
+              {Array.from({ length: MAX_SPARES + 1 }, (_, n) => (
+                <option key={n} value={String(n)}>
+                  {t("f.spareCount", { n })}
+                </option>
+              ))}
+            </Select>
+          </Field>
         </FormSection>
+
+        {selectedAxle ? (
+          <FormSection title={t("sizes.title")} description={t("sizes.description")}>
+            {sizeSlots.map((slot) => (
+              <Field
+                key={slot.axleNo}
+                id={`cv-size-${slot.axleNo}`}
+                label={`${slotName(slot)} · ${t("tyreCount", { n: slot.tyres })}`}
+              >
+                <SelectWithAdd
+                  id={`cv-size-${slot.axleNo}`}
+                  value={axleSizes[slot.axleNo] ?? ""}
+                  onChange={(v) => setAxleSizes((s) => ({ ...s, [slot.axleNo]: v }))}
+                  placeholder={t("sizes.choose")}
+                  options={tyreSizes.map((s) => ({ id: s.id, label: s.name }))}
+                  addLabel={t("sizes.add")}
+                  canAdd={lookups.allow("tyres", "add")}
+                  validate={({ name }) => validateLookupName(name, tyreSizes)}
+                  onCreate={async ({ name }) => {
+                    const res = await run<{ createTyreSize: { id: string } }>(TYRE_NAMED_OPS.size.create, {
+                      companyId: lookups.companyId,
+                      name,
+                    });
+                    await refresh();
+                    return res.createTyreSize.id;
+                  }}
+                />
+              </Field>
+            ))}
+            {sizeSlots.length > 1 ? (
+              <div className="flex items-end sm:col-span-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!axleSizes[sizeSlots.find((s) => s.axleNo !== SPARE_AXLE)?.axleNo ?? -1]}
+                  onClick={() => {
+                    const first = axleSizes[sizeSlots.find((s) => s.axleNo !== SPARE_AXLE)!.axleNo]!;
+                    setAxleSizes(Object.fromEntries(sizeSlots.map((s) => [s.axleNo, first])));
+                  }}
+                >
+                  {t("sizes.useForAll")}
+                </Button>
+              </div>
+            ) : null}
+          </FormSection>
+        ) : null}
 
         <FormSection title={t("sections.photo")} columns={1}>
           <Field id="cv-photoPath" label={t("f.photo")}>

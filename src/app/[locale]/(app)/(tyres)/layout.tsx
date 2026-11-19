@@ -8,7 +8,9 @@ export default function TyresLayout({ children }: { children: ReactNode }) {
   return (
     <CompanyScopeProvider>
       <div className="mx-auto grid max-w-[1400px] gap-4">
-        <CompanyPicker />
+        <div className="print:hidden">
+          <CompanyPicker />
+        </div>
         <ModuleGuard which="tyres">{children}</ModuleGuard>
       </div>
     </CompanyScopeProvider>

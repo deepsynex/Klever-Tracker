@@ -355,9 +355,12 @@ function RuleSheet({
     const repeat = form.repeatMinutes.trim();
     if (repeat && (!/^\d+$/.test(repeat) || Number(repeat) > 10_080)) found.repeatMinutes = `server:${t("errors.repeat")}`;
     if (!form.notifyInApp && !form.notifyEmail && !form.notifyPush) found.channels = t("errors.channel");
-    if (form.recipients.length === 0) found.recipients = t("errors.noRecipients");
-    else if (Object.keys(rowErrors).length) found.recipients = t("errors.fixRecipients");
-    else if (form.notifyEmail && !hasToRecipient(form.recipients)) found.recipients = t("errors.needTo");
+    // Recipients only receive the email: the app and push reach the company's users without them.
+    if (form.notifyEmail) {
+      if (form.recipients.length === 0) found.recipients = t("errors.noRecipients");
+      else if (Object.keys(rowErrors).length) found.recipients = t("errors.fixRecipients");
+      else if (!hasToRecipient(form.recipients)) found.recipients = t("errors.needTo");
+    }
     return found;
   };
 
@@ -495,8 +498,10 @@ function RuleSheet({
           </div>
           {errors.channels ? <p className="text-xs font-medium text-destructive">{errors.channels}</p> : null}
           {form.notifyEmail ? <p className="text-xs text-muted-foreground">{t("emailTemplateHint")}</p> : null}
+          {form.notifyInApp || form.notifyPush ? <p className="text-xs text-muted-foreground">{t("reachHint")}</p> : null}
         </FormSection>
 
+        {form.notifyEmail ? (
         <FormSection title={t("sections.who")} description={ccSupported ? t("whoHint") : t("whoHintNoCc")} columns={1}>
           <div className="grid gap-2">
             {form.recipients.map((r, i) => {
@@ -590,6 +595,7 @@ function RuleSheet({
             {errors.recipients ? <p className="text-xs font-medium text-destructive">{errors.recipients}</p> : null}
           </div>
         </FormSection>
+        ) : null}
         {form.notifyEmail ? (
           <FormSection title={t("preview.title")} description={t("preview.hint")} columns={1}>
             <EmailPreview
