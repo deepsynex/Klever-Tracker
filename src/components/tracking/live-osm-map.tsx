@@ -31,7 +31,15 @@ export function LiveOsmMap<V extends OsmVehicle>({
   panelPx,
   mapView = "map",
   onMapView,
+  following = false,
+  followKey = 0,
+  onStopFollow,
 }: {
+  /** Keep the selected vehicle centred as it moves; `followKey` changes on every pick (zoom to it again). */
+  following?: boolean;
+  followKey?: number;
+  /** The user dragged the map: stop following. */
+  onStopFollow?: () => void;
   /** Map or satellite (MapTiler's hybrid style), and the switch's handler. */
   mapView?: MapView;
   onMapView?: (view: MapView) => void;
@@ -60,7 +68,14 @@ export function LiveOsmMap<V extends OsmVehicle>({
     >
       <NavigationControl position="bottom-right" showCompass={false} />
       {onMapView ? <OsmMapViewControl view={mapView} onView={onMapView} /> : null}
-      <FollowController selected={selected} vehicles={vehicles} panelPx={panelPx} />
+      <FollowController
+        selected={selected}
+        vehicles={vehicles}
+        panelPx={panelPx}
+        following={following}
+        followKey={followKey}
+        onStopFollow={onStopFollow}
+      />
       <OsmGeofences geofences={geofences} fitKey={geofenceFitKey} />
       <OsmVehicles
         vehicles={vehicles}
@@ -75,24 +90,72 @@ export function LiveOsmMap<V extends OsmVehicle>({
   );
 }
 
-/** Follows the selected vehicle, or fits every vehicle when none is selected. */
-function FollowController({ selected, vehicles, panelPx }: { selected: OsmVehicle | null; vehicles: OsmVehicle[]; panelPx: () => number }) {
+/**
+ * Fits every vehicle once when they first load (not on each refresh, so the user's own view stays),
+ * zooms to a vehicle each time it's picked, and keeps it centred while following. Dragging the map
+ * stops following.
+ */
+function FollowController({
+  selected,
+  vehicles,
+  panelPx,
+  following,
+  followKey,
+  onStopFollow,
+}: {
+  selected: OsmVehicle | null;
+  vehicles: OsmVehicle[];
+  panelPx: () => number;
+  following: boolean;
+  followKey: number;
+  onStopFollow?: () => void;
+}) {
   const { current: map } = useMap();
+  const fitted = useRef(false);
+  const selectedRef = useRef(selected);
+  useEffect(() => {
+    selectedRef.current = selected;
+  });
 
   useEffect(() => {
-    if (!map) return;
-    if (selected?.lat && selected.lng) {
-      map.flyTo({ center: [selected.lng, selected.lat], zoom: 14, duration: 800 });
-      return;
-    }
+    if (!map || fitted.current || selected) return;
     const valid = vehicles.filter((v) => v.lat && v.lng);
+    if (!valid.length) return;
+    fitted.current = true;
     if (valid.length === 1) {
       map.flyTo({ center: [valid[0].lng!, valid[0].lat!], zoom: 13, duration: 0 });
-    } else if (valid.length > 1) {
+    } else {
       // The Vehicles & Drivers panel (340px + gap), when open, floats over the start side.
       map.fitBounds(boundsOf(valid.map((v) => ({ lat: v.lat!, lng: v.lng! })))!, { padding: fitPadding(panelPx()), duration: 0, maxZoom: 15 });
     }
   }, [map, selected, vehicles, panelPx]);
+
+  // Zoom to the vehicle once per pick (and once its position is known).
+  const selectedId = selected?.id ?? null;
+  const located = Boolean(selected?.lat && selected?.lng);
+  useEffect(() => {
+    const s = selectedRef.current;
+    if (!map || !s?.lat || !s.lng) return;
+    fitted.current = true;
+    map.flyTo({ center: [s.lng, s.lat], zoom: Math.max(map.getZoom(), 15), duration: 800 });
+  }, [map, selectedId, located, followKey]);
+
+  // Keep it centred as it moves (not while the map is flying there or being zoomed).
+  const lat = selected?.lat ?? null;
+  const lng = selected?.lng ?? null;
+  useEffect(() => {
+    if (!map || !following || lat === null || lng === null || map.isMoving()) return;
+    map.jumpTo({ center: [lng, lat] });
+  }, [map, following, lat, lng]);
+
+  useEffect(() => {
+    if (!map || !onStopFollow) return;
+    const m = map.getMap();
+    m.on("dragstart", onStopFollow);
+    return () => {
+      m.off("dragstart", onStopFollow);
+    };
+  }, [map, onStopFollow]);
 
   return null;
 }

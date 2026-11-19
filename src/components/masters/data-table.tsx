@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useMemo, useState, type ReactNode } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Select } from "@/components/ui/select";
+import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { cn } from "@/lib/utils";
 
 export type Column<T> = {
@@ -20,6 +21,10 @@ export type Column<T> = {
 
 const PAGE_SIZES = [10, 25, 50, 100];
 
+/** Rows that carry the record's API timestamps (UTC "YYYY-MM-DD HH:MM:SS"). */
+type Timestamped = { createdAt?: string | null; updatedAt?: string | null };
+const hasTimestamps = (rows: object[]) => rows.some((r) => "createdAt" in r || "updatedAt" in r);
+
 /** Card surface shared by the toolbar and the table, the same as on Vehicle details. */
 export const PANEL = "rounded-2xl border border-border/70 bg-surface shadow-sm";
 
@@ -34,10 +39,12 @@ const TOOLBAR_CONTROLS =
  * List for master screens, laid out like Vehicle details: a toolbar card (search, filters, row
  * count, actions) and a table card with sortable headers, row actions and a "Show N entries"
  * pager. Searching and paging are client side. `searchText` returns the text a row is searched by.
+ * Rows with `createdAt` / `updatedAt` get sortable Created and Updated columns at the end, in the
+ * company's time zone (`timestamps={false}` hides them).
  */
 export function DataTable<T extends { id: string }>({
   rows,
-  columns,
+  columns: baseColumns,
   loading,
   error,
   searchText,
@@ -48,6 +55,7 @@ export function DataTable<T extends { id: string }>({
   filters,
   emptyText,
   caption,
+  timestamps = true,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -63,8 +71,22 @@ export function DataTable<T extends { id: string }>({
   filters?: ReactNode;
   emptyText?: ReactNode;
   caption: string;
+  /** Show the Created and Updated columns when the rows have them (default). */
+  timestamps?: boolean;
 }) {
   const t = useTranslations("masters.common");
+  const zone = useCompanyTimeZone();
+  const columns = useMemo<Column<T>[]>(() => {
+    if (!timestamps || !hasTimestamps(rows)) return baseColumns;
+    const time = (key: "createdAt" | "updatedAt", header: string): Column<T> => ({
+      key: `_${key}`,
+      header,
+      className: "whitespace-nowrap text-xs text-muted-foreground",
+      sortValue: (r) => (r as Timestamped)[key] ?? null,
+      cell: (r) => <span dir="ltr">{formatInCompanyTz((r as Timestamped)[key], zone, "dd-MM-yyyy HH:mm")}</span>,
+    });
+    return [...baseColumns, time("createdAt", t("createdAt")), time("updatedAt", t("updatedAt"))];
+  }, [baseColumns, rows, timestamps, zone, t]);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);

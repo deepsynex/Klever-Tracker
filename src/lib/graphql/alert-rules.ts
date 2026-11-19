@@ -33,11 +33,15 @@ export type AlertRule = {
   emailMessage: string | null;
   minRepeatIntervalMinutes: number | null;
   recipients: AlertRuleRecipient[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 const RULE_FIELDS = `
   id
   companyId
+  createdAt
+  updatedAt
   eventTypeId
   name
   description

@@ -1,7 +1,7 @@
 "use client";
 
 import { AdvancedMarker, AdvancedMarkerAnchorPoint, APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
-import { Bike, CarFront, Timer, Truck, UserSearch } from "lucide-react";
+import { Bike, CarFront, LocateFixed, Timer, Truck, UserSearch, X } from "lucide-react";
 import { useFormatter, useNow, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -29,7 +29,11 @@ import { FleetPanel, type FleetPanelMode } from "./fleet-panel";
 import { IdlingPanel } from "./idling-panel";
 import { GoogleMapViewControl } from "./map-view-switch";
 import { GeofenceToolbar, GoogleGeofenceLayer, ToolbarButton, useLiveGeofences } from "./live-geofences";
+import { useGlidingVehicles } from "./use-gliding-vehicles";
 import { CarTopDown, ClusterBubble, PlateTag } from "./vehicle-marker";
+
+/** How often the live map asks for every vehicle's newest fix; a moving vehicle glides between them. */
+const LIVE_REFRESH_MS = 30_000;
 
 // MapLibre is only downloaded when the platform uses OpenStreetMap.
 const LiveOsmMap = dynamic(() => import("./live-osm-map").then((m) => m.LiveOsmMap), {
@@ -295,30 +299,42 @@ function getCategory(plate: string, name?: string | null): "truck" | "van" | "bi
   return "car";
 }
 
+/**
+ * Fits every vehicle once when they first load (not on each refresh, so the user's own view stays),
+ * zooms to a vehicle each time it's picked, and keeps it centred while following, as it glides.
+ * Dragging the map stops following (same rules as the OpenStreetMap map).
+ */
 function MapController({
   selected,
   vehicles,
   panelPx,
+  following,
+  followKey,
+  onStopFollow,
 }: {
   selected: LiveVehicle | null;
   vehicles: LiveVehicle[];
   panelPx: () => number;
+  following: boolean;
+  followKey: number;
+  onStopFollow: () => void;
 }) {
   const map = useMap();
+  const fitted = useRef(false);
+  const selectedRef = useRef(selected);
+  useEffect(() => {
+    selectedRef.current = selected;
+  });
 
   useEffect(() => {
-    if (!map) return;
-    if (selected && selected.lat && selected.lng) {
-      map.panTo({ lat: selected.lat, lng: selected.lng });
-      map.setZoom(14);
-      return;
-    }
-
+    if (!map || fitted.current || selected) return;
     const valid = vehicles.filter((v) => v.lat && v.lng);
-    if (valid.length === 1 && valid[0].lat && valid[0].lng) {
-      map.panTo({ lat: valid[0].lat, lng: valid[0].lng });
+    if (!valid.length) return;
+    fitted.current = true;
+    if (valid.length === 1) {
+      map.panTo({ lat: valid[0].lat!, lng: valid[0].lng! });
       map.setZoom(13);
-    } else if (valid.length > 1) {
+    } else {
       const bounds = new google.maps.LatLngBounds();
       valid.forEach((v) => bounds.extend({ lat: v.lat!, lng: v.lng! }));
       // Extra room on the side the Vehicles & Drivers panel covers, while it's open (same rule as the OpenStreetMap map).
@@ -328,6 +344,31 @@ function MapController({
     }
   }, [map, selected, vehicles, panelPx]);
 
+  // Zoom to the vehicle once per pick (and once its position is known).
+  const selectedId = selected?.id ?? null;
+  const located = Boolean(selected?.lat && selected?.lng);
+  useEffect(() => {
+    const s = selectedRef.current;
+    if (!map || !s?.lat || !s.lng) return;
+    fitted.current = true;
+    map.panTo({ lat: s.lat, lng: s.lng });
+    if ((map.getZoom() ?? 0) < 15) map.setZoom(15);
+  }, [map, selectedId, located, followKey]);
+
+  // Keep it centred as it glides.
+  const lat = selected?.lat ?? null;
+  const lng = selected?.lng ?? null;
+  useEffect(() => {
+    if (!map || !following || lat === null || lng === null) return;
+    map.setCenter({ lat, lng });
+  }, [map, following, lat, lng]);
+
+  useEffect(() => {
+    if (!map) return;
+    const listener = map.addListener("dragstart", onStopFollow);
+    return () => listener.remove();
+  }, [map, onStopFollow]);
+
   return null;
 }
 
@@ -336,6 +377,16 @@ export function LiveTrackingView() {
   const mapConfig = useMapConfig();
   const apiKey = mapConfig.googleMapsApiKey ?? "";
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  // Picking a vehicle (map, lists, notifications) follows it: the map keeps it centred as it moves.
+  const [following, setFollowing] = useState(false);
+  const [followKey, setFollowKey] = useState(0);
+  const pickVehicle = useCallback((id: string) => {
+    setSelectedVehicleId(id);
+    setFollowing(true);
+    setFollowKey((k) => k + 1);
+  }, []);
+  const stopFollowing = useCallback(() => setFollowing(false), []);
+  const tFollow = useTranslations("tracking.live.follow");
   // Search Vehicle / Search Driver open from the toolbar, one at a time (closed at first, so the map shows).
   const [fleetPanel, setFleetPanel] = useState<FleetPanelMode | null>(null);
   const fleetOpen = fleetPanel !== null;
@@ -368,12 +419,12 @@ export function LiveTrackingView() {
     queueMicrotask(() => {
       if (cancelled) return;
       pendingFocus = null;
-      setSelectedVehicleId(id);
+      pickVehicle(id);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [pickVehicle]);
 
   // Query vehicles from real database
   const vehiclesQuery = useQuery({
@@ -451,14 +502,16 @@ export function LiveTrackingView() {
 
       return items;
     },
-    refetchInterval: 30_000,
+    refetchInterval: LIVE_REFRESH_MS,
   });
 
   const vehicles = useMemo(() => vehiclesQuery.data ?? [], [vehiclesQuery.data]);
+  // As drawn now: moving vehicles glide to each new fix (the lists use the fixes themselves).
+  const shown = useGlidingVehicles(vehicles, LIVE_REFRESH_MS);
 
   const selectedVehicle = useMemo(
-    () => vehicles.find((v) => v.id === selectedVehicleId) ?? null,
-    [vehicles, selectedVehicleId],
+    () => shown.find((v) => v.id === selectedVehicleId) ?? null,
+    [shown, selectedVehicleId],
   );
 
   return (
@@ -469,17 +522,20 @@ export function LiveTrackingView() {
       ) : mapConfig.mapProvider === "osm" && mapConfig.maptilerApiKey ? (
         <LiveOsmMap
           maptilerKey={mapConfig.maptilerApiKey}
-          vehicles={vehicles}
+          vehicles={shown}
           selected={selectedVehicle}
           selectedId={selectedVehicleId}
           hoveredId={hoveredVehicleId}
+          following={following}
+          followKey={followKey}
+          onStopFollow={stopFollowing}
           geofences={shownGeofences}
           geofenceFitKey={geofenceFitKey}
           clusterLabel={(count) => tMarker("cluster", { count })}
           panelPx={panelPx}
           mapView={mapView}
           onMapView={setMapView}
-          onSelect={setSelectedVehicleId}
+          onSelect={pickVehicle}
           onHover={(id) => setHoveredVehicleId((current) => (id === null && current !== null ? null : id))}
           renderMarker={(v) => (
             <VehicleArrow vehicle={v} selected={v.id === selectedVehicleId} hovered={v.id === hoveredVehicleId} />
@@ -499,14 +555,21 @@ export function LiveTrackingView() {
             fullscreenControl={false}
             zoomControl={true}
           >
-            <MapController selected={selectedVehicle} vehicles={vehicles} panelPx={panelPx} />
+            <MapController
+              selected={selectedVehicle}
+              vehicles={vehicles}
+              panelPx={panelPx}
+              following={following}
+              followKey={followKey}
+              onStopFollow={stopFollowing}
+            />
             <GoogleMapViewControl view={mapView} onView={setMapView} />
             {showGeofences ? <GoogleGeofenceLayer geofences={shownGeofences} fitKey={geofenceFitKey} /> : null}
             <GoogleVehicles
-              vehicles={vehicles}
+              vehicles={shown}
               selectedId={selectedVehicleId}
               hoveredId={hoveredVehicleId}
-              onSelect={setSelectedVehicleId}
+              onSelect={pickVehicle}
               onHover={setHoveredVehicleId}
               clusterLabel={(count) => tMarker("cluster", { count })}
             />
@@ -553,7 +616,7 @@ export function LiveTrackingView() {
           loading={idling.isPending}
           selectedId={selectedVehicleId}
           onSelect={(id) => {
-            setSelectedVehicleId(id); // the map follows it
+            pickVehicle(id); // the map follows it
             if (window.innerWidth < 640) setFleetPanel(null);
           }}
           onClose={() => setShowIdling(false)}
@@ -570,11 +633,29 @@ export function LiveTrackingView() {
           selectedId={selectedVehicleId}
           onRefresh={() => void vehiclesQuery.refetch()}
           onSelect={(id) => {
-            setSelectedVehicleId(id); // the map follows it
+            pickVehicle(id); // the map follows it
             if (window.innerWidth < 640) setFleetPanel(null); // phones: show the map again
           }}
           onClose={() => setFleetPanel(null)}
         />
+      ) : null}
+
+      {following && selectedVehicle ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-16 z-10 flex justify-center px-4 sm:bottom-6">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-border/70 bg-surface/95 py-1.5 ps-3 pe-1.5 text-sm font-medium shadow-panel backdrop-blur">
+            <LocateFixed className="size-4 animate-pulse text-primary" aria-hidden />
+            <span>{tFollow("following", { plate: selectedVehicle.plateNo })}</span>
+            <button
+              type="button"
+              onClick={stopFollowing}
+              aria-label={tFollow("stop")}
+              title={tFollow("stop")}
+              className="grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </div>
+        </div>
       ) : null}
     </div>
   );

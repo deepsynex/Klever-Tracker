@@ -13,7 +13,17 @@ export type RuleRow = RuleTarget & {
   /** The key again, for tables that need an id per row. */
   id: string;
   rules: AlertRule[];
+  /** The row's first rule's creation and its latest change (for the table's Created / Updated). */
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
+
+/** Earliest createdAt and latest updatedAt of a row's rules (API times sort as text). */
+function rowTimes(rules: AlertRule[]): Pick<RuleRow, "createdAt" | "updatedAt"> {
+  const created = rules.map((r) => r.createdAt).filter((x): x is string => Boolean(x)).sort();
+  const updated = rules.map((r) => r.updatedAt).filter((x): x is string => Boolean(x)).sort();
+  return created.length || updated.length ? { createdAt: created[0] ?? null, updatedAt: updated.at(-1) ?? null } : {};
+}
 
 /** One key per company + target: a vehicle, a vehicle group, or the whole company. */
 export function targetKey(t: RuleTarget): string {
@@ -30,7 +40,7 @@ export function groupRules(rules: AlertRule[]): RuleRow[] {
     row.rules.push(r);
     rows.set(key, row);
   }
-  return [...rows.values()];
+  return [...rows.values()].map((row) => ({ ...row, ...rowTimes(row.rules) }));
 }
 
 /** The row's alerts (event type ids), once each, in the rules' order. */

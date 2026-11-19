@@ -88,6 +88,8 @@ export type Vehicle = {
   application: string | null;
   dailyAvgRunningKm: number | null;
   status: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 export type Driver = {
@@ -249,6 +251,8 @@ export const VM_LOOKUPS = /* GraphQL */ `
       data {
         id
         name
+        createdAt
+        updatedAt
         timezone
         maxUsers
         maxDrivers
@@ -290,7 +294,15 @@ export type VmLookupVehicle = Pick<
   "id" | "companyId" | "plateNo" | "vehicleName" | "vehicleTypeId" | "primaryDriverId" | "odometerKm" | "status"
 >;
 /** A company as the lookups know it; the limits are null when unlimited. */
-export type LookupCompany = { id: string; name: string; timezone: string; maxUsers: number | null; maxDrivers: number | null };
+export type LookupCompany = {
+  id: string;
+  name: string;
+  timezone: string;
+  maxUsers: number | null;
+  maxDrivers: number | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
 
 export type VmLookupsResult = {
   companies: { data: LookupCompany[] };
@@ -325,6 +337,8 @@ const lookupOps = (kind: LookupKind) => {
             companyId
             name
             status
+            createdAt
+            updatedAt
           }
         }
       }
@@ -410,6 +424,8 @@ const VEHICLE_FIELDS = /* GraphQL */ `
   emiDueDay
   fuelType
   fuelConsumptionRate
+  createdAt
+  updatedAt
   customerId
   axleConfigurationId
   application
@@ -673,7 +689,7 @@ export const DELETE_FUEL_TANK = /* GraphQL */ `
 export const ALLOCATIONS = /* GraphQL */ `
   query VehicleAllocations($first: Int!) {
     vehicleAllocations(first: $first) {
-      data {
+      data { createdAt updatedAt
         id
         vehicleId
         driverId
@@ -733,7 +749,7 @@ export const DELETE_ALLOCATION = /* GraphQL */ `
 export const MAINTENANCE_PAGE = /* GraphQL */ `
   query MaintenancePage($first: Int!) {
     maintenanceRecords(first: $first) {
-      data {
+      data { createdAt updatedAt
         id
         companyId
         vehicleId
@@ -860,7 +876,7 @@ export type SensorsResult = { vehicleSensors: { data: VehicleSensor[] } };
 export const GROUPS = /* GraphQL */ `
   query VehicleGroups($first: Int!) {
     vehicleGroups(first: $first) {
-      data {
+      data { createdAt updatedAt
         id
         companyId
         parentId
@@ -923,7 +939,7 @@ export const DELETE_GROUP_MEMBER = /* GraphQL */ `
 export const SHIFTS = /* GraphQL */ `
   query Shifts($first: Int!) {
     shifts(first: $first) {
-      data {
+      data { createdAt updatedAt
         id
         companyId
         name
@@ -983,7 +999,7 @@ export const DELETE_SHIFT_VEHICLE = /* GraphQL */ `
 export const DISTANCE_LOGS = /* GraphQL */ `
   query VehicleDistanceLogs($first: Int!) {
     vehicleDistanceLogs(first: $first) {
-      data {
+      data { createdAt updatedAt
         id
         vehicleId
         logDate
@@ -1028,7 +1044,7 @@ export const DELETE_DISTANCE_LOG = /* GraphQL */ `
 export const SHARED_LOCATIONS = /* GraphQL */ `
   query SharedLiveLocations($first: Int!) {
     sharedLiveLocations(first: $first) {
-      data {
+      data { updatedAt
         id
         vehicleId
         shareToken
@@ -1071,7 +1087,7 @@ export const DELETE_SHARED_LOCATION = /* GraphQL */ `
 export const FUEL_CALIBRATIONS = /* GraphQL */ `
   query FuelCalibrations($first: Int!) {
     fuelCalibrations(first: $first) {
-      data {
+      data { createdAt updatedAt
         id
         companyId
         name

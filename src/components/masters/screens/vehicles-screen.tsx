@@ -29,6 +29,7 @@ import { ChildRowsEditor, type ChildField } from "@/components/masters/child-row
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { downloadSheet } from "@/components/masters/excel";
 import { FileUpload } from "@/components/masters/file-upload";
+import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { useTyreLabels } from "@/components/tyres/tyre-labels";
 import { VEHICLE_APPLICATIONS } from "@/lib/graphql/tyres";
 import { useAxleConfigurations } from "@/lib/tyres/use-tyres";
@@ -83,7 +84,7 @@ import { GET_LATEST_POSITIONS_WITH_READINGS, type LatestPositionsWithReadingsRes
 import { formatEngineTime, latestReadings } from "@/lib/telemetry/device-readings";
 import { cn } from "@/lib/utils";
 
-type SortKey = "plate" | "asset" | "type" | "company" | "driver" | "status";
+type SortKey = "plate" | "asset" | "type" | "company" | "driver" | "status" | "createdAt" | "updatedAt";
 type SortDirection = "asc" | "desc";
 
 function getVehicleCategory(typeName: string): "truck" | "van" | "bike" | "car" {
@@ -139,6 +140,7 @@ function VehicleTypeBadge({ typeName }: { typeName: string }) {
 export function VehiclesScreen() {
   const t = useTranslations("masters.vm.vehicles");
   const tc = useTranslations("masters.common");
+  const zone = useCompanyTimeZone();
   const lookups = useVmLookups();
   const page = useVmQuery<VehiclesPageResult>("vehicles", VEHICLES_PAGE);
   const { run, refresh } = useVmMutations();
@@ -224,6 +226,7 @@ export function VehiclesScreen() {
         const dB = b.primaryDriverId ? lookups.driverName(b.primaryDriverId) : "";
         cmp = dA.localeCompare(dB);
       } else if (sortKey === "status") cmp = a.status.localeCompare(b.status);
+      else if (sortKey === "createdAt" || sortKey === "updatedAt") cmp = (a[sortKey] ?? "").localeCompare(b[sortKey] ?? "");
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [filteredVehicles, sortKey, sortDir, lookups]);
@@ -551,6 +554,20 @@ export function VehiclesScreen() {
                   </div>
                 </th>
 
+                {(["createdAt", "updatedAt"] as const).map((key) => (
+                  <th
+                    key={key}
+                    scope="col"
+                    onClick={() => handleSort(key)}
+                    className="py-3.5 px-3 text-start text-xs font-semibold text-muted-foreground whitespace-nowrap cursor-pointer select-none group hover:text-foreground"
+                  >
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>{tc(key)}</span>
+                      <ArrowUpDown className={cn("size-3", sortKey === key ? "text-primary" : "text-muted-foreground/60 group-hover:text-foreground")} />
+                    </div>
+                  </th>
+                ))}
+
                 <th scope="col" className="py-3.5 px-3 text-start text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   {t("actions")}
                 </th>
@@ -560,7 +577,7 @@ export function VehiclesScreen() {
             <tbody>
               {pageVehicles.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={14} className="py-12 text-center text-sm text-muted-foreground">
                     {page.isPending ? t("loading") : t("empty")}
                   </td>
                 </tr>
@@ -661,6 +678,13 @@ export function VehiclesScreen() {
                           </span>
                         )}
                       </td>
+
+                      {/* Created, Updated */}
+                      {(["createdAt", "updatedAt"] as const).map((key) => (
+                        <td key={key} className="py-3.5 px-3 whitespace-nowrap text-xs text-muted-foreground" dir="ltr">
+                          {formatInCompanyTz(v[key], zone, "dd-MM-yyyy HH:mm")}
+                        </td>
+                      ))}
 
                       {/* Actions */}
                       <td className="py-3.5 px-3 whitespace-nowrap">

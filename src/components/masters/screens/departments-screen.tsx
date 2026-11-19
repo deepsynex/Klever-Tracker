@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
-import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import {
   CREATE_DEPARTMENT,
   DELETE_DEPARTMENT,
@@ -38,7 +37,6 @@ export function DepartmentsScreen() {
   const t = useTranslations("masters.am.departments");
   const tc = useTranslations("masters.common");
   const lookups = useVmLookups();
-  const zone = useCompanyTimeZone();
   const list = useVmQuery<DepartmentsResult>("am-departments", DEPARTMENTS);
   const { run, refresh, fail } = useVmMutations();
   const errorText = useErrorText();
@@ -119,16 +117,6 @@ export function DepartmentsScreen() {
           ...(lookups.isPlatform
             ? [{ key: "company", header: t("company"), sortValue: (r: Row) => lookups.companyName(r.companyId), cell: (r: Row) => lookups.companyName(r.companyId) }]
             : []),
-          {
-            key: "created",
-            header: t("created"),
-            sortValue: (r) => r.createdAt,
-            cell: (r) => (
-              <span dir="ltr" className="whitespace-nowrap">
-                {formatInCompanyTz(r.createdAt, zone, "dd-MM-yyyy")}
-              </span>
-            ),
-          },
         ]}
         onEdit={lookups.allow("department", "edit") ? openForm : undefined}
         onDelete={lookups.allow("department", "delete") ? setDeleting : undefined}

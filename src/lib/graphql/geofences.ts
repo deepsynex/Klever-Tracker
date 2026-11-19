@@ -27,7 +27,7 @@ export type Geofence = {
 export const GEOFENCES = /* GraphQL */ `
   query Geofences($first: Int!) {
     geofences(first: $first) {
-      data {
+      data { updatedAt
         id
         companyId
         name
