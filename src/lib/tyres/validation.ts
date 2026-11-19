@@ -90,3 +90,28 @@ export function validateRecommendation(
   }
   return errors;
 }
+
+/**
+ * Tyre thresholds: both depths required and within 0–40 mm (exclusive of 0), the replace depth
+ * below the critical one, and the pressure tolerance a percentage above 0.
+ */
+export function validateTyreSettings(values: Record<string, string>): Errors {
+  const errors: Errors = {};
+  const depth = (key: string) => {
+    const v = values[key] ?? "";
+    if (isBlank(v)) errors[key] = "required";
+    else if ((numberOrNull(v) ?? -1) <= 0) errors[key] = "positive";
+    else if ((numberOrNull(v) ?? 0) > 40) errors[key] = "treadRange";
+  };
+  depth("treadCriticalMm");
+  depth("treadReplaceMm");
+  if (!errors.treadCriticalMm && !errors.treadReplaceMm) {
+    if ((numberOrNull(values.treadReplaceMm ?? "") ?? 0) >= (numberOrNull(values.treadCriticalMm ?? "") ?? 0)) {
+      errors.treadReplaceMm = "replaceBelowCritical";
+    }
+  }
+  const pct = values.pressureTolerancePct ?? "";
+  if (isBlank(pct)) errors.pressureTolerancePct = "required";
+  else if ((numberOrNull(pct) ?? -1) <= 0 || (numberOrNull(pct) ?? 0) > 100) errors.pressureTolerancePct = "percent";
+  return errors;
+}

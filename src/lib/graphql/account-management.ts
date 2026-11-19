@@ -225,6 +225,13 @@ export const DELETE_COMPANY_CONTACT = /* GraphQL */ `
 // 2. Users, roles, departments, vehicle / driver grants
 // ---------------------------------------------------------------------------------------------
 
+/** A5: a fresh welcome email with a new set-password link (the old link stops working). Platform staff only. */
+export const RESEND_WELCOME_EMAIL = /* GraphQL */ `
+  mutation ResendWelcomeEmail($userId: ID!) {
+    resendWelcomeEmail(userId: $userId)
+  }
+`;
+
 export const USERS = /* GraphQL */ `
   query Users($first: Int!) {
     users(first: $first) {

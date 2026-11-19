@@ -28,7 +28,7 @@ export function PushToggle() {
   }, []);
 
   const on = state === "on";
-  const disabled = busy || state === "loading" || state === "unsupported" || state === "denied" || state === "backend";
+  const disabled = busy || state === "loading" || state === "unsupported" || state === "denied" || state === "setup";
 
   const toggle = async () => {
     setBusy(true);
@@ -48,8 +48,8 @@ export function PushToggle() {
       ? t("unsupported")
       : state === "denied"
         ? t("denied")
-        : state === "backend"
-          ? t("backend")
+        : state === "setup"
+          ? t("setup")
           : on
             ? t("onHint")
             : t("offHint");

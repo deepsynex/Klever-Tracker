@@ -1,25 +1,60 @@
 "use client";
 
+import type { FirebaseOptions } from "firebase/app";
 import { gqlRequest } from "@/lib/graphql/client";
-import { isMissingFromApi } from "@/lib/map-settings";
-import { REGISTER_PUSH_SUBSCRIPTION, REMOVE_PUSH_SUBSCRIPTION, urlBase64ToUint8Array, WEB_PUSH_PUBLIC_KEY } from "./api";
+import { REGISTER_PUSH_TOKEN, REMOVE_PUSH_TOKEN, urlBase64ToUint8Array } from "./api";
 
 /**
- * Browser push (Web Push with VAPID, backend G5). Separate from the live WebSocket: this reaches
- * the user when the tab is in the background or closed. Permission is only ever asked on a click.
+ * Browser push through Firebase Cloud Messaging (backend G5, API Doc §6.22). Separate from the live
+ * WebSocket: this reaches the user when the tab is in the background or closed. Permission is only
+ * ever asked on a click. The app's own service worker (/sw.js) receives the pushes and shows them;
+ * Firebase only issues the token the backend sends them to.
  */
 
 export const SW_URL = "/sw.js";
+/** This browser's current FCM token, so logout and a token change can tell the server. */
+export const PUSH_TOKEN_KEY = "kt.push.token";
 
 export type PushState =
   | "unsupported" // no service worker / PushManager / Notification (e.g. iOS Safari outside an installed app)
+  | "setup" // the site has no Firebase settings yet (NEXT_PUBLIC_FIREBASE_*)
   | "denied" // the user blocked notifications for this site
-  | "backend" // the server doesn't support push subscriptions yet
   | "off"
   | "on";
 
+export type FirebaseSettings = { options: FirebaseOptions; vapidKey: string };
+
+/** The Firebase web settings from the environment, or null while any of them is missing. */
+export function firebaseSettings(env: Record<string, string | undefined>): FirebaseSettings | null {
+  const options: FirebaseOptions = {
+    apiKey: env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain: env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || undefined,
+    projectId: env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    messagingSenderId: env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  };
+  const vapidKey = env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+  if (!options.apiKey || !options.projectId || !options.messagingSenderId || !options.appId || !vapidKey) return null;
+  return { options, vapidKey };
+}
+
+// Read one by one: Next.js only inlines NEXT_PUBLIC_* values written out in full.
+const SETTINGS = firebaseSettings({
+  NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  NEXT_PUBLIC_FIREBASE_VAPID_KEY: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+});
+
 /** What the browser offers, from plain feature flags so it can be unit-tested. */
-export function pushSupport(env: { serviceWorker: boolean; pushManager: boolean; notification: boolean; secure: boolean }): boolean {
+export function pushSupport(env: {
+  serviceWorker: boolean;
+  pushManager: boolean;
+  notification: boolean;
+  secure: boolean;
+}): boolean {
   return env.serviceWorker && env.pushManager && env.notification && env.secure;
 }
 
@@ -33,20 +68,29 @@ export function isPushSupported(): boolean {
   });
 }
 
-export function permission(): NotificationPermission | "unsupported" {
-  return isPushSupported() ? Notification.permission : "unsupported";
+/** Whether two application server keys are the same bytes (a subscription made with another key can't be reused). */
+export function sameKey(a: ArrayBuffer | null | undefined, b: Uint8Array): boolean {
+  if (!a || a.byteLength !== b.byteLength) return false;
+  const x = new Uint8Array(a);
+  return x.every((v, i) => v === b[i]);
 }
 
-/** The fields registerPushSubscription takes, from PushSubscription.toJSON(). Null if incomplete. */
-export function subscriptionVariables(
-  json: { endpoint?: string | null; keys?: Record<string, string> | null },
-  userAgent: string | null,
-): { endpoint: string; p256dh: string; auth: string; userAgent: string | null } | null {
-  const endpoint = json.endpoint;
-  const p256dh = json.keys?.p256dh;
-  const auth = json.keys?.auth;
-  if (!endpoint || !p256dh || !auth) return null;
-  return { endpoint, p256dh, auth, userAgent: userAgent ? userAgent.slice(0, 255) : null };
+/** This browser's FCM token while push is on here (sent with sign-out so the server drops it). */
+export function storedToken(): string | null {
+  try {
+    return localStorage.getItem(PUSH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(PUSH_TOKEN_KEY, token);
+    else localStorage.removeItem(PUSH_TOKEN_KEY);
+  } catch {
+    // Storage blocked: the token is fetched again next time.
+  }
 }
 
 async function registration(): Promise<ServiceWorkerRegistration> {
@@ -54,79 +98,97 @@ async function registration(): Promise<ServiceWorkerRegistration> {
   return existing ?? navigator.serviceWorker.register(SW_URL, { scope: "/" });
 }
 
-async function existingSubscription(): Promise<PushSubscription | null> {
-  if (!isPushSupported()) return null;
-  const reg = await navigator.serviceWorker.getRegistration(SW_URL);
-  return reg ? reg.pushManager.getSubscription() : null;
+/** Firebase, loaded on first use. */
+async function firebase() {
+  const [{ initializeApp, getApps }, fm] = await Promise.all([import("firebase/app"), import("firebase/messaging")]);
+  return { initializeApp, getApps, ...fm };
 }
 
-async function sendToServer(sub: PushSubscription): Promise<void> {
-  const vars = subscriptionVariables(sub.toJSON(), navigator.userAgent);
-  if (!vars) throw new Error("Incomplete push subscription");
-  await gqlRequest(REGISTER_PUSH_SUBSCRIPTION, vars);
+async function messaging() {
+  if (!SETTINGS) throw new Error("Firebase isn't configured");
+  const { initializeApp, getApps, getMessaging } = await firebase();
+  const app = getApps()[0] ?? initializeApp(SETTINGS.options);
+  return getMessaging(app);
 }
 
 /**
- * Whether the server supports push subscriptions: false only when the operation is missing from
- * the API (backend G5 not live yet). Other errors are thrown.
+ * Gets this browser's FCM token (Firebase reuses it until it changes) and registers it with the
+ * server. Registering again is harmless, and a token from a previous login moves to this user.
  */
-export async function serverSupportsPush(): Promise<boolean> {
-  try {
-    await gqlRequest<{ webPushPublicKey: string }>(WEB_PUSH_PUBLIC_KEY);
-    return true;
-  } catch (err) {
-    if (isMissingFromApi(err)) return false;
-    throw err;
+async function registerToken(): Promise<void> {
+  if (!SETTINGS) return;
+  const reg = await registration();
+  await navigator.serviceWorker.ready;
+  // A subscription left from the old Web Push setup uses another key: Firebase can't reuse it.
+  const old = await reg.pushManager.getSubscription();
+  if (old && !sameKey(old.options.applicationServerKey, urlBase64ToUint8Array(SETTINGS.vapidKey))) {
+    await old.unsubscribe();
   }
+  const { getToken } = await firebase();
+  const token = await getToken(await messaging(), { vapidKey: SETTINGS.vapidKey, serviceWorkerRegistration: reg });
+  await gqlRequest(REGISTER_PUSH_TOKEN, { token, userAgent: navigator.userAgent.slice(0, 255) });
+  storeToken(token);
+}
+
+async function canUse(): Promise<PushState | null> {
+  if (!isPushSupported()) return "unsupported";
+  if (!SETTINGS) return "setup";
+  const { isSupported } = await firebase();
+  if (!(await isSupported().catch(() => false))) return "unsupported";
+  if (Notification.permission === "denied") return "denied";
+  return null;
 }
 
 /** Current state for the switch, without asking for permission. */
 export async function currentPushState(): Promise<PushState> {
-  if (!isPushSupported()) return "unsupported";
-  if (Notification.permission === "denied") return "denied";
-  if (!(await serverSupportsPush())) return "backend";
-  return (await existingSubscription()) ? "on" : "off";
+  const blocked = await canUse();
+  if (blocked) return blocked;
+  return Notification.permission === "granted" && storedToken() ? "on" : "off";
 }
 
-/** Turn push on: asks for permission (call only from a click), subscribes and tells the server. */
+/** Turn push on: asks for permission (call only from a click), gets the token and tells the server. */
 export async function enablePush(): Promise<PushState> {
-  if (!isPushSupported()) return "unsupported";
+  const blocked = await canUse();
+  if (blocked) return blocked;
   const result = await Notification.requestPermission();
   if (result !== "granted") return result === "denied" ? "denied" : "off";
-  const { webPushPublicKey } = await gqlRequest<{ webPushPublicKey: string }>(WEB_PUSH_PUBLIC_KEY);
-  const reg = await registration();
-  await navigator.serviceWorker.ready;
-  const sub =
-    (await reg.pushManager.getSubscription()) ??
-    (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(webPushPublicKey) }));
-  await sendToServer(sub);
+  await registerToken();
   return "on";
 }
 
-/** Turn push off: removes it on the server, then in the browser. */
+/** Turn push off: removes the token on the server, then in Firebase and the browser. */
 export async function disablePush(): Promise<PushState> {
-  const sub = await existingSubscription();
-  if (sub) {
-    await gqlRequest(REMOVE_PUSH_SUBSCRIPTION, { endpoint: sub.endpoint }).catch((err: unknown) => {
-      // A missing operation or an already-removed row shouldn't keep the browser subscribed.
-      if (!isMissingFromApi(err)) console.warn("[push] remove on server failed", err);
+  const token = storedToken();
+  if (token) {
+    await gqlRequest(REMOVE_PUSH_TOKEN, { token }).catch((err: unknown) => {
+      // An already-removed token shouldn't keep the browser subscribed.
+      console.warn("[push] remove on server failed", err);
     });
-    await sub.unsubscribe();
   }
+  if (SETTINGS) {
+    const { deleteToken } = await firebase();
+    await deleteToken(await messaging()).catch(() => undefined);
+  }
+  storeToken(null);
   return "off";
 }
 
 /**
- * On app load: when permission is granted and the browser still has a subscription, send it to
- * the server again (an upsert), so a rotated or server-side-expired one heals. Silent; never asks.
+ * On every signed-in load (so after each login too): while push is on in this browser, register
+ * the token again. That keeps a token Firebase has changed up to date, and moves this browser to
+ * whoever is signed in now. Silent; never asks.
  */
 export async function healPushSubscription(): Promise<void> {
-  if (!isPushSupported() || Notification.permission !== "granted") return;
-  const sub = await existingSubscription();
-  if (!sub) return;
+  // Permission was blocked or reset in the browser's settings since push was turned on: the
+  // browser can't show pushes any more, so stop the server sending them here.
+  if (isPushSupported() && Notification.permission !== "granted" && storedToken()) {
+    await disablePush().catch(() => undefined);
+    return;
+  }
+  if (!isPushSupported() || Notification.permission !== "granted" || !storedToken() || (await canUse())) return;
   try {
-    await sendToServer(sub);
+    await registerToken();
   } catch (err) {
-    if (!isMissingFromApi(err)) console.warn("[push] re-register failed", err);
+    console.warn("[push] re-register failed", err);
   }
 }

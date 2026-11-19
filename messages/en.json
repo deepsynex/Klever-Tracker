@@ -83,7 +83,10 @@
     "permissionsRequired": "Allow at least one module (tick View somewhere).",
     "weightsTotal": "The weights must add up to 100%.",
     "codeFormat": "Use lower-case letters, digits and underscores, starting with a letter.",
-    "duplicateCode": "This code is already used. Choose a different one."
+    "duplicateCode": "This code is already used. Choose a different one.",
+    "pressureRange": "Enter a pressure between 0 and 200 psi.",
+    "treadRange": "Enter a depth between 0 and 40 mm.",
+    "replaceBelowCritical": "The replace depth must be below the critical depth."
   },
   "errors": {
     "invalid_credentials": "The email or password is incorrect.",
@@ -180,7 +183,6 @@
     "comingSoon": "Available in phase {n}",
     "heatmap": "Heatmap",
     "open": "Open menu",
-    "historyShort": "History",
     "vehicles": "Vehicles",
     "tyres": "Tyres",
     "accounts": "Account & settings",
@@ -416,7 +418,8 @@
           "document": "PDF",
           "user_photo": "JPG, PNG or WebP image",
           "driver_photo": "JPG, PNG or WebP image",
-          "company_logo": "JPG, PNG or WebP image"
+          "company_logo": "JPG, PNG or WebP image",
+          "tyre_photo": "JPG, PNG or WebP image"
         },
         "problems": {
           "type": "This file type isn’t allowed. Upload a {kind}.",
@@ -1029,7 +1032,7 @@
       },
       "notificationRules": {
         "title": "Notification rules",
-        "description": "Choose who is told when an alert happens, and how: in the app, by email or by browser push.",
+        "description": "Choose which alerts are sent, and how. Email goes to the recipients you add. In the app and browser push reach everyone in the company who can see the vehicle and has notifications turned on.",
         "add": "Add vehicle alerts",
         "editTitle": "Alerts for {name}",
         "sheetHint": "One row per vehicle: pick its alerts, how to send them and who gets them. Email goes to the To recipients, with CC recipients copied.",
@@ -1043,7 +1046,7 @@
         "group": "Vehicle group",
         "groupValue": "Group: {name}",
         "sendBy": "Send by",
-        "recipients": "Recipients",
+        "recipients": "Email recipients",
         "toCount": "{to} To",
         "toCcCount": "{to} To · {cc} CC",
         "repeat": "Don't repeat within (minutes)",
@@ -1057,7 +1060,7 @@
         "sections": {
           "when": "When",
           "how": "How",
-          "who": "Who"
+          "who": "Email recipients"
         },
         "whoHint": "Pick users or type email addresses. Choose To or CC for each one.",
         "whoHintNoCc": "Pick users or type email addresses. CC will be available once the backend supports it; for now everyone is a To recipient.",
@@ -1078,13 +1081,13 @@
           "total": "Vehicles & groups",
           "active": "Active",
           "email": "Send email",
-          "recipients": "People notified"
+          "recipients": "Email recipients"
         },
         "deleteNotice": "{count, plural, one {Its alert and recipients are} other {All # alerts and their recipients are}} deleted permanently. Alerts already recorded are kept.",
         "errors": {
           "repeat": "Enter whole minutes, up to 10,080 (one week).",
           "channel": "Choose at least one way to send.",
-          "noRecipients": "Add at least one recipient.",
+          "noRecipients": "Add at least one email recipient, or turn off Email.",
           "fixRecipients": "Fix the highlighted recipients.",
           "needTo": "An email needs at least one To recipient. Change one recipient from CC to To.",
           "row": {
@@ -1146,7 +1149,8 @@
         "testEmail": "Send test email",
         "testEmailSending": "Sending test email…",
         "testEmailSent": "{n, plural, one {Test email sent to # recipient.} other {Test email sent to # recipients.}} It uses sample alert details.",
-        "testEmailNotSent": "The test email wasn't sent. Check the recipients' email addresses and try again."
+        "testEmailNotSent": "The test email wasn't sent. Check the recipients' email addresses and try again.",
+        "reachHint": "In the app and browser push go to everyone in this company who can see the vehicle and has turned on Browser notifications in their Profile. No recipients needed."
       }
     },
     "am": {
@@ -1255,13 +1259,12 @@
         },
         "firstAdmin": {
           "title": "First admin user",
-          "description": "We'll create this user as the company's admin with a random password, and email them a link to set their own password.",
+          "description": "We'll create this user as the company's admin and email them a welcome with a link to set their own password (valid for 7 days).",
           "name": "Full name",
           "email": "Email",
           "username": "Username",
           "usernameHint": "What they sign in with. Their email works too.",
-          "emailSent": "We emailed {email} a link to set their password.",
-          "emailFailed": "The account was created, but the password email to {email} couldn't be sent. Ask them to use “Forgot password” on the sign-in page."
+          "emailSent": "Welcome email sent to {email}, with a link to set their password."
         }
       },
       "users": {
@@ -1328,7 +1331,9 @@
         "kpi": {
           "total": "Total users",
           "admins": "Admins"
-        }
+        },
+        "resendWelcome": "Resend welcome email",
+        "resendWelcomeSent": "Welcome email sent again to {email}. The previous link no longer works."
       },
       "drivers": {
         "title": "Drivers",
@@ -1637,6 +1642,8 @@
         "label": "Tyres sections",
         "customers": "Customers",
         "customerVehicles": "Customer vehicles",
+        "inspections": "Inspections",
+        "report": "Tyre report",
         "tyreMasters": "Tyre masters"
       },
       "axles": {
@@ -1715,7 +1722,23 @@
           "axle": "Axle configuration",
           "application": "Application",
           "dailyAvgKm": "Daily average (km)",
-          "photo": "Vehicle photo"
+          "photo": "Vehicle photo",
+          "spares": "Spare tyres",
+          "sparesHint": "How many spares the vehicle carries (SP1, SP2, …).",
+          "spareCount": "{n, plural, =0 {No spare} one {# spare} other {# spares}}"
+        },
+        "showAxles": "Show the axles and tyres",
+        "sizes": {
+          "title": "Tyre sizes",
+          "description": "The tyre size on each axle (all its tyres) and on the spares. Tyres can only be fitted where the size matches.",
+          "steer": "Steer axle",
+          "drive": "Drive axle {n}",
+          "trailer": "Trailer axle {n}",
+          "axle": "Axle {n}",
+          "spare": "Spare tyres",
+          "choose": "Choose a size…",
+          "add": "Add tyre size",
+          "useForAll": "Use the first axle's size for all"
         }
       },
       "masters": {
@@ -1723,9 +1746,8 @@
         "description": "The tyre sizes, brands and products you work with, and the recommendations given after an inspection.",
         "tabs": {
           "products": "Products",
-          "sizes": "Sizes",
-          "brands": "Brands",
-          "recommendations": "Recommendations"
+          "recommendations": "Recommendations",
+          "thresholds": "Thresholds"
         },
         "add": {
           "size": "Add size",
@@ -1734,16 +1756,10 @@
           "recommendation": "Add recommendation"
         },
         "edit": {
-          "size": "Edit size",
-          "brand": "Edit brand",
           "product": "Edit product",
           "recommendation": "Edit recommendation"
         },
-        "usedBy": "Products",
-        "sizeHint": "As printed on the tyre, like 315/80R22.5.",
         "inUse": {
-          "size": "Couldn't delete this size. A product uses it. Change or delete that product first.",
-          "brand": "Couldn't delete this brand. A product uses it. Change or delete that product first.",
           "product": "Couldn't delete this product. It's probably used by tyres. Mark it Inactive instead."
         },
         "productDescription": "The product name is built from the size, brand, pattern and ply rating when you save.",
@@ -1769,6 +1785,300 @@
           "title": "Title",
           "code": "Code",
           "description": "Description"
+        },
+        "thresholds": {
+          "title": "Inspection thresholds",
+          "description": "Used to judge each new inspection reading. Defaults: 6 mm, 3 mm and ±10 %.",
+          "pickCompany": "Choose a company above to see its thresholds.",
+          "note": "Changes apply to new inspections. Inspections already saved keep their results.",
+          "f": {
+            "treadCriticalMm": "Critical tread depth (mm)",
+            "treadReplaceMm": "Replace tread depth (mm)",
+            "pressureTolerancePct": "Pressure tolerance (%)"
+          },
+          "hint": {
+            "treadCriticalMm": "A groove below this depth is Critical.",
+            "treadReplaceMm": "A groove below this depth Needs replacement.",
+            "pressureTolerancePct": "Within ± this share of the recommended pressure is Good."
+          }
+        }
+      },
+      "axleView": {
+        "title": "Axle configuration: {plate}",
+        "diagramLabel": "Top view of the {layout} layout with its tyre positions",
+        "front": "Front",
+        "positions": "Tyre positions",
+        "positionsHint": "Hover a row or a tyre to find it on the drawing.",
+        "tyreCount": "{n, plural, one {# tyre} other {# tyres}}",
+        "km": "{n} km",
+        "kinds": {
+          "steer": "Steer axle",
+          "drive": "Drive axle {n}",
+          "trailer": "Trailer axle {n}",
+          "axle": "Axle {n}",
+          "spare": "Spare tyre"
+        },
+        "sides": {
+          "left": "Left",
+          "right": "Right"
+        },
+        "placements": {
+          "single": "Single",
+          "inner": "Inner",
+          "outer": "Outer",
+          "spare": "Spare"
+        },
+        "facts": {
+          "layout": "Layout",
+          "axles": "Axles",
+          "tyres": "Tyres",
+          "customer": "Customer",
+          "application": "Application",
+          "dailyKm": "Daily average",
+          "tyresWithSpare": "{n} + {spares} spare",
+          "fitted": "Fitted",
+          "fittedOf": "{n} of {total} positions"
+        },
+        "cols": {
+          "position": "Position",
+          "axle": "Axle",
+          "side": "Side",
+          "placement": "Placement",
+          "size": "Size",
+          "tyre": "Tyre"
+        },
+        "plan": {
+          "title": "Tyres on this vehicle",
+          "hint": "Drag a tyre onto another position to move or swap it. Drag it out of the drawing to take it off. Tap an empty position (+) to add a tyre. Then press Save.",
+          "sizes": "Tyre size per axle",
+          "sizesHint": "Tyres can only be fitted, moved or swapped where the size matches. Saved as soon as you change it.",
+          "noSize": "No size set",
+          "sizeMismatch": "Can't move that tyre: {from} and {to} are different tyre sizes.",
+          "sizeMissing": "Set a tyre size for both axles first.",
+          "releaseToRemove": "Release to take {code} off",
+          "empty": "Empty",
+          "from": "Tyre from {code}",
+          "removedTitle": "Taken off",
+          "removedHint": "Put a tyre back on its own position, or the first empty one.",
+          "putBack": "Put back",
+          "reset": "Reset the plan",
+          "addTyre": "Add tyre",
+          "newTyre": "New tyre",
+          "addNeedsSize": "Set a tyre size for this axle first.",
+          "save": "Save",
+          "saving": "Saving…",
+          "saved": "Tyre layout saved.",
+          "movedNote": "Moved to {code}"
+        },
+        "fate": {
+          "title": "What did you do with this tyre?",
+          "description": "The tyre on the {axle}, {side} position ({size}) is coming off. Say what happened to it.",
+          "tyre": "Tyre",
+          "size": "Tyre size",
+          "options": {
+            "retreaded": "Sent for retreading",
+            "repaired": "Repaired",
+            "scrapped": "Scrapped",
+            "store": "Back to store (spare)",
+            "sold": "Sold",
+            "other": "Other"
+          },
+          "note": "Note (optional)",
+          "noteRequired": "Note: say what happened *",
+          "cancel": "Cancel",
+          "confirm": "Take it off"
+        },
+        "tread": "{mm} mm tread",
+        "saved": {
+          "size": "Tyre size saved."
+        },
+        "history": {
+          "title": "Removal history",
+          "hint": "Tyres taken off this vehicle, newest first.",
+          "when": "When",
+          "what": "What happened",
+          "by": "By"
+        }
+      },
+      "conditions": {
+        "good": "Good",
+        "critical": "Critical",
+        "needs_replacement": "Replace",
+        "over_inflated": "Over-inflated",
+        "under_inflated": "Under-inflated",
+        "uniform": "Even wear",
+        "outer": "Outer wear",
+        "inner": "Inner wear",
+        "center": "Centre wear",
+        "shoulder": "Shoulder wear"
+      },
+      "inspections": {
+        "title": "Inspections",
+        "description": "Tyre inspections of customer vehicles: pressure, tread on three grooves, condition, photos and recommendations.",
+        "new": "New inspection",
+        "empty": "No inspections yet.",
+        "report": "Report",
+        "km": "{n} km",
+        "mm": "{n} mm",
+        "kpi": {
+          "total": "Inspections",
+          "vehicles": "Vehicles inspected",
+          "attention": "With tyres to replace"
+        },
+        "cols": {
+          "inspectedAt": "Inspected",
+          "vehicle": "Vehicle",
+          "odometer": "Odometer",
+          "tyres": "Tyres",
+          "toReplace": "To replace",
+          "inspector": "Inspector"
+        },
+        "back": "Back to inspections",
+        "next": "Inspect the tyres",
+        "toReview": "Review",
+        "backToTyres": "Back to tyres",
+        "saveReading": "Save reading & next",
+        "saveVisit": "{n, plural, one {Save inspection (# tyre)} other {Save inspection (# tyres)}}",
+        "saved": "{n, plural, one {Inspection saved with # tyre.} other {Inspection saved with # tyres.}}",
+        "noAxles": "This vehicle has no axle configuration. Set it under Customer vehicles first.",
+        "noTyres": "No tyres are fitted on this vehicle. Fit them on its axle drawing under Customer vehicles first.",
+        "pickTyre": "Tap a tyre on the drawing to enter its reading.",
+        "positionsLabel": "Tyre positions",
+        "original": "Original tread {n} mm",
+        "suggested": "suggested from the conditions",
+        "reviewHint": "{done} of {total} tyres have a complete reading. Tap a row to change it. Only complete readings are saved.",
+        "spare": "Spare",
+        "axle": {
+          "steer": "Steer axle",
+          "drive": "Drive axle {n}",
+          "trailer": "Trailer axle {n}",
+          "axle": "Axle {n}"
+        },
+        "side": {
+          "left": "Left",
+          "right": "Right"
+        },
+        "steps": {
+          "label": "Inspection steps",
+          "vehicle": "Vehicle",
+          "tyres": "Tyres · {done}/{total}",
+          "review": "Review & save"
+        },
+        "live": {
+          "avg": "Average tread",
+          "wearPct": "Worn",
+          "tread": "Tread",
+          "pressure": "Pressure",
+          "wear": "Wear"
+        },
+        "tyreCondition": {
+          "new": "New",
+          "running": "Running",
+          "rotated": "Rotated",
+          "retread": "Retread",
+          "removed": "Removed"
+        },
+        "review": {
+          "position": "Position",
+          "tyre": "Tyre",
+          "pressure": "Pressure (actual / rec.)",
+          "treads": "Outer · centre · inner",
+          "avg": "Average",
+          "tread": "Tread",
+          "pressureCond": "Pressure",
+          "wear": "Wear",
+          "recs": "Recommendations"
+        },
+        "f": {
+          "customer": "Customer",
+          "vehicle": "Vehicle",
+          "date": "Date",
+          "time": "Time",
+          "odometer": "Odometer (km)",
+          "lastOdometer": "Last reading: {n} km",
+          "remarks": "Remarks",
+          "pressure": "Pressure (psi)",
+          "outer": "Outer (mm)",
+          "center": "Centre (mm)",
+          "inner": "Inner (mm)",
+          "tyreCondition": "Tyre condition",
+          "recommendations": "Recommendations",
+          "photo": "Photo",
+          "tyreRemarks": "Remarks",
+          "recommendedPsi": "Recommended (psi)"
+        }
+      },
+      "report": {
+        "title": "Tyre report",
+        "description": "A vehicle's tyres at its latest inspection: conditions, running km and expected life, cost per km. Print it or save it as PDF.",
+        "print": "Print / PDF",
+        "pick": "Vehicle",
+        "pickHint": "Choose a vehicle to see its tyre report.",
+        "printedOn": "Printed {date}",
+        "noData": "No data yet",
+        "km": "{n} km",
+        "mm": "{n} mm",
+        "facts": {
+          "customer": "Customer",
+          "vehicle": "Vehicle",
+          "axles": "Axle layout",
+          "application": "Application",
+          "dailyKm": "Daily average",
+          "odometer": "Odometer",
+          "inspected": "Last inspection",
+          "inspector": "Inspector",
+          "tyres": "Tyres fitted",
+          "fittedOf": "{n} of {total}"
+        },
+        "summary": {
+          "tread": "Tread",
+          "pressure": "Pressure",
+          "wear": "Wear pattern"
+        },
+        "life": {
+          "title": "Running km vs expected life",
+          "hint": "Bar: km the tyre has run. Mark: km it's expected to last down to 2 mm.",
+          "running": "Running km",
+          "expected": "Expected life"
+        },
+        "cpk": {
+          "title": "Cost per km: current vs expected",
+          "hint": "Bar: purchase price ÷ km so far. Mark: price ÷ expected life.",
+          "current": "Current CPK",
+          "expected": "Expected CPK"
+        },
+        "latest": {
+          "title": "Latest inspection",
+          "none": "No inspection yet.",
+          "position": "Position",
+          "tyre": "Tyre",
+          "product": "Product",
+          "pressure": "Pressure (actual / rec.)",
+          "treads": "Outer · centre · inner",
+          "avg": "Average",
+          "wearPct": "Worn",
+          "tread": "Tread",
+          "pressureCond": "Pressure",
+          "wear": "Wear",
+          "tyreCondition": "Condition"
+        },
+        "profiles": {
+          "title": "Tread profiles",
+          "hint": "Outer, centre and inner groove (mm). Dashed lines: critical 6 mm, replace 3 mm.",
+          "outer": "Outer",
+          "center": "Centre",
+          "inner": "Inner"
+        },
+        "photos": {
+          "title": "Photos and recommendations",
+          "alt": "Tyre at {code}"
+        },
+        "tyreCondition": {
+          "new": "New",
+          "running": "Running",
+          "rotated": "Rotated",
+          "retread": "Retread",
+          "removed": "Removed"
         }
       }
     }
@@ -1800,7 +2110,6 @@
       "searchVehicles": "Search vehicles",
       "selectedCount": "{count} of {max} selected",
       "selectAll": "Select all",
-      "selectNone": "Clear",
       "noMatches": "No vehicles match.",
       "device": "device",
       "noVehicles": "Your company has no vehicles or tracking devices yet.",
@@ -1957,7 +2266,6 @@
       "signal": "Signal",
       "gpsFix": "GPS fix",
       "gpsNoFix": "no GPS fix",
-      "vehicleCount": "{count, plural, one {# vehicle} other {# vehicles}}",
       "cluster": "{count} vehicles here. Click to zoom in.",
       "offlineLastSeen": "Offline · last seen {ago}",
       "idle": "Idle · engine on"
@@ -2072,8 +2380,8 @@
       "offHint": "Turn on to get alert notifications in this browser. Your browser will ask for permission.",
       "unsupported": "This browser can't receive push notifications. On iPhone and iPad, add Klever Tracker to the Home Screen first (Share → Add to Home Screen) and open it from there.",
       "denied": "Notifications are blocked for this site. To allow them, click the lock icon next to the address, set Notifications to Allow, then reload the page.",
-      "backend": "Available once the server supports browser notifications.",
-      "failed": "Couldn't change browser notifications. Try again."
+      "failed": "Couldn't change browser notifications. Try again.",
+      "setup": "Browser notifications aren't set up for this site yet."
     },
     "title": "Notifications",
     "description": "Geofence entries and exits and other alerts for the vehicles you can see. Newest first.",

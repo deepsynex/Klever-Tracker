@@ -15,6 +15,7 @@ import {
   type LogoutResult,
   type ResetPasswordResult,
 } from "@/lib/graphql/operations";
+import { PUSH_TOKEN_FIELD, REMOVE_PUSH_TOKEN } from "@/lib/notifications/api";
 import { clearSession, getOwnSessionToken, setSession } from "@/lib/session";
 import { fieldErrors, forgotPasswordSchema, loginSchema, resetPasswordSchema } from "./schemas";
 
@@ -56,7 +57,10 @@ export async function forgotPasswordAction(_prev: FormState, formData: FormData)
   if (!parsed.success) return { status: "error", error: "invalid_input", fields: fieldErrors(parsed.error) };
 
   // The reset email and its link follow the language the user is viewing the app in.
-  const result = await kleverRequest<ForgotPasswordResult>(FORGOT_PASSWORD, { ...parsed.data, locale: localeFrom(formData) });
+  const result = await kleverRequest<ForgotPasswordResult>(FORGOT_PASSWORD, {
+    ...parsed.data,
+    locale: localeFrom(formData),
+  });
   // The API returns true whether or not the email exists, so only transport failures are errors.
   if (!result.ok && result.error.kind !== "validation") return { status: "error", error: result.error.kind };
   return { status: "success" };
@@ -92,6 +96,16 @@ export async function logoutAction(formData: FormData): Promise<void> {
   // own token: never the shared DEV_AUTH_TOKEN fallback. Sign-out still completes if the call fails
   // (network, already-expired token): the cookie is cleared either way, and the failure is logged.
   const token = await getOwnSessionToken();
+  // Stop browser push to this device first (G5): it needs the session that's about to be revoked.
+  const pushToken = formData.get(PUSH_TOKEN_FIELD);
+  if (token && typeof pushToken === "string" && pushToken) {
+    const removed = await kleverRequest(REMOVE_PUSH_TOKEN, { token: pushToken }, { token }).catch((err: unknown) => ({
+      ok: false as const,
+      error: { kind: "network", message: err instanceof Error ? err.message : String(err) },
+    }));
+    if (!removed.ok)
+      console.warn(`[logout] push token removal failed (${removed.error.kind}): ${removed.error.message}`);
+  }
   if (token) {
     const result = await kleverRequest<LogoutResult>(LOGOUT, {}, { token }).catch((err: unknown) => ({
       ok: false as const,

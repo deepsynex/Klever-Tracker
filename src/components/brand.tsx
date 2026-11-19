@@ -32,14 +32,6 @@ function Icon() {
   );
 }
 
-export function BrandIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="7 10 106 100" className={cn("size-8 shrink-0", className)} role="img" aria-label={APP_NAME}>
-      <Icon />
-    </svg>
-  );
-}
-
 /** The full logo: pin and route, then "Klever" above a spaced-out "TRACKER". */
 export function BrandLogo({ className }: { className?: string }) {
   return (

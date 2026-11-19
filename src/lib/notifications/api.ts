@@ -49,21 +49,19 @@ export const MARK_ALL_NOTIFICATIONS_READ = /* GraphQL */ `
   }
 `;
 
-export const WEB_PUSH_PUBLIC_KEY = /* GraphQL */ `
-  query WebPushPublicKey {
-    webPushPublicKey
+/** This browser's Firebase Cloud Messaging token (API Doc §6.22). Again is harmless; it moves to the signed-in user. */
+export const REGISTER_PUSH_TOKEN = /* GraphQL */ `
+  mutation RegisterPushToken($token: String!, $userAgent: String) {
+    registerPushToken(token: $token, platform: "web", userAgent: $userAgent)
   }
 `;
 
-export const REGISTER_PUSH_SUBSCRIPTION = /* GraphQL */ `
-  mutation RegisterPushSubscription($endpoint: String!, $p256dh: String!, $auth: String!, $userAgent: String) {
-    registerPushSubscription(endpoint: $endpoint, p256dh: $p256dh, auth: $auth, userAgent: $userAgent)
-  }
-`;
+/** The sign-out form field that carries this browser's push token. */
+export const PUSH_TOKEN_FIELD = "pushToken";
 
-export const REMOVE_PUSH_SUBSCRIPTION = /* GraphQL */ `
-  mutation RemovePushSubscription($endpoint: String!) {
-    removePushSubscription(endpoint: $endpoint)
+export const REMOVE_PUSH_TOKEN = /* GraphQL */ `
+  mutation RemovePushToken($token: String!) {
+    removePushToken(token: $token)
   }
 `;
 
@@ -105,7 +103,8 @@ export type NotificationDetails = {
 
 export type AppNotification = Omit<ApiNotification, "data"> & { details: NotificationDetails };
 
-const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v : typeof v === "number" ? String(v) : null);
+const str = (v: unknown): string | null =>
+  typeof v === "string" && v.trim() ? v : typeof v === "number" ? String(v) : null;
 const num = (v: unknown): number | null => {
   const n = typeof v === "string" ? Number(v) : v;
   return typeof n === "number" && Number.isFinite(n) ? n : null;
@@ -149,7 +148,11 @@ export function toAppNotification(n: ApiNotification): AppNotification {
 export type NotificationKind = "enter" | "exit" | "other";
 
 export function notificationKind(n: Pick<AppNotification, "details">): NotificationKind {
-  return n.details.eventCode === "geofence_enter" ? "enter" : n.details.eventCode === "geofence_exit" ? "exit" : "other";
+  return n.details.eventCode === "geofence_enter"
+    ? "enter"
+    : n.details.eventCode === "geofence_exit"
+      ? "exit"
+      : "other";
 }
 
 /**

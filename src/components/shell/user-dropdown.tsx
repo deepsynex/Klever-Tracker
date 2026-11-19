@@ -6,6 +6,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { CHANGE_PASSWORD_HREF } from "@/components/masters/am-modules";
 import { Link } from "@/i18n/navigation";
 import { logoutAction } from "@/lib/auth/actions";
+import { PUSH_TOKEN_FIELD } from "@/lib/notifications/api";
+import { storedToken } from "@/lib/notifications/push";
 
 type Props = { name: string; email: string; initials: string; locale: string };
 
@@ -60,6 +62,8 @@ export function UserDropdown({ name, email, initials, locale }: Props) {
           </Link>
           <form action={logoutAction}>
             <input type="hidden" name="locale" value={locale} />
+            {/* This browser's push token, so the server stops sending alerts here after sign-out. */}
+            <input type="hidden" name={PUSH_TOKEN_FIELD} value={storedToken() ?? ""} />
             <button type="submit" className={item}>
               <LogOut className="rtl:rotate-180" aria-hidden />
               {t("signOut")}

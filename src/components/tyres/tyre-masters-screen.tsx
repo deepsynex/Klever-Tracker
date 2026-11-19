@@ -1,11 +1,11 @@
 "use client";
 
-import { CircleCheck, Disc3, Lightbulb, Package, Pencil, Plus, Ruler, RotateCcw, Tag, Trash2 } from "lucide-react";
+import { CircleCheck, Disc3, Lightbulb, Package, Plus, RotateCcw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
-import { DataTable, RowAction } from "@/components/masters/data-table";
+import { DataTable } from "@/components/masters/data-table";
 import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
 import { FilterSelect, FormSection, KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { SelectWithAdd } from "@/components/masters/pickers";
@@ -29,14 +29,15 @@ import {
   type TyreRecommendation,
 } from "@/lib/graphql/tyres";
 import { useTyreMasters } from "@/lib/tyres/use-tyres";
+import { TyreThresholdsTab } from "./tyre-thresholds";
 import { codeFromTitle, validateRecommendation, validateTyreProduct } from "@/lib/tyres/validation";
 import { intOrNull, numberOrNull, numText, textOrNull } from "@/lib/vehicle-management/helpers";
 import { useErrorText, useVmLookups, useVmMutations } from "@/lib/vehicle-management/use-vm";
 import { validateLookupName } from "@/lib/vehicle-management/validation";
 import { cn } from "@/lib/utils";
 
-type Tab = "products" | "sizes" | "brands" | "recommendations";
-const TABS: Tab[] = ["products", "sizes", "brands", "recommendations"];
+type Tab = "products" | "recommendations" | "thresholds";
+const TABS: Tab[] = ["products", "recommendations", "thresholds"];
 
 /** Shared data for every tab: one request, filtered to the company being worked in. */
 function useMasters() {
@@ -72,8 +73,6 @@ export function TyreMastersScreen() {
         loading={m.isPending}
         items={[
           { key: "products", label: t("tabs.products"), value: m.products.length, icon: <Package />, tone: "primary" },
-          { key: "sizes", label: t("tabs.sizes"), value: m.sizes.length, icon: <Ruler />, tone: "muted" },
-          { key: "brands", label: t("tabs.brands"), value: m.brands.length, icon: <Tag />, tone: "muted" },
           {
             key: "recommendations",
             label: t("tabs.recommendations"),
@@ -107,170 +106,9 @@ export function TyreMastersScreen() {
       ) : tab === "recommendations" ? (
         <RecommendationsTab />
       ) : (
-        <NamedTab key={tab} kind={tab === "sizes" ? "size" : "brand"} />
+        <TyreThresholdsTab />
       )}
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------------------------
-// Sizes and brands
-// ---------------------------------------------------------------------------------------------
-
-function NamedTab({ kind }: { kind: TyreNamedKind }) {
-  const t = useTranslations("masters.tyres.masters");
-  const tc = useTranslations("masters.common");
-  const m = useMasters();
-  const { run, refresh, failInto } = useVmMutations();
-  const errorText = useErrorText();
-  const ops = TYRE_NAMED_OPS[kind];
-  const rows = kind === "size" ? m.sizes : m.brands;
-  const usage = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const p of m.products) {
-      const id = kind === "size" ? p.tyreSizeId : p.tyreBrandId;
-      counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
-    return counts;
-  }, [m.products, kind]);
-
-  const [editing, setEditing] = useState<TyreNamed | "new" | null>(null);
-  const [deleting, setDeleting] = useState<TyreNamed | null>(null);
-  const [name, setName] = useState("");
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [pending, setPending] = useState(false);
-
-  const openForm = (row: TyreNamed | "new") => {
-    setEditing(row);
-    setErrors({});
-    setName(row === "new" ? "" : row.name);
-  };
-
-  const save = async () => {
-    const found = validateLookupName(name, rows, editing === "new" ? undefined : editing?.id);
-    setErrors(found);
-    if (found.name || !m.lookups.companyId) return;
-    setPending(true);
-    try {
-      if (editing === "new") await run(ops.create, { companyId: m.lookups.companyId, name: name.trim() });
-      else if (editing) await run(ops.update, { id: editing.id, name: name.trim() });
-      await refresh();
-      toast.success(tc("saved"));
-      setEditing(null);
-    } catch (err) {
-      failInto(err, setErrors);
-    } finally {
-      setPending(false);
-    }
-  };
-
-  const canEdit = m.lookups.allow("tyres", "edit");
-  const canDelete = m.lookups.allow("tyres", "delete");
-
-  return (
-    <>
-      <DataTable
-        caption={t(`tabs.${kind}s`)}
-        rows={rows}
-        loading={m.isPending}
-        error={m.error ? errorText(m.error) : null}
-        searchText={(r) => r.name}
-        toolbar={
-          <Button onClick={() => openForm("new")} disabled={!m.lookups.allow("tyres", "add")}>
-            <Plus />
-            {t(`add.${kind}`)}
-          </Button>
-        }
-        columns={[
-          {
-            key: "name",
-            header: tc("name"),
-            sortValue: (r) => r.name,
-            cell: (r) => (
-              <span className="font-medium" dir="ltr">
-                {r.name}
-              </span>
-            ),
-          },
-          {
-            key: "products",
-            header: t("usedBy"),
-            numeric: true,
-            sortValue: (r) => usage.get(r.id) ?? 0,
-            cell: (r) => usage.get(r.id) ?? 0,
-          },
-        ]}
-        rowActions={
-          canEdit || canDelete
-            ? (r) => {
-                const used = usage.get(r.id) ?? 0;
-                return (
-                  <>
-                    {canEdit ? (
-                      <RowAction label={tc("edit")} onClick={() => openForm(r)}>
-                        <Pencil />
-                      </RowAction>
-                    ) : null}
-                    {/* A size or brand a product uses can't be deleted: no delete offered for it. */}
-                    {canDelete && used === 0 ? (
-                      <RowAction label={tc("delete")} onClick={() => setDeleting(r)} danger>
-                        <Trash2 />
-                      </RowAction>
-                    ) : null}
-                  </>
-                );
-              }
-            : undefined
-        }
-      />
-
-      <Sheet
-        open={editing !== null}
-        onOpenChange={(open) => !open && setEditing(null)}
-        title={editing === "new" ? t(`add.${kind}`) : t(`edit.${kind}`)}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setEditing(null)}>
-              {tc("cancel")}
-            </Button>
-            <Button onClick={save} disabled={pending || !name.trim()}>
-              {pending ? tc("saving") : tc("save")}
-            </Button>
-          </>
-        }
-      >
-        <form
-          className="grid gap-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void save();
-          }}
-        >
-          <Field
-            id="tm-name"
-            label={`${tc("name")} *`}
-            error={errors.name}
-            hint={kind === "size" ? t("sizeHint") : undefined}
-          >
-            <Input id="tm-name" dir="ltr" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-          </Field>
-          <button type="submit" hidden />
-        </form>
-      </Sheet>
-
-      <ConfirmDelete
-        open={deleting !== null}
-        onOpenChange={(open) => !open && setDeleting(null)}
-        name={deleting?.name ?? ""}
-        failHint={t(`inUse.${kind}`)}
-        onConfirm={async () => {
-          if (!deleting) return;
-          await run(ops.remove, { id: deleting.id });
-          await refresh();
-          toast.success(tc("deleted"));
-        }}
-      />
-    </>
   );
 }
 

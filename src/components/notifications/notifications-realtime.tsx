@@ -93,6 +93,31 @@ export function NotificationsRealtime() {
     });
   }, [userId, available, qc]);
 
+  // A browser push (FCM) while this tab is visible: the service worker hands it over instead of a
+  // system notification. Toast that notification (once, by its id) and refresh the bell.
+  useEffect(() => {
+    if (!available || !("serviceWorker" in navigator)) return;
+    const onMessage = (e: MessageEvent) => {
+      const msg = e.data as { type?: string; data?: { notificationId?: string } } | null;
+      if (msg?.type !== "push-message") return;
+      const wanted = msg.data?.notificationId ?? null;
+      if (wanted && seen.current.has(wanted)) return void invalidateNotifications(qc);
+      void gqlRequest<NotificationsPage>(MY_NOTIFICATIONS, { unreadOnly: true, first: 5, page: 1 })
+        .then((res) => {
+          void invalidateNotifications(qc);
+          const raw = res.myNotifications.data.find((r) => (wanted ? r.id === wanted : !seen.current.has(r.id)));
+          if (!raw || seen.current.has(raw.id)) return;
+          seen.current.add(raw.id);
+          showToast(toAppNotification(raw));
+        })
+        .catch(() => {
+          // A missed toast isn't worth an error: the bell still shows the notification.
+        });
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, [available, qc]);
+
   useEffect(() => {
     if (!available) return;
     const before = previousCount.current;

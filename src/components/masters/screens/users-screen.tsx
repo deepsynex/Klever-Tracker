@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Car, CircleCheck, CircleSlash, Download, History, IdCard, Layers, Plus, RotateCcw, Search, ShieldCheck, Users, X } from "lucide-react";
+import { Car, CircleCheck, CircleSlash, Download, History, IdCard, Layers, MailPlus, Plus, RotateCcw, Search, ShieldCheck, Users, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -33,6 +33,7 @@ import {
   REVOKE_USER_VEHICLE_GROUP,
   UPDATE_USER,
   USER_LOGIN_LOGS,
+  RESEND_WELCOME_EMAIL,
   USERS,
   type AccessGrant,
   type AmVehicleGroup,
@@ -211,6 +212,22 @@ export function UsersScreen() {
             {!lookups.isPlatform && lookups.can("core") && roleName.has(u.roleId) ? (
               <RowAction label={t("rolePermissionsOf", { role: roleName.get(u.roleId) ?? "" })} onClick={() => setPermissionsOf(u)}>
                 <ShieldCheck />
+              </RowAction>
+            ) : null}
+            {/* Platform staff: a fresh welcome email (set-password link) for a company user (A5). */}
+            {lookups.isPlatform && u.companyId ? (
+              <RowAction
+                label={t("resendWelcome")}
+                onClick={async () => {
+                  try {
+                    await run(RESEND_WELCOME_EMAIL, { userId: u.id });
+                    toast.success(t("resendWelcomeSent", { email: u.email }));
+                  } catch (err) {
+                    fail(err);
+                  }
+                }}
+              >
+                <MailPlus />
               </RowAction>
             ) : null}
             {lookups.can("admin") ? (
