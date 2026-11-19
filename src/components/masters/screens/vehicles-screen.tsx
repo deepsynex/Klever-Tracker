@@ -29,6 +29,9 @@ import { ChildRowsEditor, type ChildField } from "@/components/masters/child-row
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
 import { downloadSheet } from "@/components/masters/excel";
 import { FileUpload } from "@/components/masters/file-upload";
+import { useTyreLabels } from "@/components/tyres/tyre-labels";
+import { VEHICLE_APPLICATIONS } from "@/lib/graphql/tyres";
+import { useAxleConfigurations } from "@/lib/tyres/use-tyres";
 import { VehiclesHeaderBanner } from "@/components/masters/vehicles-header-banner";
 import { DriverSelect } from "@/components/masters/driver-select";
 import { FormSection } from "@/components/masters/page-header";
@@ -967,9 +970,10 @@ function VehicleSheet({ vehicle, onClose }: { vehicle: Vehicle | null; onClose: 
           </FormSection>
 
           <FormSection title={t("sections.subscription")} columns={3}>
-            {text("installDate", t("f.installDate"), { type: "date", required: true })}
-            <Field id="v-paymentType" label={`${t("f.paymentType")} *`} error={errors.paymentType}>
+            {text("installDate", t("f.installDate"), { type: "date" })}
+            <Field id="v-paymentType" label={t("f.paymentType")} error={errors.paymentType}>
               <Select id="v-paymentType" value={form.paymentType} onChange={(e) => set("paymentType", e.target.value)}>
+                <option value="">{tc("none")}</option>
                 {PAYMENT_TYPES.map((p) => (
                   <option key={p} value={p}>
                     {t(`payment.${p}`)}
@@ -984,8 +988,8 @@ function VehicleSheet({ vehicle, onClose }: { vehicle: Vehicle | null; onClose: 
           <Alert tone="info">{t("complianceNote")}</Alert>
 
           <FormSection title={t("sections.limits")} columns={3}>
-            {text("speedLimitKmh", t("f.speedLimit"), { type: "number", required: true })}
-            {text("idleLimitMinutes", t("f.idleLimit"), { type: "number", required: true })}
+            {text("speedLimitKmh", t("f.speedLimit"), { type: "number" })}
+            {text("idleLimitMinutes", t("f.idleLimit"), { type: "number" })}
             <span className="hidden lg:block" />
             {text("trackingHoursFrom", t("f.trackingFrom"), { type: "time" })}
             {text("trackingHoursTo", t("f.trackingTo"), { type: "time" })}
@@ -995,6 +999,8 @@ function VehicleSheet({ vehicle, onClose }: { vehicle: Vehicle | null; onClose: 
               </Field>
             </div>
           </FormSection>
+
+          {lookups.can("tyres") ? <TyreUsageSection form={form} set={set} errors={errors} /> : null}
 
           <FormSection title={t("sections.service")} columns={3}>
             {text("odometerKm", t("f.odometer"), {
@@ -1044,6 +1050,58 @@ function VehicleSheet({ vehicle, onClose }: { vehicle: Vehicle | null; onClose: 
 }
 
 /** All IANA time zones the browser knows, with the current value kept even if unknown. */
+/** Axle layout, application and daily running: what the tyre module plans from. */
+function TyreUsageSection({
+  form,
+  set,
+  errors,
+}: {
+  form: VehicleFormValues;
+  set: (key: "axleConfigurationId" | "application" | "dailyAvgRunningKm", value: string) => void;
+  errors: Record<string, string>;
+}) {
+  const t = useTranslations("masters.tyres.customerVehicles");
+  const tc = useTranslations("masters.common");
+  const axles = useAxleConfigurations();
+  const labels = useTyreLabels();
+  return (
+    <FormSection title={t("sections.usage")} description={t("usageNote")} columns={3}>
+      <Field id="v-axleConfigurationId" label={t("f.axle")}>
+        <Select id="v-axleConfigurationId" value={form.axleConfigurationId} onChange={(e) => set("axleConfigurationId", e.target.value)}>
+          <option value="">{tc("none")}</option>
+          {(axles.data ?? []).map((a) => (
+            <option key={a.id} value={a.id}>
+              {labels.axle(a)} · {t("tyreCount", { n: a.positions.length })}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field id="v-application" label={t("f.application")}>
+        <Select id="v-application" value={form.application} onChange={(e) => set("application", e.target.value)}>
+          <option value="">{tc("none")}</option>
+          {VEHICLE_APPLICATIONS.map((a) => (
+            <option key={a} value={a}>
+              {labels.application(a)}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field id="v-dailyAvgRunningKm" label={t("f.dailyAvgKm")} error={errors.dailyAvgRunningKm}>
+        <Input
+          id="v-dailyAvgRunningKm"
+          type="number"
+          step="any"
+          min={0}
+          inputMode="decimal"
+          value={form.dailyAvgRunningKm}
+          onChange={(e) => set("dailyAvgRunningKm", e.target.value)}
+          aria-invalid={errors.dailyAvgRunningKm ? true : undefined}
+        />
+      </Field>
+    </FormSection>
+  );
+}
+
 function timeZones(current: string): string[] {
   const all = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.("timeZone") ?? [
     "Asia/Dubai",

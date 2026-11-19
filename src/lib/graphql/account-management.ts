@@ -145,14 +145,15 @@ export const ACCOUNTS = /* GraphQL */ `
       data { id companyId name email phone isPrimary sortOrder }
     }
     users(first: $first) {
-      data { id name isAdmin }
+      data { id name isAdmin email username }
     }
   }
 `;
 export type AccountsResult = {
   companies: Paginated<Company>;
   companyContacts: Paginated<CompanyContact>;
-  users: Paginated<Pick<User, "id" | "name" | "isAdmin">>;
+  /** Email and username: for the new account's first admin, which must be unique across companies. */
+  users: Paginated<Pick<User, "id" | "name" | "isAdmin" | "email" | "username">>;
 };
 
 const COMPANY_ARGS = `
@@ -169,9 +170,16 @@ const COMPANY_PASS = `
   location: $location
 `;
 
+/**
+ * Platform staff can create the company's first admin user with it (A2): `adminName`, `adminEmail`,
+ * `adminUsername`, `adminPassword`. The web sends a random password and then emails the user a link
+ * to set their own (see first-admin.ts).
+ */
 export const CREATE_COMPANY = /* GraphQL */ `
-  mutation CreateCompany($name: String!, $city: String!, $state: String!, $country: String!, $createdBy: ID, ${COMPANY_ARGS}) {
-    createCompany(name: $name, city: $city, state: $state, country: $country, createdBy: $createdBy, ${COMPANY_PASS}) {
+  mutation CreateCompany($name: String!, $city: String!, $state: String!, $country: String!, $createdBy: ID,
+    $adminName: String, $adminEmail: String, $adminUsername: String, $adminPassword: String, ${COMPANY_ARGS}) {
+    createCompany(name: $name, city: $city, state: $state, country: $country, createdBy: $createdBy,
+      adminName: $adminName, adminEmail: $adminEmail, adminUsername: $adminUsername, adminPassword: $adminPassword, ${COMPANY_PASS}) {
       id
     }
   }
@@ -228,7 +236,10 @@ export const USERS = /* GraphQL */ `
     departments(first: $first) {
       data { id companyId name }
     }
-    vehicles(first: $first) {
+    vehicles(first: $first, ownFleet: true) {
+      data { id userAccess { id userId } }
+    }
+    trackedVehicles: vehicles(first: $first, hasDevice: true) {
       data { id userAccess { id userId } }
     }
     drivers(first: $first) {
@@ -376,6 +387,37 @@ export const DELETE_AM_DRIVER = /* GraphQL */ `
 // ---------------------------------------------------------------------------------------------
 // 4. Menu Setting: roles and their module permissions
 // ---------------------------------------------------------------------------------------------
+
+/** The module catalogue (Vehicles, Tyres, Live position …), for the per-company module switches. */
+export const MODULES_LIST = /* GraphQL */ `
+  query ModulesList($first: Int!) {
+    modules(first: $first) {
+      data { id name code }
+    }
+  }
+`;
+
+/**
+ * Which modules each company may use (backend request T4, platform staff only). Asked on its own,
+ * so the Accounts screen still loads while the API doesn't have the field yet.
+ */
+export const COMPANY_ENABLED_MODULES = /* GraphQL */ `
+  query CompanyEnabledModules($first: Int!) {
+    companies(first: $first) {
+      data { id enabledModules }
+    }
+  }
+`;
+
+/** Replaces a company's modules (T4). `core` is always kept by the API. */
+export const SET_COMPANY_MODULES = /* GraphQL */ `
+  mutation SetCompanyModules($companyId: ID!, $moduleCodes: [String!]!) {
+    setCompanyModules(companyId: $companyId, moduleCodes: $moduleCodes) {
+      id
+      enabledModules
+    }
+  }
+`;
 
 export const ROLES = /* GraphQL */ `
   query Roles($first: Int!) {
@@ -567,10 +609,13 @@ export type UserLoginLog = {
   createdAt: string;
 };
 
-/** Audit trail (API Doc §6.13, append-only): who changed what, with before/after values as JSON strings. */
-export const AUDIT_LOGS = /* GraphQL */ `
-  query AuditLogs($first: Int!, $page: Int) {
-    auditLogs(first: $first, page: $page) {
+/**
+ * Audit trail (API Doc §6.13, append-only): who changed what, with before/after values as JSON
+ * strings. Newest first. `auditLogsQuery(true)` takes `$companyId` and asks for one company only.
+ */
+export const auditLogsQuery = (forCompany: boolean) => /* GraphQL */ `
+  query AuditLogs($first: Int!, $page: Int${forCompany ? ", $companyId: ID" : ""}) {
+    auditLogs(first: $first, page: $page${forCompany ? ", companyId: $companyId" : ""}) {
       data { id userId companyId action auditableType auditableId oldValues newValues ipAddress createdAt }
       paginatorInfo { total currentPage lastPage }
     }

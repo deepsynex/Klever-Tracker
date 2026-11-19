@@ -48,7 +48,7 @@ export type ResetPasswordResult = { resetPassword: boolean };
  */
 export const GET_VEHICLES = /* GraphQL */ `
   query Vehicles($first: Int) {
-    vehicles(first: $first) {
+    vehicles(first: $first, hasDevice: true) {
       data {
         id
         plateNo
@@ -295,7 +295,7 @@ export type PositionHistoryResult = {
  */
 export const HEATMAP_VEHICLE_IDS = /* GraphQL */ `
   query HeatmapVehicleIds($first: Int, $page: Int) {
-    vehicles(first: $first, page: $page) {
+    vehicles(first: $first, page: $page, hasDevice: true) {
       data {
         id
       }

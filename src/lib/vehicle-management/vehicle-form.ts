@@ -40,12 +40,12 @@ const FIELDS = {
   year: { kind: "int" },
   photoPath: { kind: "text" },
   comment: { kind: "text" },
-  installDate: { kind: "date", notNull: true },
-  paymentType: { kind: "text", notNull: true },
+  installDate: { kind: "date" },
+  paymentType: { kind: "text" },
   subscriptionExpiresAt: { kind: "date" },
   renewedAt: { kind: "date" },
-  speedLimitKmh: { kind: "int", notNull: true },
-  idleLimitMinutes: { kind: "int", notNull: true },
+  speedLimitKmh: { kind: "int" },
+  idleLimitMinutes: { kind: "int" },
   odometerKm: { kind: "float", notNull: true },
   lastServiceDate: { kind: "date" },
   lastOilChangeDate: { kind: "date" },
@@ -64,6 +64,9 @@ const FIELDS = {
   emiDueDay: { kind: "int" },
   fuelType: { kind: "text" },
   fuelConsumptionRate: { kind: "float" },
+  axleConfigurationId: { kind: "id" },
+  application: { kind: "text" },
+  dailyAvgRunningKm: { kind: "float" },
   status: { kind: "text", notNull: true },
 } satisfies Record<string, FieldSpec>;
 
@@ -132,7 +135,8 @@ export function validateVehicleForm(
 ): Record<string, string> {
   const errors: Record<string, string> = {};
   const today = context.today ?? companyToday();
-  for (const key of ["plateNo", "vehicleTypeId", "installDate", "paymentType", "speedLimitKmh", "idleLimitMinutes"] as const) {
+  // Install date, payment type and the limits are optional since the tyre module; new vehicles still get defaults.
+  for (const key of ["plateNo", "vehicleTypeId"] as const) {
     if (!form[key].trim()) errors[key] = "required";
   }
   if (form.plateNo.trim() && (context.otherPlates ?? []).some((p) => normalizePlate(p) === normalizePlate(form.plateNo))) {
@@ -151,6 +155,7 @@ export function validateVehicleForm(
     "monthlyEmi",
     "emiCount",
     "fuelConsumptionRate",
+    "dailyAvgRunningKm",
   ] as const;
   for (const key of nonNegative) {
     const n = numberOrNull(form[key]);

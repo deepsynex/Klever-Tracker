@@ -15,6 +15,22 @@ export const VEHICLE_DOCUMENTABLE_TYPE = "App\\Models\\Vehicle";
 
 export type Paginated<T> = { data: T[]; paginatorInfo: { total: number } };
 
+/**
+ * The vehicles the GPS management screens list (Vehicle details, allocations, maintenance, user
+ * access …): the company's own fleet, tracker or not, plus any customer truck that has a tracker.
+ * Tyre-only customer trucks are left out (they're under Tyres > Customer vehicles). The API can't
+ * combine two filters with "or", so these queries ask for `vehicles(ownFleet: true)` and
+ * `trackedVehicles: vehicles(hasDevice: true)`, and this folds the second list into the first.
+ */
+export function mergeTrackedVehicles<T>(result: T): T {
+  if (!result || typeof result !== "object" || !("trackedVehicles" in result)) return result;
+  const { trackedVehicles, ...rest } = result as Record<string, unknown> & { trackedVehicles?: { data?: Array<{ id: string }> } | null };
+  const own = (rest.vehicles as { data?: Array<{ id: string }> } | null | undefined)?.data ?? [];
+  const seen = new Set(own.map((v) => v.id));
+  const extra = (trackedVehicles?.data ?? []).filter((v) => !seen.has(v.id));
+  return { ...rest, vehicles: { ...(rest.vehicles as object | null), data: [...own, ...extra] } } as T;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------------------------
@@ -39,12 +55,13 @@ export type Vehicle = {
   photoPath: string | null;
   comment: string | null;
   hasCanBus: boolean;
-  installDate: string;
-  paymentType: string;
+  /** GPS install details: optional since the tyre module (customer trucks have none). */
+  installDate: string | null;
+  paymentType: string | null;
   subscriptionExpiresAt: string | null;
   renewedAt: string | null;
-  speedLimitKmh: number;
-  idleLimitMinutes: number;
+  speedLimitKmh: number | null;
+  idleLimitMinutes: number | null;
   odometerKm: number;
   lastServiceDate: string | null;
   lastOilChangeDate: string | null;
@@ -64,6 +81,12 @@ export type Vehicle = {
   emiDueDay: number | null;
   fuelType: string | null;
   fuelConsumptionRate: number | null;
+  /** Tyre module: null = the company's own GPS fleet. */
+  customerId: string | null;
+  axleConfigurationId: string | null;
+  /** city | regional | long_haul | on_off | off_road */
+  application: string | null;
+  dailyAvgRunningKm: number | null;
   status: string;
 };
 
@@ -218,6 +241,8 @@ export type FuelCalibration = {
 // A company user gets their own company; a platform account (no company) gets all of them.
 // ---------------------------------------------------------------------------------------------
 
+const LOOKUP_VEHICLE_FIELDS = "id plateNo companyId vehicleName vehicleTypeId primaryDriverId odometerKm status";
+
 export const VM_LOOKUPS = /* GraphQL */ `
   query VmLookups($first: Int!) {
     companies(first: $first) {
@@ -229,16 +254,14 @@ export const VM_LOOKUPS = /* GraphQL */ `
         maxDrivers
       }
     }
-    vehicles(first: $first) {
+    vehicles(first: $first, ownFleet: true) {
       data {
-        id
-        plateNo
-        companyId
-        vehicleName
-        vehicleTypeId
-        primaryDriverId
-        odometerKm
-        status
+        ${LOOKUP_VEHICLE_FIELDS}
+      }
+    }
+    trackedVehicles: vehicles(first: $first, hasDevice: true) {
+      data {
+        ${LOOKUP_VEHICLE_FIELDS}
       }
     }
     drivers(first: $first) {
@@ -387,6 +410,10 @@ const VEHICLE_FIELDS = /* GraphQL */ `
   emiDueDay
   fuelType
   fuelConsumptionRate
+  customerId
+  axleConfigurationId
+  application
+  dailyAvgRunningKm
   status
 `;
 
@@ -428,7 +455,12 @@ const TANK_FIELDS = /* GraphQL */ `
 /** The vehicles list with everything its columns need (device, SIM, document expiries). */
 export const VEHICLES_PAGE = /* GraphQL */ `
   query VehiclesPage($first: Int!) {
-    vehicles(first: $first) {
+    vehicles(first: $first, ownFleet: true) {
+      data {
+        ${VEHICLE_FIELDS}
+      }
+    }
+    trackedVehicles: vehicles(first: $first, hasDevice: true) {
       data {
         ${VEHICLE_FIELDS}
       }
@@ -511,7 +543,8 @@ const VEHICLE_ARGS_DECL = `
   $tyreIntervalKm: Int, $oilIntervalKm: Int, $serviceIntervalKm: Int, $machineServiceHours: Float,
   $trackingHoursFrom: String, $trackingHoursTo: String, $workingDays: String, $purchaseDate: String,
   $totalCost: Float, $downPayment: Float, $monthlyEmi: Float, $emiCount: Int, $emiDueDay: Int,
-  $fuelType: String, $fuelConsumptionRate: Float, $status: String
+  $fuelType: String, $fuelConsumptionRate: Float, $axleConfigurationId: ID, $application: String,
+  $dailyAvgRunningKm: Float, $status: String
 `;
 const VEHICLE_ARGS_PASS = `
   vehicleName: $vehicleName, timezone: $timezone, primaryDriverId: $primaryDriverId,
@@ -523,17 +556,12 @@ const VEHICLE_ARGS_PASS = `
   machineServiceHours: $machineServiceHours, trackingHoursFrom: $trackingHoursFrom,
   trackingHoursTo: $trackingHoursTo, workingDays: $workingDays, purchaseDate: $purchaseDate,
   totalCost: $totalCost, downPayment: $downPayment, monthlyEmi: $monthlyEmi, emiCount: $emiCount,
-  emiDueDay: $emiDueDay, fuelType: $fuelType, fuelConsumptionRate: $fuelConsumptionRate, status: $status
+  emiDueDay: $emiDueDay, fuelType: $fuelType, fuelConsumptionRate: $fuelConsumptionRate,
+  axleConfigurationId: $axleConfigurationId, application: $application, dailyAvgRunningKm: $dailyAvgRunningKm, status: $status
 `;
 
 export const CREATE_VEHICLE = /* GraphQL */ `
-  mutation CreateVehicle($companyId: ID!, $plateNo: String!, $vehicleTypeId: ID!, $installDate: String!,
-    $paymentType: String!, $speedLimitKmh: Int!, $idleLimitMinutes: Int!, ${VEHICLE_ARGS_DECL
-      .replace("$vehicleTypeId: ID,", "")
-      .replace("$installDate: String,", "")
-      .replace("$paymentType: String,", "")
-      .replace("$speedLimitKmh: Int,", "")
-      .replace("$idleLimitMinutes: Int,", "")}) {
+  mutation CreateVehicle($companyId: ID!, $plateNo: String!, $vehicleTypeId: ID!, ${VEHICLE_ARGS_DECL.replace("$vehicleTypeId: ID,", "")}) {
     createVehicle(companyId: $companyId, plateNo: $plateNo, vehicleTypeId: $vehicleTypeId, installDate: $installDate,
       paymentType: $paymentType, speedLimitKmh: $speedLimitKmh, idleLimitMinutes: $idleLimitMinutes, ${VEHICLE_ARGS_PASS}) {
       id

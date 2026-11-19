@@ -1,5 +1,19 @@
 import type { PermissionModule } from "@/lib/permissions";
-import { BellRing, Building2, CircleUserRound, Gauge, IdCard, KeyRound, Map, Network, ScrollText, ShieldCheck, Users, type LucideIcon } from "lucide-react";
+import {
+  BellRing,
+  Blocks,
+  Building2,
+  CircleUserRound,
+  Gauge,
+  IdCard,
+  KeyRound,
+  Map,
+  Network,
+  ScrollText,
+  ShieldCheck,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 
 // Short top-level addresses (/accounts, /users …): the pages live in the (account) route group.
 export const CHANGE_PASSWORD_HREF = "/change-password";
@@ -11,12 +25,24 @@ export const MAP_SETTINGS_HREF = "/map-settings";
  * Account Management sub-modules, in the reference site's order (Staff and Passenger are out of
  * scope). Shared by the Account & settings dropdown and the section guard. `perm`: as in VM_MODULES (My profile and Change Password
  * are for everyone). `superAdmin`: platform super admins only (platform-wide settings).
+ * `platformOnly`: platform staff only (no company of their own). `companyOnly`: company users only.
  */
-export const AM_MODULES: Array<{ key: string; href: string; icon: LucideIcon; perm?: PermissionModule[]; superAdmin?: boolean }> = [
+export const AM_MODULES: Array<{
+  key: string;
+  href: string;
+  icon: LucideIcon;
+  perm?: PermissionModule[];
+  superAdmin?: boolean;
+  platformOnly?: boolean;
+  companyOnly?: boolean;
+}> = [
   { key: "accounts", href: "/accounts", icon: Building2, perm: ["core"] },
   { key: "users", href: "/users", icon: Users, perm: ["core"] },
   { key: "drivers", href: "/drivers", icon: IdCard, perm: ["drivers"] },
-  { key: "roles", href: "/roles", icon: ShieldCheck, perm: ["core"] },
+  // The platform admin sets what each company may use (Company permissions); company admins
+  // give their own roles access within that (User permissions).
+  { key: "roles", href: "/roles", icon: ShieldCheck, perm: ["core"], companyOnly: true },
+  { key: "companyPermissions", href: "/company-permissions", icon: Blocks, platformOnly: true },
   { key: "departments", href: "/departments", icon: Network, perm: ["department"] },
   { key: "notificationRules", href: "/notification-rules", icon: BellRing, perm: ["alerts"] },
   { key: "auditLog", href: AUDIT_HREF, icon: ScrollText, perm: ["admin"] },

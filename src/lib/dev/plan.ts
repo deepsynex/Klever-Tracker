@@ -1,6 +1,6 @@
 /**
  * Parsers for the planning docs shown on the local /dev page: the phase table and
- * checklists in implementation-plan.md, and the request tables in backend-changes.md. Pure, so
+ * checklists in implementation-plan.md, and the request tables in backend-changes-timeline.md. Pure, so
  * Vitest can test them. They read the docs' current shapes and skip anything they don't recognise.
  */
 
@@ -92,7 +92,7 @@ export function statusTone(status: string): RequestTone {
 }
 
 /**
- * Request rows from backend-changes.md: 4-column tables (# | Change | Why | Status), the 3-column
+ * Request rows from backend-changes-timeline.md: 4-column tables (# | What | Asked on | Status), the 3-column
  * "Already done" table (# | Item | Seen in the live API) and "### B9: title (status)" headings.
  */
 export function parseBackendRequests(md: string): BackendRequest[] {

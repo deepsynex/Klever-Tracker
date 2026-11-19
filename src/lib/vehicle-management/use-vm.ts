@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { ApiRequestError, gqlRequest, gqlRequestPartial } from "@/lib/graphql/client";
-import { LIST_PAGE_SIZE, VM_LOOKUPS, type VmLookupsResult } from "@/lib/graphql/vehicle-management";
+import { LIST_PAGE_SIZE, mergeTrackedVehicles, VM_LOOKUPS, type VmLookupsResult } from "@/lib/graphql/vehicle-management";
 import { can, useMe, type PermissionAction, type PermissionModule } from "@/lib/permissions";
 import { ALL_COMPANIES, useCompanyScope } from "./company-scope";
 import { dropUnneededNulls } from "./helpers";
@@ -30,7 +30,7 @@ export function useVmLookups() {
   const me = meQuery.data;
   const query = useQuery({
     queryKey: [VM_KEY, "lookups"],
-    queryFn: () => gqlRequestPartial<VmLookupsResult>(VM_LOOKUPS, { first: LIST_PAGE_SIZE }),
+    queryFn: async () => mergeTrackedVehicles(await gqlRequestPartial<VmLookupsResult>(VM_LOOKUPS, { first: LIST_PAGE_SIZE })),
   });
   const ready = query.isSuccess && meQuery.isSuccess;
 
@@ -97,11 +97,14 @@ export function useVmLookups() {
   return { ...query, isSuccess: ready, ...helpers };
 }
 
-/** A Vehicle Management list query (one big page; the API has no server-side filters). */
+/**
+ * A Vehicle Management list query (one big page, filtered on the client). A `trackedVehicles`
+ * list in the result is folded into `vehicles` (see mergeTrackedVehicles).
+ */
 export function useVmQuery<T>(name: string, document: string) {
   return useQuery({
     queryKey: [VM_KEY, name],
-    queryFn: () => gqlRequestPartial<T>(document, { first: LIST_PAGE_SIZE }),
+    queryFn: async () => mergeTrackedVehicles(await gqlRequestPartial<T>(document, { first: LIST_PAGE_SIZE })),
   });
 }
 

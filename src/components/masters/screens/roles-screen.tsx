@@ -14,6 +14,8 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Sheet } from "@/components/ui/sheet";
+import { modulesForCompany } from "@/lib/account-management/company-modules";
+import { useCompanyModules } from "@/lib/account-management/use-company-modules";
 import { MAX_LENGTH, validateRole } from "@/lib/account-management/validation";
 import {
   CREATE_ROLE,
@@ -34,10 +36,11 @@ const ACTIONS = ["canView", "canAdd", "canEdit", "canDelete"] as const;
 type Action = (typeof ACTIONS)[number];
 type Flags = Record<Action, boolean>;
 const ALL: Flags = { canView: true, canAdd: true, canEdit: true, canDelete: true };
+const NONE: Flags = { canView: false, canAdd: false, canEdit: false, canDelete: false };
 
 /**
- * A role's effective rights per module. A module with no saved row allows everything (the API
- * is fail-open until a role is configured), so it starts fully ticked.
+ * A role's effective rights per module. A module with no saved row allows nothing (B7, live since
+ * 18 Nov 2026: new roles start with no access, and a module added later is off until ticked).
  */
 function effectiveFlags(modules: Module[], saved: RolePermission[]): Record<string, Flags> {
   const byModule = new Map(saved.map((p) => [p.moduleId, p]));
@@ -46,7 +49,7 @@ function effectiveFlags(modules: Module[], saved: RolePermission[]): Record<stri
       const p = byModule.get(m.id);
       return [
         m.id,
-        p ? { canView: p.canView, canAdd: p.canAdd, canEdit: p.canEdit, canDelete: p.canDelete } : { ...ALL },
+        p ? { canView: p.canView, canAdd: p.canAdd, canEdit: p.canEdit, canDelete: p.canDelete } : { ...NONE },
       ];
     }),
   );
@@ -65,7 +68,12 @@ export function RolesScreen() {
   const [statusFilter, setStatusFilter] = useState("");
 
   const data = list.data;
-  const modules = useMemo(() => [...(data?.modules.data ?? [])].sort((a, b) => Number(a.id) - Number(b.id)), [data]);
+  const companyModules = useCompanyModules();
+  const enabledModules = companyModules.enabledFor(lookups.companyId);
+  const modules = useMemo(
+    () => modulesForCompany([...(data?.modules.data ?? [])].sort((a, b) => Number(a.id) - Number(b.id)), enabledModules),
+    [data, enabledModules],
+  );
   const permsByRole = useMemo(() => {
     const map = new Map<string, RolePermission[]>();
     for (const p of data?.rolePermissions.data ?? []) map.set(p.roleId, [...(map.get(p.roleId) ?? []), p]);
@@ -231,6 +239,7 @@ export function RolePermissionsSheet({
 }) {
   const lookups = useVmLookups();
   const list = useVmQuery<RolesResult>("am-roles", ROLES);
+  const companyModules = useCompanyModules();
   const errorText = useErrorText();
   const data = list.data;
   const role = data?.roles.data.find((r) => r.id === roleId) ?? null;
@@ -238,7 +247,10 @@ export function RolePermissionsSheet({
   if (list.error) return <Alert tone="error">{errorText(list.error)}</Alert>;
   // Still loading, or the role is gone (deleted since the list loaded): nothing to show.
   if (!data || !lookups.isSuccess || !role) return null;
-  const modules = [...data.modules.data].sort((a, b) => Number(a.id) - Number(b.id));
+  const modules = modulesForCompany(
+    [...data.modules.data].sort((a, b) => Number(a.id) - Number(b.id)),
+    companyModules.enabledFor(role.companyId),
+  );
   const editable = role.companyId !== null && role.companyId === lookups.companyId && lookups.allow("core", "edit");
   return (
     <RoleSheet
@@ -299,7 +311,7 @@ function RoleSheet({
   const setRow = (moduleId: string, on: boolean) =>
     setFlags((f) => ({
       ...f,
-      [moduleId]: on ? { ...ALL } : { canView: false, canAdd: false, canEdit: false, canDelete: false },
+      [moduleId]: on ? { ...ALL } : { ...NONE },
     }));
   const setColumn = (action: Action, on: boolean) => {
     for (const m of modules) setOne(m.id, action, on);

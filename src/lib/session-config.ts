@@ -4,6 +4,17 @@ export const USER_COOKIE = "kt_user";
 /** Set on logout so the dev-only DEV_AUTH_TOKEN auto sign-in stays off until the next real sign-in. */
 export const SIGNED_OUT_COOKIE = "kt_signed_out";
 
+/**
+ * Whether the proxy may answer a request with a redirect to the login page. Only page loads: a
+ * Server Action (a POST with a `Next-Action` header, e.g. Log out) must reach its action, because the
+ * client can't read a login page as an action reply ("An unexpected response was received from the
+ * server"). Actions check the session themselves; Log out without one just clears the cookies.
+ */
+export function mayRedirectToLogin(method: string, headers: { has(name: string): boolean }): boolean {
+  if (headers.has("next-action")) return false;
+  return method === "GET" || method === "HEAD";
+}
+
 /** Dev-only fallback token from DEV_AUTH_TOKEN: never in production, and not after the user signed out. */
 export function devAuthToken(signedOut: boolean): string | undefined {
   if (process.env.NODE_ENV === "production" || signedOut) return undefined;
