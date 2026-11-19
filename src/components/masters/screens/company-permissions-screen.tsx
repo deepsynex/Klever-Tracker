@@ -14,9 +14,10 @@ import { Dialog, Sheet } from "@/components/ui/sheet";
 import { allModuleCodes, isAlwaysOn, toggleModule } from "@/lib/account-management/company-modules";
 import { useCompanyModules } from "@/lib/account-management/use-company-modules";
 import { SET_COMPANY_MODULES, type Module } from "@/lib/graphql/account-management";
+import type { LookupCompany } from "@/lib/graphql/vehicle-management";
 import { useErrorText, useVmLookups, useVmMutations } from "@/lib/vehicle-management/use-vm";
 
-type CompanyRow = { id: string; name: string; codes: string[] };
+type CompanyRow = { id: string; name: string; codes: string[]; createdAt?: string | null; updatedAt?: string | null };
 
 /**
  * Company permissions (platform admin only): which modules each company may use (T4). What's
@@ -39,7 +40,11 @@ export function CompanyPermissionsScreen() {
     () =>
       lookups.companies
         .filter((c) => lookups.inScope(c.id))
-        .map((c) => ({ id: c.id, name: c.name, codes: cm.enabledFor(c.id) ?? allModuleCodes(cm.modules) })),
+        .map((c) => ({ id: c.id, name: c.name, codes: cm.enabledFor(c.id) ?? allModuleCodes(cm.modules),
+          // A company user's own company (from `me`) carries no timestamps.
+          createdAt: (c as LookupCompany).createdAt ?? null,
+          updatedAt: (c as LookupCompany).updatedAt ?? null,
+        })),
     [lookups, cm],
   );
   const isOn = (row: CompanyRow, code: string) => isAlwaysOn(code) || row.codes.includes(code);

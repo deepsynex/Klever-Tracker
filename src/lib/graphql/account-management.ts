@@ -133,7 +133,7 @@ export type DriverBehaviourSetting = {
 const COMPANY_FIELDS = `
   id accountType name address city state country timezone website industry logoPath status
   isTrial taxExpiresAt maxUsers maxStaff maxDrivers paymentMode totalCharge invoicePath
-  tripCloseOnBarcode offlineAlertsEnabled createdBy locationLat locationLng
+  tripCloseOnBarcode offlineAlertsEnabled createdBy locationLat locationLng createdAt updatedAt
 `;
 
 export const ACCOUNTS = /* GraphQL */ `
@@ -228,7 +228,7 @@ export const DELETE_COMPANY_CONTACT = /* GraphQL */ `
 export const USERS = /* GraphQL */ `
   query Users($first: Int!) {
     users(first: $first) {
-      data { id companyId roleId departmentId name username email mobile address photoPath status isAdmin }
+      data { createdAt updatedAt id companyId roleId departmentId name username email mobile address photoPath status isAdmin }
     }
     roles(first: $first) {
       data { id companyId name status }
@@ -333,7 +333,7 @@ const DRIVER_FIELDS = `
   id companyId username name mobile address photoPath nationality bloodGroup emergencyContactName
   emergencyContactNumber notes employeeId employmentStatus employmentType workingHoursPerDay overtimeRate
   licenceNo licenceExpiryDate visaExpiryDate otherPermitName otherPermitNo permitExpiresAt permitPdfPath
-  rfidTagId canDriveHeavy canDriveLight status userAccess { id userId }
+  rfidTagId canDriveHeavy canDriveLight status createdAt updatedAt userAccess { id userId }
 `;
 
 export const AM_DRIVERS = /* GraphQL */ `
@@ -422,7 +422,7 @@ export const SET_COMPANY_MODULES = /* GraphQL */ `
 export const ROLES = /* GraphQL */ `
   query Roles($first: Int!) {
     roles(first: $first) {
-      data { id companyId name status }
+      data { createdAt updatedAt id companyId name status }
     }
     modules(first: $first) {
       data { id name code }
@@ -498,7 +498,7 @@ export const CHANGE_PASSWORD = /* GraphQL */ `
 export const BEHAVIOUR_SETTINGS = /* GraphQL */ `
   query DriverBehaviourSettings($first: Int!) {
     driverBehaviourSettings(first: $first) {
-      data {
+      data { createdAt updatedAt
         id companyId minimumMileageKm topScore displayAbsoluteValue userCustomizedScore
         weightHarshAcceleration weightHarshBraking weightExcessiveIdling weightSpeeding weightSeatbelt
       }
@@ -563,7 +563,7 @@ export const REVOKE_USER_VEHICLE_GROUP = /* GraphQL */ `
 export const DEPARTMENTS = /* GraphQL */ `
   query Departments($first: Int!) {
     departments(first: $first) {
-      data { id companyId name createdAt }
+      data { id companyId name createdAt updatedAt }
     }
     users(first: $first) {
       data { id departmentId }

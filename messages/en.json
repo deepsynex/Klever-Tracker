@@ -453,7 +453,9 @@
       },
       "show": "Show",
       "entries": "entries",
-      "reset": "Reset"
+      "reset": "Reset",
+      "createdAt": "Created",
+      "updatedAt": "Updated"
     },
     "vm": {
       "title": "Vehicle management",
@@ -1923,6 +1925,10 @@
         "label": "Map view",
         "map": "Map",
         "satellite": "Satellite"
+      },
+      "follow": {
+        "following": "Following {plate}",
+        "stop": "Stop following"
       }
     },
     "detailed": {

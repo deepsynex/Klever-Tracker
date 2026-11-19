@@ -81,7 +81,7 @@ export type TyreRecommendation = {
 // Customers
 // ---------------------------------------------------------------------------------------------
 
-const CUSTOMER_FIELDS = `id companyId name area emirate country email contactName contactPhone address status`;
+const CUSTOMER_FIELDS = `id companyId name area emirate country email contactName contactPhone address status createdAt updatedAt`;
 
 export const CUSTOMERS = /* GraphQL */ `
   query Customers($first: Int!) {
@@ -120,7 +120,7 @@ export const DELETE_CUSTOMER = /* GraphQL */ `
 // Customer vehicles
 // ---------------------------------------------------------------------------------------------
 
-const CUSTOMER_VEHICLE_FIELDS = `id companyId customerId plateNo vehicleName vehicleTypeId axleConfigurationId application
+const CUSTOMER_VEHICLE_FIELDS = `id companyId customerId plateNo vehicleName vehicleTypeId axleConfigurationId application createdAt updatedAt
   dailyAvgRunningKm photoPath status`;
 
 /** Customer trucks only (`ownFleet: false`), tracker or not. The GPS screens ask for `hasDevice: true`. */
@@ -180,21 +180,21 @@ export type AxleConfigurationsResult = { axleConfigurations: AxleConfiguration[]
 export const TYRE_MASTERS = /* GraphQL */ `
   query TyreMasters($first: Int!) {
     tyreSizes(first: $first) {
-      data {
+      data { createdAt updatedAt
         id
         companyId
         name
       }
     }
     tyreBrands(first: $first) {
-      data {
+      data { createdAt updatedAt
         id
         companyId
         name
       }
     }
     tyreProducts(first: $first) {
-      data {
+      data { createdAt updatedAt
         id
         companyId
         tyreSizeId
@@ -209,7 +209,7 @@ export const TYRE_MASTERS = /* GraphQL */ `
       }
     }
     tyreRecommendations(first: $first) {
-      data {
+      data { createdAt updatedAt
         id
         companyId
         code
