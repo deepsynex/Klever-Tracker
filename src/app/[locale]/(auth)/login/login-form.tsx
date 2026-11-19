@@ -9,6 +9,7 @@ import { Alert } from "@/components/ui/alert";
 import { Link } from "@/i18n/navigation";
 import { loginAction, type FormState } from "@/lib/auth/actions";
 import { loginSchema, type LoginInput } from "@/lib/auth/schemas";
+import { BrandLogo } from "@/components/brand";
 
 const initialState: FormState = { status: "idle" };
 
@@ -74,23 +75,9 @@ export function LoginForm({ mockHint }: { mockHint?: { email: string; password: 
 
   return (
     <div className="w-full rounded-[24px] border border-slate-100 bg-white p-7 sm:p-9 shadow-[0_12px_40px_-10px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)]">
-      {/* Brand Header */}
-      <div className="flex items-center justify-center gap-3.5 mb-6">
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-[#059669] to-[#0d9488] shadow-[0_4px_10px_rgba(5,150,105,0.25)]">
-          {/* Klever Navigation Flight Arrow Logo */}
-          <svg viewBox="0 0 24 24" className="size-6 text-white fill-white" strokeWidth="1" stroke="currentColor">
-            <path d="M 6,12 L 19,6 L 12,19 L 10.5,13.5 Z" />
-          </svg>
-        </div>
-        <div className="flex flex-col">
-          <div className="text-2xl font-extrabold tracking-tight leading-none">
-            <span className="text-[#111827]">Klever </span>
-            <span className="text-[#0d9488]">Tracker</span>
-          </div>
-          <span className="text-[9px] font-bold tracking-[2.2px] text-slate-400 mt-1 uppercase">
-            {t("brandTagline")}
-          </span>
-        </div>
+      {/* Brand */}
+      <div className="mb-6 flex justify-center">
+        <BrandLogo className="h-14" />
       </div>
 
       {/* Welcome Heading */}

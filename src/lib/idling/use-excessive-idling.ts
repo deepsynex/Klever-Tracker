@@ -15,7 +15,7 @@ import { IDLE_DEFAULTS, excessiveIdle, type IdleFix } from "./detector";
 
 const IDLING_VEHICLES = /* GraphQL */ `
   query IdlingVehicles {
-    vehicles(first: 500) {
+    vehicles(first: 500, hasDevice: true) {
       data {
         id
         plateNo

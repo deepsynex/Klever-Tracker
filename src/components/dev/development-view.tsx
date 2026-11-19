@@ -142,7 +142,7 @@ export function DevelopmentView({
     <div className="grid gap-6">
       <PageHeader
         title="Development"
-        description="Local only (npm run dev). Phase progress from implementation-plan.md, backend requests from backend-changes.md, and live checks of the Klever API through this app's /api/graphql."
+        description="Local only (npm run dev). Phase progress from implementation-plan.md, backend requests from backend-changes-timeline.md, and live checks of the Klever API through this app's /api/graphql."
         actions={
           <Button onClick={runChecks} disabled={running}>
             <RefreshCw className={cn(running && "animate-spin")} />

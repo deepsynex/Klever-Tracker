@@ -207,7 +207,8 @@ export function UsersScreen() {
         }
         rowActions={(u) => (
           <>
-            {lookups.can("core") && roleName.has(u.roleId) ? (
+            {/* Role permissions are the company admins' job; the platform admin sets Company permissions. */}
+            {!lookups.isPlatform && lookups.can("core") && roleName.has(u.roleId) ? (
               <RowAction label={t("rolePermissionsOf", { role: roleName.get(u.roleId) ?? "" })} onClick={() => setPermissionsOf(u)}>
                 <ShieldCheck />
               </RowAction>

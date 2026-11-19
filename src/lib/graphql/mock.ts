@@ -150,6 +150,72 @@ export async function mockFetch(rawBody: string, token?: string) {
     return json(200, { data: { positionHistory: { data: rows, paginatorInfo: { total: rows.length } } } });
   }
 
+  // Tyre module (src/lib/graphql/tyres.ts): company 1's QA data, read-only.
+  if (/\baxleConfigurations\b/.test(query)) {
+    const side = (axleNo: number, dual: boolean) =>
+      (dual ? ["LO", "LI", "RI", "RO"] : ["L", "R"]).map((code, i) => ({
+        code: `A${axleNo}${code}`,
+        axleNo,
+        side: code.startsWith("L") ? "left" : "right",
+        placement: dual ? (code.endsWith("O") ? "outer" : "inner") : "single",
+        sortOrder: axleNo * 10 + i,
+      }));
+    const layout = (id: string, code: string, name: string, axles: boolean[]) => ({
+      id,
+      code,
+      name,
+      positions: axles.flatMap((dual, i) => side(i + 1, dual)),
+    });
+    return json(200, {
+      data: {
+        axleConfigurations: [
+          layout("1", "4x2", "4x2 (2 axles, rear drive)", [false, true]),
+          layout("2", "4x4", "4x4 (2 axles, all-wheel drive)", [false, true]),
+          layout("3", "6x2", "6x2 (3 axles, rear drive)", [false, true, true]),
+          layout("4", "6x4", "6x4 (3 axles, tandem drive)", [false, true, true]),
+          layout("5", "2x_trailer", "Trailer — 2 axles", [false, true]),
+          layout("6", "3x_trailer", "Trailer — 3 axles", [true, true, true]),
+        ],
+      },
+    });
+  }
+  if (/\bcustomers\s*\(/.test(query)) {
+    const customer = { id: "1", companyId: "1", name: "QA Test Customer", area: "Al Quoz", emirate: "Dubai", country: "UAE", email: "qa.customer@example.com", contactName: "QA Contact", contactPhone: "+971500000001", address: null, status: "active" };
+    return json(200, { data: { customers: { data: [customer], paginatorInfo: { total: 1 } } } });
+  }
+  if (/\bownFleet:\s*false\b/.test(query)) {
+    const truck = { id: "16", companyId: "1", customerId: "1", plateNo: "TEST-QA-001", vehicleName: "QA Truck 1", vehicleTypeId: "1", axleConfigurationId: "4", application: "regional", dailyAvgRunningKm: 250, photoPath: null, status: "active" };
+    return json(200, { data: { vehicles: { data: [truck], paginatorInfo: { total: 1 } } } });
+  }
+  if (/\btyreSizes\b/.test(query)) {
+    const named = (rows: string[]) => ({ data: rows.map((name, i) => ({ id: String(i + 1), companyId: "1", name })) });
+    const product = (id: string, tyreSizeId: string, tyreBrandId: string, displayName: string, pattern: string, plyRating: number) => ({
+      id, companyId: "1", tyreSizeId, tyreBrandId, displayName, pattern, plyRating, loadSpeedIndex: "156/150L", recommendedPressurePsi: 120, originalTreadDepthMm: 18, status: "active",
+    });
+    return json(200, {
+      data: {
+        tyreSizes: named(["315/80R22.5", "11R22.5", "295/80R22.5"]),
+        tyreBrands: named(["APOLLO", "BOTO", "CEAT"]),
+        tyreProducts: {
+          data: [
+            product("1", "1", "1", "315/80R22.5 APOLLO ENDURACE RD 18PR", "ENDURACE RD", 18),
+            product("2", "1", "3", "315/80R22.5 CEAT WINMILE 18PR", "WINMILE", 18),
+            product("3", "2", "2", "11R22.5 BOTO BT926 16PR", "BT926", 16),
+          ],
+        },
+        tyreRecommendations: {
+          data: ["check_alignment", "rotate_tyre", "correct_pressure", "retread_tyre"].map((code, i) => ({
+            id: String(i + 1),
+            companyId: "1",
+            code,
+            title: code.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            description: null,
+          })),
+        },
+      },
+    });
+  }
+
   // Vehicles query
   if (/\bvehicles\b/.test(query)) {
     return json(200, {

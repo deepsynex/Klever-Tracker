@@ -1,7 +1,7 @@
 "use client";
 
 import { Building2, CircleCheck, Contact, FlaskConical, Plus, RotateCcw } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ChildRowsEditor } from "@/components/masters/child-rows";
@@ -26,7 +26,10 @@ import {
   PAYMENT_MODES,
   type AccountForm,
 } from "@/lib/account-management/forms";
+import { emptyFirstAdmin, randomPassword, validateFirstAdmin, type FirstAdmin } from "@/lib/account-management/first-admin";
 import { MAX_CONTACTS, MAX_LENGTH, validateAccount, validateContact } from "@/lib/account-management/validation";
+import { gqlRequest } from "@/lib/graphql/client";
+import { FORGOT_PASSWORD, type ForgotPasswordResult } from "@/lib/graphql/operations";
 import {
   ACCOUNTS,
   CREATE_COMPANY,
@@ -192,6 +195,7 @@ export function AccountsScreen() {
           contacts={editing === "new" ? [] : (contactsByCompany.get(editing.id) ?? [])}
           contactsByCompany={contactsByCompany}
           others={(list.data?.companies.data ?? []).filter((c) => editing === "new" || c.id !== editing.id)}
+          users={list.data?.users.data ?? []}
           onClose={() => setEditing(null)}
         />
       ) : null}
@@ -217,14 +221,17 @@ function AccountSheet({
   contacts,
   contactsByCompany,
   others,
+  users,
   onClose,
 }: {
   company: Company | null;
   contacts: CompanyContact[];
   contactsByCompany: Map<string, CompanyContact[]>;
   others: Company[];
+  users: Array<{ email?: string | null; username?: string | null }>;
   onClose: () => void;
 }) {
+  const locale = useLocale();
   const t = useTranslations("masters.am.accounts");
   const tc = useTranslations("masters.common");
   const tv = useTranslations("validation");
@@ -237,14 +244,22 @@ function AccountSheet({
   const [form, setForm] = useState<AccountForm>(() => (company ? companyToForm(company) : emptyAccountForm()));
   // The values as last saved (or loaded), to tell whether closing would lose edits.
   const [savedForm, setSavedForm] = useState(form);
-  const guard = useDiscardGuard(isDirty(form, savedForm), onClose);
+  // A new account (platform staff) is created with its first admin user.
+  const withFirstAdmin = isPlatform && !company && !companyId;
+  const [admin, setAdmin] = useState<FirstAdmin>(emptyFirstAdmin);
+  // The username follows the email until it's typed in by hand.
+  const [usernameTouched, setUsernameTouched] = useState(false);
+  const guard = useDiscardGuard(isDirty(form, savedForm) || (withFirstAdmin && isDirty(admin, emptyFirstAdmin())), onClose);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const set = <K extends keyof AccountForm>(key: K, value: AccountForm[K]) => setForm((f) => ({ ...f, [key]: value }));
   const savedContacts = companyId && !company ? (contactsByCompany.get(companyId) ?? []) : contacts;
 
   const save = async () => {
-    const found = validateAccount(form, { otherNames: others.map((c) => c.name), isPlatform });
+    const found = {
+      ...validateAccount(form, { otherNames: others.map((c) => c.name), isPlatform }),
+      ...(withFirstAdmin ? validateFirstAdmin(admin, users) : {}),
+    };
     setErrors(found);
     if (Object.keys(found).length) {
       toast.error(tc("fixErrors"));
@@ -257,9 +272,26 @@ function AccountSheet({
         await run(UPDATE_COMPANY, { id: companyId, ...vars }, { previous: savedRef.current });
         toast.success(tc("saved"));
       } else {
-        const res = await run<{ createCompany: { id: string } }>(CREATE_COMPANY, { ...vars, createdBy: lookups.meId });
+        const firstAdmin = withFirstAdmin
+          ? {
+              adminName: admin.adminName.trim(),
+              adminEmail: admin.adminEmail.trim(),
+              adminUsername: admin.adminUsername.trim(),
+              adminPassword: randomPassword(),
+            }
+          : {};
+        const res = await run<{ createCompany: { id: string } }>(CREATE_COMPANY, { ...vars, ...firstAdmin, createdBy: lookups.meId });
         setCompanyId(res.createCompany.id);
         toast.success(t("createdNext"));
+        if (withFirstAdmin) {
+          // The admin's password is random and unknown: email them a link to set their own.
+          try {
+            await gqlRequest<ForgotPasswordResult>(FORGOT_PASSWORD, { email: admin.adminEmail.trim(), locale });
+            toast.success(t("firstAdmin.emailSent", { email: admin.adminEmail.trim() }));
+          } catch {
+            toast.warning(t("firstAdmin.emailFailed", { email: admin.adminEmail.trim() }));
+          }
+        }
       }
       savedRef.current = vars;
       setSavedForm(form);
@@ -404,6 +436,44 @@ function AccountSheet({
             <Checkbox label={t("f.tripCloseOnBarcode")} checked={form.tripCloseOnBarcode} onChange={(e) => set("tripCloseOnBarcode", e.target.checked)} />
             <Checkbox label={t("f.offlineAlertsEnabled")} checked={form.offlineAlertsEnabled} onChange={(e) => set("offlineAlertsEnabled", e.target.checked)} />
           </FormSection>
+
+          {withFirstAdmin ? (
+            <FormSection title={t("firstAdmin.title")} description={t("firstAdmin.description")} columns={3}>
+              <Field id="a-adminName" label={`${t("firstAdmin.name")} *`} error={errors.adminName}>
+                <Input
+                  id="a-adminName"
+                  value={admin.adminName}
+                  onChange={(e) => setAdmin((a) => ({ ...a, adminName: e.target.value }))}
+                  aria-invalid={errors.adminName ? true : undefined}
+                />
+              </Field>
+              <Field id="a-adminEmail" label={`${t("firstAdmin.email")} *`} error={errors.adminEmail}>
+                <Input
+                  id="a-adminEmail"
+                  type="email"
+                  dir="ltr"
+                  value={admin.adminEmail}
+                  onChange={(e) => {
+                    const email = e.target.value;
+                    setAdmin((a) => ({ ...a, adminEmail: email, adminUsername: usernameTouched ? a.adminUsername : email.trim() }));
+                  }}
+                  aria-invalid={errors.adminEmail ? true : undefined}
+                />
+              </Field>
+              <Field id="a-adminUsername" label={`${t("firstAdmin.username")} *`} error={errors.adminUsername} hint={t("firstAdmin.usernameHint")}>
+                <Input
+                  id="a-adminUsername"
+                  dir="ltr"
+                  value={admin.adminUsername}
+                  onChange={(e) => {
+                    setUsernameTouched(true);
+                    setAdmin((a) => ({ ...a, adminUsername: e.target.value }));
+                  }}
+                  aria-invalid={errors.adminUsername ? true : undefined}
+                />
+              </Field>
+            </FormSection>
+          ) : null}
 
           {isPlatform ? (
             <FormSection title={t("sections.platform")} description={t("platformHint")} columns={3}>

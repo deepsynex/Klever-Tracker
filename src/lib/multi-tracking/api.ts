@@ -11,7 +11,7 @@ const LAST_POSITION_FIELDS = "status speed heading ignition locationLat location
 /** Vehicle list with live status in one call; `search` matches plate, name or registration. */
 export const MULTI_TRACK_VEHICLES = /* GraphQL */ `
   query MultiTrackVehicles($search: String, $first: Int, $page: Int) {
-    vehicles(search: $search, first: $first, page: $page) {
+    vehicles(search: $search, first: $first, page: $page, hasDevice: true) {
       data {
         id
         plateNo

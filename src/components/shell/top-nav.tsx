@@ -3,6 +3,7 @@
 import {
   CarFront,
   ChevronDown,
+  Disc3,
   Flame,
   History,
   Home,
@@ -18,6 +19,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useVisibleModules } from "@/components/masters/vm-nav";
 import { AM_MODULES } from "@/components/masters/am-modules";
+import { TYRE_MODULES } from "@/components/masters/tyre-modules";
 import { VM_MODULES } from "@/components/masters/vm-modules";
 import { can, useMe } from "@/lib/permissions";
 import { TRACKING_PERMISSION } from "./route-permissions";
@@ -58,11 +60,18 @@ const TRACKING_CHILDREN: NavItem[] = [
 function useNavEntries() {
   const visibleVehicleModules = useVisibleModules(VM_MODULES);
   const visibleAccountModules = useVisibleModules(AM_MODULES);
+  const visibleTyreModules = useVisibleModules(TYRE_MODULES);
   // Every tracking screen reads positions; hidden until the role is known, like the masters tabs.
   const { data: me } = useMe();
   const canTrack = can(me, TRACKING_PERMISSION);
 
   const vehicleChildren: NavItem[] = visibleVehicleModules.map((m) => ({
+    key: m.key,
+    icon: m.icon,
+    href: m.href,
+  }));
+
+  const tyreChildren: NavItem[] = visibleTyreModules.map((m) => ({
     key: m.key,
     icon: m.icon,
     href: m.href,
@@ -92,6 +101,17 @@ function useNavEntries() {
             icon: CarFront,
             namespace: "masters.vm.modules",
             children: vehicleChildren,
+          } satisfies NavGroup,
+        ]
+      : []),
+    // Tyres (Phase 1 masters): customers, their vehicles and the tyre catalogue.
+    ...(tyreChildren.length > 0
+      ? [
+          {
+            key: "tyres",
+            icon: Disc3,
+            namespace: "masters.tyres.modules",
+            children: tyreChildren,
           } satisfies NavGroup,
         ]
       : []),
@@ -191,6 +211,7 @@ function NavDropdown({ group }: { group: NavGroup }) {
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
+        title={tNav(group.key)}
         onClick={() => setOpen((prev) => !prev)}
         onKeyDown={(e) => {
           if (e.key === "Escape") setOpen(false);

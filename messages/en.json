@@ -81,7 +81,9 @@
     "duplicateInFile": "An earlier row in this file has the same value.",
     "expiredWarning": "This date has passed. You can still save.",
     "permissionsRequired": "Allow at least one module (tick View somewhere).",
-    "weightsTotal": "The weights must add up to 100%."
+    "weightsTotal": "The weights must add up to 100%.",
+    "codeFormat": "Use lower-case letters, digits and underscores, starting with a letter.",
+    "duplicateCode": "This code is already used. Choose a different one."
   },
   "errors": {
     "invalid_credentials": "The email or password is incorrect.",
@@ -123,7 +125,6 @@
       "tagline": "Sign in to access your fleet tracking dashboard",
       "showPassword": "Show password",
       "hidePassword": "Hide password",
-      "brandTagline": "Vehicle tracking system",
       "rememberMe": "Remember me",
       "orContinue": "or continue with",
       "secureTitle": "Secure & reliable",
@@ -181,6 +182,7 @@
     "open": "Open menu",
     "historyShort": "History",
     "vehicles": "Vehicles",
+    "tyres": "Tyres",
     "accounts": "Account & settings",
     "settings": "Settings",
     "track": "Tracking",
@@ -194,7 +196,6 @@
     "signOut": "Sign out",
     "signedInAs": "Signed in as {email}",
     "changePassword": "Change password",
-    "tagline": "Vehicle tracking system",
     "forbidden": {
       "title": "You don't have permission",
       "body": "Your role can't open this screen. Ask your administrator if you need access.",
@@ -1139,7 +1140,11 @@
         },
         "emailTemplateHint": "Emails use the standard Klever Tracker alert template. See the preview below.",
         "partlyActive": "Partly active",
-        "settingsDiffer": "These alerts had different settings or recipients. Saving applies the settings below to all of them."
+        "settingsDiffer": "These alerts had different settings or recipients. Saving applies the settings below to all of them.",
+        "testEmail": "Send test email",
+        "testEmailSending": "Sending test email…",
+        "testEmailSent": "{n, plural, one {Test email sent to # recipient.} other {Test email sent to # recipients.}} It uses sample alert details.",
+        "testEmailNotSent": "The test email wasn't sent. Check the recipients' email addresses and try again."
       }
     },
     "am": {
@@ -1151,6 +1156,7 @@
         "users": "User",
         "drivers": "Driver",
         "roles": "User permissions",
+        "companyPermissions": "Company permissions",
         "changePassword": "Change password",
         "driverBehaviour": "Driver behaviour",
         "departments": "Departments",
@@ -1244,6 +1250,16 @@
         "kpi": {
           "total": "Accounts",
           "contacts": "Contacts"
+        },
+        "firstAdmin": {
+          "title": "First admin user",
+          "description": "We'll create this user as the company's admin with a random password, and email them a link to set their own password.",
+          "name": "Full name",
+          "email": "Email",
+          "username": "Username",
+          "usernameHint": "What they sign in with. Their email works too.",
+          "emailSent": "We emailed {email} a link to set their password.",
+          "emailFailed": "The account was created, but the password email to {email} couldn't be sent. Ask them to use “Forgot password” on the sign-in page."
         }
       },
       "users": {
@@ -1440,7 +1456,8 @@
           "other": "Other",
           "core": "Company, users & roles",
           "live-position": "Live position",
-          "department": "Departments"
+          "department": "Departments",
+          "tyres": "Tyres"
         },
         "moduleHints": {
           "core": "Accounts, users, roles and devices"
@@ -1589,6 +1606,168 @@
         "configured": "Set",
         "notConfigured": "Not set",
         "demoMapId": "Not set: Google's demo map ID is used"
+      },
+      "companyPermissions": {
+        "title": "Company permissions",
+        "description": "Choose which modules each company can use. A module switched off is hidden from every user of that company, whatever their role. Company admins give their roles access to the rest on User permissions.",
+        "pending": "Not available yet: the backend hasn't added per-company modules. Until then every company has every module.",
+        "company": "Company",
+        "modules": "Modules",
+        "count": "{n} of {total} on",
+        "editTitle": "Permissions for {name}",
+        "formDescription": "Tick the modules this company has bought. Changes apply to all of its users straight away.",
+        "alwaysOn": "Always on",
+        "saved": "Company permissions saved.",
+        "kpi": {
+          "companies": "Companies",
+          "tyres": "With Tyres",
+          "limited": "With modules off"
+        },
+        "showModules": "Show the modules",
+        "activeTitle": "Active modules: {name}",
+        "switchedOff": "Switched off",
+        "close": "Close",
+        "edit": "Edit modules"
+      }
+    },
+    "tyres": {
+      "modules": {
+        "label": "Tyres sections",
+        "customers": "Customers",
+        "customerVehicles": "Customer vehicles",
+        "tyreMasters": "Tyre masters"
+      },
+      "axles": {
+        "4x2": "4x2 (2 axles, rear drive)",
+        "4x4": "4x4 (2 axles, all-wheel drive)",
+        "6x2": "6x2 (3 axles, rear drive)",
+        "6x4": "6x4 (3 axles, tandem drive)",
+        "2x_trailer": "Trailer, 2 axles",
+        "3x_trailer": "Trailer, 3 axles"
+      },
+      "applications": {
+        "city": "City",
+        "regional": "Regional",
+        "long_haul": "Long haul",
+        "on_off": "On/off road",
+        "off_road": "Off road"
+      },
+      "customers": {
+        "title": "Customers",
+        "description": "The companies whose trucks you look after. Their trucks are listed under Customer vehicles.",
+        "add": "Add customer",
+        "editTitle": "Edit {name}",
+        "formDescription": "Contact and location details. Only the name is required.",
+        "empty": "No customers yet. Add the first one.",
+        "inactiveHint": "Inactive customers stay on their vehicles but aren't offered for new ones.",
+        "noVehicles": "No vehicles for this customer yet. Add them under Customer vehicles.",
+        "deleteNotice": "{n, plural, one {This customer has # vehicle.} other {This customer has # vehicles.}} The vehicles are kept, without a customer.",
+        "kpi": {
+          "total": "Customers",
+          "vehicles": "Their vehicles"
+        },
+        "sections": {
+          "details": "Customer",
+          "location": "Location",
+          "vehicles": "Vehicles ({n})"
+        },
+        "f": {
+          "contact": "Contact",
+          "location": "Location",
+          "vehicles": "Vehicles",
+          "contactName": "Contact name",
+          "contactPhone": "Contact phone",
+          "email": "Email",
+          "area": "Area",
+          "emirate": "Emirate",
+          "country": "Country",
+          "address": "Address"
+        }
+      },
+      "customerVehicles": {
+        "title": "Customer vehicles",
+        "description": "Customers' trucks whose tyres you manage. They have no GPS tracker, so they don't appear on the maps.",
+        "add": "Add vehicle",
+        "editTitle": "Edit {plate}",
+        "formDescription": "The truck, its customer and how it's used. GPS details aren't needed.",
+        "empty": "No customer vehicles yet. Add the first one.",
+        "noCustomers": "Add a customer first, under Customers.",
+        "usageNote": "Used to plan tyre checks and replacements.",
+        "tyreCount": "{n, plural, one {# tyre position} other {# tyre positions}}",
+        "km": "{n} km",
+        "kpi": {
+          "total": "Customer vehicles",
+          "customers": "Customers with vehicles",
+          "avgKm": "Average km per day"
+        },
+        "sections": {
+          "vehicle": "Vehicle",
+          "usage": "Tyres and usage",
+          "photo": "Photo"
+        },
+        "f": {
+          "customer": "Customer",
+          "plateNo": "Plate number",
+          "vehicleName": "Vehicle name",
+          "vehicleType": "Vehicle type",
+          "axle": "Axle configuration",
+          "application": "Application",
+          "dailyAvgKm": "Daily average (km)",
+          "photo": "Vehicle photo"
+        }
+      },
+      "masters": {
+        "title": "Tyre masters",
+        "description": "The tyre sizes, brands and products you work with, and the recommendations given after an inspection.",
+        "tabs": {
+          "products": "Products",
+          "sizes": "Sizes",
+          "brands": "Brands",
+          "recommendations": "Recommendations"
+        },
+        "add": {
+          "size": "Add size",
+          "brand": "Add brand",
+          "product": "Add product",
+          "recommendation": "Add recommendation"
+        },
+        "edit": {
+          "size": "Edit size",
+          "brand": "Edit brand",
+          "product": "Edit product",
+          "recommendation": "Edit recommendation"
+        },
+        "usedBy": "Products",
+        "sizeHint": "As printed on the tyre, like 315/80R22.5.",
+        "inUse": {
+          "size": "Couldn't delete this size. A product uses it. Change or delete that product first.",
+          "brand": "Couldn't delete this brand. A product uses it. Change or delete that product first.",
+          "product": "Couldn't delete this product. It's probably used by tyres. Mark it Inactive instead."
+        },
+        "productDescription": "The product name is built from the size, brand, pattern and ply rating when you save.",
+        "loadSpeedHint": "Like 156/150L.",
+        "codeHint": "Lower-case letters, digits and underscores. It can't be changed later.",
+        "codeFixed": "The code can't be changed.",
+        "mm": "mm",
+        "sections": {
+          "product": "Product",
+          "specs": "Specifications"
+        },
+        "f": {
+          "size": "Size",
+          "brand": "Brand",
+          "product": "Product",
+          "pattern": "Pattern",
+          "plyRating": "Ply rating",
+          "loadSpeedIndex": "Load/speed index",
+          "pressure": "Pressure",
+          "tread": "Tread depth",
+          "pressurePsi": "Recommended pressure (psi)",
+          "treadMm": "Original tread depth (mm)",
+          "title": "Title",
+          "code": "Code",
+          "description": "Description"
+        }
       }
     }
   },

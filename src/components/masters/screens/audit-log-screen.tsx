@@ -10,8 +10,7 @@ import { Alert } from "@/components/ui/alert";
 import { auditChanges, auditSubject, groupAuditEntries, nameFromValues, subjectLabel } from "@/lib/account-management/audit";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { gqlRequestPartial } from "@/lib/graphql/client";
-import { AUDIT_LOGS, type AuditLogsResult } from "@/lib/graphql/account-management";
-import { gqlRequest } from "@/lib/graphql/client";
+import { auditLogsQuery, type AuditLogsResult } from "@/lib/graphql/account-management";
 import { parseApiDateTime } from "@/lib/vehicle-management/helpers";
 import { useErrorText, useVmLookups } from "@/lib/vehicle-management/use-vm";
 import { cn } from "@/lib/utils";
@@ -30,21 +29,11 @@ function actionTone(action: string): "ok" | "info" | "warn" | "muted" {
  * Each entry expands to its changed fields (before → after). Changes made in the app are recorded
  * by the GraphQL proxy (lib/audit); the backend adds its own.
  *
- * The API pages oldest first and can't filter by company, so the newest MAX_ENTRIES are read from
- * the last pages and filtered and paged here.
+ * The API returns newest first and filters by company (A3), so the newest MAX_ENTRIES of the
+ * company being worked in are read from the first pages, then searched and paged here.
  */
 const MAX_ENTRIES = 1000;
 const API_PAGE = 250;
-
-const AUDIT_TOTAL = /* GraphQL */ `
-  query AuditTotal {
-    auditLogs(first: 1) {
-      paginatorInfo {
-        total
-      }
-    }
-  }
-`;
 
 /** Names of the records entries point at, for the Record column (lists the role may not read come back empty). */
 const AUDIT_NAMES = /* GraphQL */ `
@@ -85,17 +74,23 @@ type Named = { data: Array<{ id: string; name: string }> } | null;
 type AuditNamesResult = { alertRules: Named; geofences: Named; roles: Named; departments: Named; vehicleGroups: Named };
 const byId = (list: Named) => new Map((list?.data ?? []).map((x) => [x.id, x.name]));
 
-/** The newest entries (up to MAX_ENTRIES), newest first, plus the user names. */
-async function loadNewest(): Promise<{ entries: AuditLogsResult["auditLogs"]["data"]; users: AuditLogsResult["users"]["data"]; total: number }> {
-  const { auditLogs } = await gqlRequest<{ auditLogs: { paginatorInfo: { total: number } } }>(AUDIT_TOTAL);
-  const total = auditLogs.paginatorInfo.total;
-  const last = Math.max(1, Math.ceil(total / API_PAGE));
+/**
+ * The newest entries (up to MAX_ENTRIES) of one company, or of every company when `companyId` is
+ * null (platform staff, "all companies"), newest first, plus the user names.
+ */
+async function loadNewest(
+  companyId: string | null,
+): Promise<{ entries: AuditLogsResult["auditLogs"]["data"]; users: AuditLogsResult["users"]["data"]; total: number }> {
+  const document = auditLogsQuery(companyId !== null);
   const entries: AuditLogsResult["auditLogs"]["data"] = [];
   let users: AuditLogsResult["users"]["data"] = [];
-  for (let page = last; page >= 1 && entries.length < MAX_ENTRIES; page--) {
-    const res = await gqlRequestPartial<AuditLogsResult>(AUDIT_LOGS, { first: API_PAGE, page });
+  let total = 0;
+  for (let page = 1; entries.length < MAX_ENTRIES; page++) {
+    const res = await gqlRequestPartial<AuditLogsResult>(document, { first: API_PAGE, page, ...(companyId ? { companyId } : {}) });
     entries.push(...res.auditLogs.data);
     if (!users.length) users = res.users.data;
+    total = res.auditLogs.paginatorInfo.total;
+    if (page >= res.auditLogs.paginatorInfo.lastPage) break;
   }
   entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || Number(b.id) - Number(a.id));
   return { entries: entries.slice(0, MAX_ENTRIES), users, total };
@@ -111,8 +106,9 @@ export function AuditLogScreen() {
   const [open, setOpen] = useState<string | null>(null);
 
   const query = useQuery({
-    queryKey: ["vm", "am-audit"],
-    queryFn: loadNewest,
+    queryKey: ["vm", "am-audit", lookups.companyId],
+    queryFn: () => loadNewest(lookups.companyId),
+    enabled: lookups.isSuccess,
     placeholderData: keepPreviousData,
   });
   const userName = useMemo(() => new Map((query.data?.users ?? []).map((u) => [u.id, u.name])), [query.data]);

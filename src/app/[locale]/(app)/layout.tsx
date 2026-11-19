@@ -1,4 +1,3 @@
-import { useTranslations } from "next-intl";
 import { Suspense } from "react";
 import { Brand } from "@/components/brand";
 import { RouteGuard } from "@/components/shell/route-guard";
@@ -13,15 +12,13 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Link } from "@/i18n/navigation";
 
 export default function AppLayout({ children }: LayoutProps<"/[locale]">) {
-  const t = useTranslations("shell");
-
   return (
     <div className="flex min-h-dvh flex-col">
       {/* Exactly 4rem tall including the border: the full-screen map pages size themselves as 100dvh - 4rem. */}
       <header className="sticky top-0 z-20 h-16 border-b border-border/70 bg-surface/80 backdrop-blur-xl">
         <div className="flex h-full items-center gap-3 px-4 sm:px-6 xl:gap-6">
           <Link href="/dashboard" className="shrink-0 rounded-lg">
-            <Brand subtitle={t("tagline")} />
+            <Brand className="h-10 sm:h-11" />
           </Link>
           <div className="flex min-w-0 flex-1 items-center xl:justify-center">
             <TopNav />

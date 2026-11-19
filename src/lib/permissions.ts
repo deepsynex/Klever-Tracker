@@ -61,11 +61,22 @@ export type PermissionModule =
   | "other"
   | "core"
   | "live-position"
-  | "department";
+  | "department"
+  | "tyres";
 
-/** Whether `me` may do `action` in `module`. Unknown user (still loading) → false. */
-export function can(me: Pick<Me, "permissions"> | null | undefined, module: PermissionModule, action: PermissionAction = "view"): boolean {
-  return Boolean(me?.permissions.includes(`${module}.${action}`));
+/**
+ * Whether `me` may do `action` in `module`. Unknown user (still loading) → false. Platform staff
+ * (no company of their own) may do everything, as in the API, even when a newer module (tyres) is
+ * still missing from their `permissions` list.
+ */
+export function can(
+  me: (Pick<Me, "permissions"> & Partial<Pick<Me, "companyId">>) | null | undefined,
+  module: PermissionModule,
+  action: PermissionAction = "view",
+): boolean {
+  if (!me) return false;
+  if (me.companyId === null) return true;
+  return me.permissions.includes(`${module}.${action}`);
 }
 
 export function useMe() {

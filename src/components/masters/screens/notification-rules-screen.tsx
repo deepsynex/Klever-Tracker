@@ -1,12 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { BellRing, Check, Mail, Plus, RotateCcw, Trash2, UserRound } from "lucide-react";
+import { BellRing, Check, Mail, MailCheck, Plus, RotateCcw, Trash2, UserRound } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/masters/confirm-delete";
-import { DataTable } from "@/components/masters/data-table";
+import { DataTable, RowAction } from "@/components/masters/data-table";
 import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
 import { FilterSelect, FormSection, KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import {
   DELETE_ALERT_RULE,
   DELETE_ALERT_RULE_RECIPIENT,
   RECIPIENT_FIELDS,
+  SEND_TEST_ALERT_EMAIL,
   UPDATE_ALERT_RULE,
   type AlertRule,
   type AlertRulesResult,
@@ -65,8 +66,9 @@ export function NotificationRulesScreen() {
   });
   const users = useVmQuery<AlertUsersResult>("alertUsers", ALERT_USERS);
   const groupsQuery = useVmQuery<GroupsResult>("groups", GROUPS);
-  const { run, refresh } = useVmMutations();
+  const { run, refresh, fail } = useVmMutations();
   const errorText = useErrorText();
+  const [testing, setTesting] = useState<string | null>(null);
   const [editing, setEditing] = useState<RuleRow | "new" | null>(null);
   const [deleting, setDeleting] = useState<RuleRow | null>(null);
   const [eventFilter, setEventFilter] = useState("all");
@@ -165,6 +167,35 @@ export function NotificationRulesScreen() {
               {tc("reset")}
             </Button>
           </>
+        }
+        rowActions={
+          lookups.allow("alerts", "edit")
+            ? (row) => {
+                // A row's rules share their recipients, so one rule's test shows the row's email.
+                const rule = row.rules.find((r) => r.notifyEmail && r.recipients.length > 0);
+                if (!rule) return null;
+                return (
+                  <RowAction
+                    label={testing === row.key ? t("testEmailSending") : t("testEmail")}
+                    disabled={testing !== null}
+                    onClick={async () => {
+                      setTesting(row.key);
+                      try {
+                        const res = await run<{ sendTestAlertEmail: boolean }>(SEND_TEST_ALERT_EMAIL, { alertRuleId: rule.id });
+                        if (res.sendTestAlertEmail) toast.success(t("testEmailSent", { n: rule.recipients.length }));
+                        else toast.error(t("testEmailNotSent"));
+                      } catch (err) {
+                        fail(err);
+                      } finally {
+                        setTesting(null);
+                      }
+                    }}
+                  >
+                    <MailCheck />
+                  </RowAction>
+                );
+              }
+            : undefined
         }
         onEdit={lookups.allow("alerts", "edit") ? setEditing : undefined}
         onDelete={lookups.allow("alerts", "delete") ? setDeleting : undefined}

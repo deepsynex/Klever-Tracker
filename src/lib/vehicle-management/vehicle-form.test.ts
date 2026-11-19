@@ -45,6 +45,10 @@ const vehicle: Vehicle = {
   emiDueDay: 5,
   fuelType: "diesel",
   fuelConsumptionRate: 8.5,
+  customerId: null,
+  axleConfigurationId: "4",
+  application: "regional",
+  dailyAvgRunningKm: 250,
   status: "active",
 };
 
@@ -67,7 +71,16 @@ describe("vehicle form", () => {
       workingDays: '["mon","tue"]',
       hasCanBus: true,
       colour: null, // cleared optional fields are sent as null so they clear
+      axleConfigurationId: "4",
+      application: "regional",
+      dailyAvgRunningKm: 250,
     });
+  });
+
+  it("lets the GPS install fields be cleared (optional since the tyre module)", () => {
+    const form = { ...vehicleToForm(vehicle), installDate: "", paymentType: "", speedLimitKmh: "", idleLimitMinutes: "" };
+    expect(validateVehicleForm(form)).toEqual({});
+    expect(vehicleFormToVariables(form)).toMatchObject({ installDate: null, paymentType: null, speedLimitKmh: null, idleLimitMinutes: null });
   });
 
   it("never sends null for NOT NULL columns", () => {
@@ -80,7 +93,8 @@ describe("vehicle form", () => {
   it("requires the fields the API requires and checks ranges", () => {
     const errors = validateVehicleForm({ ...emptyVehicleForm(), year: "1800", emiDueDay: "40", oilIntervalKm: "-5" });
     expect(errors).toMatchObject({ plateNo: "required", vehicleTypeId: "required", year: "year", emiDueDay: "dayOfMonth", oilIntervalKm: "nonNegative" });
-    expect(errors.installDate).toBeUndefined(); // defaults to today
+    expect(errors.installDate).toBeUndefined(); // optional (and defaults to today)
+    expect(validateVehicleForm({ ...vehicleToForm(vehicle), dailyAvgRunningKm: "-1" })).toEqual({ dailyAvgRunningKm: "nonNegative" });
     expect(validateVehicleForm({ ...vehicleToForm(vehicle) })).toEqual({});
   });
 });

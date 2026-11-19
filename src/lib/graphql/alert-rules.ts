@@ -4,7 +4,7 @@
  * and/or by push. Recipients are users or plain email addresses; there is no update mutation for
  * a recipient, so changes are delete + create.
  *
- * CC: `isCc` on a recipient is a backend request (B10, see backend-requests/backend-changes.md).
+ * CC: `isCc` on a recipient is a backend request (B10, see backend-requests/backend-changes-timeline.md).
  * The web asks the schema whether the field exists (RECIPIENT_FIELDS) and only then sends it.
  */
 
@@ -145,6 +145,16 @@ export const DELETE_ALERT_RULE = /* GraphQL */ `
     deleteAlertRule(id: $id) {
       id
     }
+  }
+`;
+
+/**
+ * Sends the alert email template with sample data to the rule's To and CC recipients (B10c), so a
+ * company can check the email without waiting for a real alert. Same permission as editing the rule.
+ */
+export const SEND_TEST_ALERT_EMAIL = /* GraphQL */ `
+  mutation SendTestAlertEmail($alertRuleId: ID!) {
+    sendTestAlertEmail(alertRuleId: $alertRuleId)
   }
 `;
 
