@@ -86,7 +86,14 @@
     "duplicateCode": "This code is already used. Choose a different one.",
     "pressureRange": "Enter a pressure between 0 and 200 psi.",
     "treadRange": "Enter a depth between 0 and 40 mm.",
-    "replaceBelowCritical": "The replace depth must be below the critical depth."
+    "replaceBelowCritical": "The replace depth must be below the critical depth.",
+    "axleCodeFormat": "Use lower-case letters, digits and underscores, like 6x4 or 2x_trailer.",
+    "sparesRange": "Choose 0 to 4 spare tyres.",
+    "axlesRequired": "Add at least one axle.",
+    "axlesMax": "A layout can have up to 6 axles.",
+    "axleMix": "A trailer has only trailer axles. Make every axle a trailer axle, or none.",
+    "steerFirst": "Put the steer axles first, before the drive axles.",
+    "driveRequired": "A truck needs at least one drive axle."
   },
   "errors": {
     "invalid_credentials": "The email or password is incorrect.",
@@ -1730,7 +1737,6 @@
         "showAxles": "Show the axles and tyres",
         "sizes": {
           "title": "Tyre sizes",
-          "description": "The tyre size on each axle (all its tyres) and on the spares. Tyres can only be fitted where the size matches.",
           "steer": "Steer axle",
           "drive": "Drive axle {n}",
           "trailer": "Trailer axle {n}",
@@ -1738,8 +1744,11 @@
           "spare": "Spare tyres",
           "choose": "Choose a size…",
           "add": "Add tyre size",
-          "useForAll": "Use the first axle's size for all"
-        }
+          "useForAll": "Use the first tyre's size for all",
+          "descriptionAxle": "Every tyre and spare. Choosing a size for one tyre sets every tyre on its axle (each tyre gets its own size once the server supports it). Tyres can only be fitted where the size matches.",
+          "descriptionTyre": "Each tyre's own size, and the spares'. Tyres can only be fitted where the size matches."
+        },
+        "axleConfigs": "Axle configurations"
       },
       "masters": {
         "title": "Tyre masters",
@@ -1808,7 +1817,7 @@
         "diagramLabel": "Top view of the {layout} layout with its tyre positions",
         "front": "Front",
         "positions": "Tyre positions",
-        "positionsHint": "Hover a row or a tyre to find it on the drawing.",
+        "positionsHint": "Hover a row or a tyre to find it on the drawing. Change a tyre size in the Size column: each tyre has its own, and tyres only move or swap where sizes match. Saved straight away.",
         "tyreCount": "{n, plural, one {# tyre} other {# tyres}}",
         "km": "{n} km",
         "kinds": {
@@ -1850,8 +1859,6 @@
         "plan": {
           "title": "Tyres on this vehicle",
           "hint": "Drag a tyre onto another position to move or swap it. Drag it out of the drawing to take it off. Tap an empty position (+) to add a tyre. Then press Save.",
-          "sizes": "Tyre size per axle",
-          "sizesHint": "Tyres can only be fitted, moved or swapped where the size matches. Saved as soon as you change it.",
           "noSize": "No size set",
           "sizeMismatch": "Can't move that tyre: {from} and {to} are different tyre sizes.",
           "sizeMissing": "Set a tyre size for both axles first.",
@@ -1898,7 +1905,9 @@
           "when": "When",
           "what": "What happened",
           "by": "By"
-        }
+        },
+        "sizeOf": "Tyre size for {code}",
+        "positionsHintAxle": "Hover a row or a tyre to find it on the drawing. Change a tyre size in the Size column: every tyre on that axle changes with it (each tyre gets its own size once the server supports it). Saved straight away."
       },
       "conditions": {
         "good": "Good",
@@ -2079,6 +2088,57 @@
           "rotated": "Rotated",
           "retread": "Retread",
           "removed": "Removed"
+        }
+      },
+      "axleConfigs": {
+        "title": "Axle configurations",
+        "description": "The standard layouts every company shares, and your company's own. Your own can be changed and deleted; a layout a vehicle uses keeps its axles.",
+        "add": "Add axle configuration",
+        "addTitle": "New axle configuration",
+        "editTitle": "Edit {name}",
+        "formDescription": "List the axles from front to back. The tyre positions are named like the standard layouts.",
+        "edit": "Edit {name}",
+        "delete": "Delete {name}",
+        "deleted": "Axle configuration deleted.",
+        "notYet": "Adding your own axle configurations switches on once the server supports it.",
+        "inUseDelete": "Vehicles use this layout. Move them to another layout before deleting it.",
+        "locked": "{n, plural, one {# vehicle uses} other {# vehicles use}} this layout, so its axles can't change. You can still change the name, code and spares.",
+        "own": "Your company",
+        "standard": "Standard",
+        "tyresWithSpares": "{n} + {spares} spare",
+        "preview": "{n} tyres{spares, plural, =0 {} one { + # spare} other { + # spares}}",
+        "axleN": "Axle {n}",
+        "addAxle": "Add axle",
+        "removeAxle": "Remove axle {n}",
+        "single": "Single tyres",
+        "dual": "Twin tyres",
+        "kinds": {
+          "steer": "Steer",
+          "drive": "Drive",
+          "trailer": "Trailer"
+        },
+        "sections": {
+          "layout": "Axles",
+          "details": "Details"
+        },
+        "cols": {
+          "name": "Name",
+          "code": "Code",
+          "axles": "Axles",
+          "tyres": "Tyres",
+          "owner": "Whose",
+          "vehicles": "Vehicles",
+          "actions": "Actions"
+        },
+        "f": {
+          "axles": "Axles, front to back",
+          "kind": "Axle {n} type",
+          "tyres": "Axle {n} tyres",
+          "name": "Name",
+          "nameHint": "As people should see it, like 8x4 (4 axles, twin steer).",
+          "code": "Code",
+          "codeHint": "Short and unique, like 8x4. Filled in from the axles until you type one.",
+          "spares": "Spare tyres"
         }
       }
     }

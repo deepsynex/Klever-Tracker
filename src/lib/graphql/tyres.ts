@@ -34,7 +34,18 @@ export type AxlePosition = {
   placement: "single" | "inner" | "outer";
   sortOrder: number;
 };
-export type AxleConfiguration = { id: string; code: string; name: string; positions: AxlePosition[] };
+export type AxleConfiguration = {
+  id: string;
+  code: string;
+  name: string;
+  positions: AxlePosition[];
+  /** Null for the standard layouts every company shares; set on a company's own (once the backend has them). */
+  companyId?: string | null;
+  /** Spare tyres a vehicle with this layout starts with. */
+  spareCount?: number;
+  /** Vehicles using it: while any do, only the code, name and spares can change, and it can't be deleted. */
+  vehicleCount?: number;
+};
 
 /** A customer's truck: a vehicle with a customer and no GPS device. */
 export type CustomerVehicle = {
@@ -176,6 +187,71 @@ export const AXLE_CONFIGURATIONS = /* GraphQL */ `
 `;
 export type AxleConfigurationsResult = { axleConfigurations: AxleConfiguration[] };
 
+/*
+ * Each company's own axle layouts (requested from the backend, not live yet): the list then also
+ * says whose each layout is and how many vehicles use it, and the company can add, edit and delete
+ * its own. The web switches these on from the schema (useAxleApi), so nothing calls a missing field.
+ */
+export const AXLE_CONFIGURATIONS_OWN = /* GraphQL */ `
+  query AxleConfigurationsOwn {
+    axleConfigurations {
+      id
+      code
+      name
+      companyId
+      spareCount
+      vehicleCount
+      positions {
+        code
+        axleNo
+        side
+        placement
+        sortOrder
+      }
+    }
+  }
+`;
+const AXLE_ARGS = `$code: String!, $name: String!, $spareCount: Int!, $positions: [AxlePositionInput!]!`;
+const AXLE_PASS = `code: $code, name: $name, spareCount: $spareCount, positions: $positions`;
+export const CREATE_AXLE_CONFIGURATION = /* GraphQL */ `
+  mutation CreateAxleConfiguration($companyId: ID, ${AXLE_ARGS}) {
+    createAxleConfiguration(companyId: $companyId, ${AXLE_PASS}) { id }
+  }
+`;
+/** The positions can only change while no vehicle uses the layout (the API refuses it otherwise). */
+export const UPDATE_AXLE_CONFIGURATION = /* GraphQL */ `
+  mutation UpdateAxleConfiguration($id: ID!, ${AXLE_ARGS}) {
+    updateAxleConfiguration(id: $id, ${AXLE_PASS}) { id }
+  }
+`;
+/** Refused while any vehicle uses the layout. */
+export const DELETE_AXLE_CONFIGURATION = /* GraphQL */ `
+  mutation DeleteAxleConfiguration($id: ID!) {
+    deleteAxleConfiguration(id: $id) {
+      id
+    }
+  }
+`;
+/** Whether the backend has a company's own axle layouts yet (checked once per visit). */
+export const AXLE_API_PROBE = /* GraphQL */ `
+  query AxleApiProbe {
+    m: __type(name: "Mutation") {
+      fields {
+        name
+      }
+    }
+    a: __type(name: "AxleConfiguration") {
+      fields {
+        name
+      }
+    }
+  }
+`;
+export type AxleApiProbeResult = {
+  m: { fields: Array<{ name: string }> } | null;
+  a: { fields: Array<{ name: string }> } | null;
+};
+
 // ---------------------------------------------------------------------------------------------
 // Tyre masters
 // ---------------------------------------------------------------------------------------------
@@ -302,7 +378,22 @@ export const DELETE_TYRE_RECOMMENDATION = /* GraphQL */ `
 // Tyre size per axle (T5), tyres and fitments (T6)
 // ---------------------------------------------------------------------------------------------
 
-/** Replaces a vehicle's tyre size per axle (axle 0 = spare; null clears one). */
+/**
+ * Sets the tyre size of every position on each listed axle (axle 0 = spare; null clears one). Once
+ * tyres can have their own sizes, only the listed axles change.
+ */
+/**
+ * Each tyre's own size (requested from the backend, not live yet): sets only the listed positions
+ * (null clears one). The axle drawing switches it on from the schema (useAxleApi().perTyreSizes).
+ */
+export const SET_VEHICLE_TYRE_POSITION_SIZES = /* GraphQL */ `
+  mutation SetVehicleTyrePositionSizes($vehicleId: ID!, $sizes: [TyrePositionSizeInput!]!) {
+    setVehicleTyrePositionSizes(vehicleId: $vehicleId, sizes: $sizes) {
+      id
+    }
+  }
+`;
+
 export const SET_VEHICLE_AXLE_TYRE_SIZES = /* GraphQL */ `
   mutation SetVehicleAxleTyreSizes($vehicleId: ID!, $sizes: [AxleTyreSizeInput!]!) {
     setVehicleAxleTyreSizes(vehicleId: $vehicleId, sizes: $sizes) {

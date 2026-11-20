@@ -16,6 +16,7 @@ import { gqlRequest } from "@/lib/graphql/client";
 import {
   SAVE_VEHICLE_TYRE_PLAN,
   SET_VEHICLE_AXLE_TYRE_SIZES,
+  SET_VEHICLE_TYRE_POSITION_SIZES,
   TYRE_DISPOSITIONS,
   VEHICLE_TYRE_POSITIONS,
   type AxleConfiguration,
@@ -36,7 +37,7 @@ import {
   planRemovals,
 } from "@/lib/tyres/rotation-plan";
 import { useTyreRemovals } from "@/lib/tyres/use-tyre-api";
-import { useTyreMasters } from "@/lib/tyres/use-tyres";
+import { useAxleApi, useTyreMasters } from "@/lib/tyres/use-tyres";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { useVmLookups, useVmMutations, VM_KEY } from "@/lib/vehicle-management/use-vm";
 import { cn } from "@/lib/utils";
@@ -910,13 +911,12 @@ export function AxleConfigSheet({
   const sizeName = (id: string | null | undefined) => sizes.find((s) => s.id === id)?.name ?? t("plan.noSize");
   const slots = [...rows.map((r) => r.axleNo), ...(spares.length ? [SPARE_AXLE] : [])];
 
-  const setAxleSize = async (axleNo: number, tyreSizeId: string) => {
+  const axleApi = useAxleApi();
+  /** Saves one size change straight away, then reloads the positions. */
+  const saveSize = async (document: string, variables: Record<string, unknown>) => {
     setBusy(true);
     try {
-      await run(SET_VEHICLE_AXLE_TYRE_SIZES, {
-        vehicleId,
-        sizes: slots.map((a) => ({ axleNo: a, tyreSizeId: (a === axleNo ? tyreSizeId : axleSizes[a]) || null })),
-      });
+      await run(document, variables);
       await refresh();
       toast.success(t("saved.size"));
     } catch (err) {
@@ -925,6 +925,29 @@ export function AxleConfigSheet({
       setBusy(false);
     }
   };
+  const setAxleSize = (axleNo: number, tyreSizeId: string) =>
+    saveSize(SET_VEHICLE_AXLE_TYRE_SIZES, {
+      vehicleId,
+      sizes: slots.map((a) => ({ axleNo: a, tyreSizeId: (a === axleNo ? tyreSizeId : axleSizes[a]) || null })),
+    });
+  /** One tyre's own size (once the backend has per-tyre sizes); before that, its whole axle's. */
+  const setTyreSize = (code: string, tyreSizeId: string) =>
+    axleApi.perTyreSizes
+      ? saveSize(SET_VEHICLE_TYRE_POSITION_SIZES, {
+          vehicleId,
+          sizes: [{ positionCode: code, tyreSizeId: tyreSizeId || null }],
+        })
+      : setAxleSize(byCode.get(code)?.axleNo ?? 0, tyreSizeId);
+  const sizeOptions = (
+    <>
+      <option value="">{t("plan.noSize")}</option>
+      {sizes.map((s) => (
+        <option key={s.id} value={s.id}>
+          {s.name}
+        </option>
+      ))}
+    </>
+  );
 
   // The plan: the tyre on each position now, known by the position it started on.
   const order = useMemo(() => positions.map((p) => p.code), [positions]);
@@ -1105,31 +1128,11 @@ export function AxleConfigSheet({
               </ul>
             </FormSection>
           ) : null}
-          <FormSection title={t("plan.sizes")} description={t("plan.sizesHint")} columns={1}>
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {slots.map((axleNo) => (
-                <li key={axleNo} className="grid gap-1">
-                  <label htmlFor={`axle-size-${axleNo}`} className="text-xs font-semibold">
-                    {axleName(axleNo)}
-                  </label>
-                  <Select
-                    id={`axle-size-${axleNo}`}
-                    value={axleSizes[axleNo] ?? ""}
-                    disabled={!canEdit || busy}
-                    onChange={(e) => void setAxleSize(axleNo, e.target.value)}
-                  >
-                    <option value="">{t("plan.noSize")}</option>
-                    {sizes.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Select>
-                </li>
-              ))}
-            </ul>
-          </FormSection>
-          <FormSection title={t("positions")} description={t("positionsHint")} columns={1}>
+          <FormSection
+            title={t("positions")}
+            description={axleApi.perTyreSizes ? t("positionsHint") : t("positionsHintAxle")}
+            columns={1}
+          >
             <div className="overflow-x-auto rounded-xl border border-border/70">
               <table className="w-full text-sm">
                 <thead className="bg-surface-2 text-xs text-muted-foreground">
@@ -1156,8 +1159,21 @@ export function AxleConfigSheet({
                         </td>
                         <td className="px-3 py-1.5">{axleName(p.axleNo)}</td>
                         <td className="px-3 py-1.5">{p.side ? t(`sides.${p.side}`) : "—"}</td>
-                        <td className="px-3 py-1.5" dir="ltr">
-                          {p.tyreSize?.name ?? <span className="text-muted-foreground">—</span>}
+                        <td className="min-w-36 px-3 py-1" dir="ltr">
+                          {canEdit ? (
+                            // This tyre's own size; before per-tyre sizes, its whole axle's.
+                            <Select
+                              aria-label={t("sizeOf", { code: p.code })}
+                              className="h-8"
+                              value={(axleApi.perTyreSizes ? p.tyreSizeId : axleSizes[p.axleNo]) ?? ""}
+                              disabled={busy}
+                              onChange={(e) => void setTyreSize(p.code, e.target.value)}
+                            >
+                              {sizeOptions}
+                            </Select>
+                          ) : (
+                            (p.tyreSize?.name ?? <span className="text-muted-foreground">—</span>)
+                          )}
                         </td>
                         <td className="px-3 py-1.5">
                           {!here ? (
