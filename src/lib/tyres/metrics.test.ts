@@ -7,6 +7,7 @@ import {
   expectedLifeKm,
   pressureCondition,
   runningKm,
+  runningKmAt,
   treadCondition,
   tyreMetrics,
   wearCondition,
@@ -20,6 +21,38 @@ describe("tread condition", () => {
     expect(treadCondition([12, 5.9, 8])).toBe("critical");
     expect(treadCondition([6, 6, 6])).toBe("good");
     expect(treadCondition([null, undefined])).toBeNull();
+  });
+});
+
+describe("running km at a reading", () => {
+  it("adds the km driven since the recorded figure", () => {
+    // 30,000 km already run when the vehicle was at 12,500 km; inspected at 13,000 km.
+    expect(runningKmAt({ recordedKm: 30000, fittedOdometerKm: null }, 12500, 13000)).toBe(30500);
+    expect(runningKmAt({ recordedKm: 30000, fittedOdometerKm: null }, 12500, null)).toBe(30000);
+    // A reading below the vehicle's odometer never takes km off.
+    expect(runningKmAt({ recordedKm: 30000, fittedOdometerKm: null }, 12500, 12000)).toBe(30000);
+    expect(runningKmAt({ recordedKm: 0, fittedOdometerKm: null }, null, 13000)).toBe(0);
+  });
+  it("uses the km the API knows in the metrics, even without fitments", () => {
+    const base = { outer: 10, center: 10, inner: 10, actualPressure: null, recommendedPressure: null };
+    const m = tyreMetrics({
+      ...base,
+      originalTread: 16,
+      price: 1200,
+      fitments: [],
+      currentOdometerKm: 13000,
+      knownRunningKm: 30000,
+    });
+    expect(m.runningKm).toBe(30000);
+    expect(m.wearRateKmPerMm).toBe(5000);
+    expect(m.currentCpk).toBe(0.04);
+    const none = tyreMetrics({ ...base, originalTread: 16, price: null, fitments: [], currentOdometerKm: 13000 });
+    expect(none.runningKm).toBeNull();
+  });
+  it("falls back to the km since fitting, else unknown", () => {
+    expect(runningKmAt({ recordedKm: null, fittedOdometerKm: 10000 }, 12500, 13000)).toBe(3000);
+    expect(runningKmAt({ recordedKm: null, fittedOdometerKm: 10000 }, 12500, null)).toBe(2500);
+    expect(runningKmAt({ recordedKm: null, fittedOdometerKm: null }, 12500, 13000)).toBeNull();
   });
 });
 

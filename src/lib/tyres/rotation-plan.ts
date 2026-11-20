@@ -51,26 +51,37 @@ export function addTyre(plan: RotationPlan, position: string): RotationPlan {
   return { ...plan, [position]: `${NEW_TYRE_PREFIX}${n}` };
 }
 
+export type PlanPosition = { code: string; fitted: boolean; movedFrom?: string };
+
+/**
+ * Every position as the API takes it: whether it has a tyre and, for a tyre moved or swapped here,
+ * the position it came from, so the tyre keeps its running km. A new tyre has no `movedFrom`, so it
+ * starts from 0 km.
+ */
+export const planPositions = (plan: RotationPlan, order: string[]): PlanPosition[] =>
+  order.map((code) => {
+    const tyre = plan[code];
+    return tyre && tyre !== code && !isNewTyre(tyre)
+      ? { code, fitted: true, movedFrom: tyre }
+      : { code, fitted: Boolean(tyre) };
+  });
+
 export type PlanRemoval = { position: string; disposition: string; note: string | null };
 
 /**
- * What to tell the API about each tyre that left its position. Every position that started with a
- * tyre and now has a different one, or none, needs a removal. A tyre taken off says what happened to
- * it (`fates`); a tyre moved to a position that was empty says where it went (`movedNote`), since
- * its old position is now empty. A tyre swapped with another needs nothing: both positions keep a tyre.
+ * What to tell the API about each tyre taken off the vehicle: what happened to it (`fates`). A tyre
+ * moved or swapped needs nothing (its new position says `movedFrom`), even when its old position is
+ * left empty.
  */
 export function planRemovals(
   plan: RotationPlan,
   start: RotationPlan,
   order: string[],
   fates: Record<string, { fate: string; note: string }>,
-  movedNote: (to: string) => string,
 ): PlanRemoval[] {
-  return order.flatMap((code) => {
-    if (start[code] !== code || plan[code] === code) return [];
-    const now = order.find((c) => plan[c] === code);
-    if (!now) return [{ position: code, disposition: fates[code]?.fate ?? "other", note: fates[code]?.note || null }];
-    // Moved: only its old position going empty has to be explained.
-    return plan[code] ? [] : [{ position: code, disposition: "other", note: movedNote(now) }];
-  });
+  return removedTyres(plan, start, order).map((code) => ({
+    position: code,
+    disposition: fates[code]?.fate ?? "other",
+    note: fates[code]?.note || null,
+  }));
 }

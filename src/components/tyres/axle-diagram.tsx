@@ -9,6 +9,7 @@ import { useDiscardGuard } from "@/components/masters/discard-guard";
 import { FormSection } from "@/components/masters/page-header";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Dialog, Sheet } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +17,8 @@ import { gqlRequest } from "@/lib/graphql/client";
 import {
   SAVE_VEHICLE_TYRE_PLAN,
   SET_VEHICLE_AXLE_TYRE_SIZES,
+  SET_VEHICLE_TYRE_POSITION_PRODUCTS,
+  SET_VEHICLE_TYRE_POSITION_SIZES,
   TYRE_DISPOSITIONS,
   VEHICLE_TYRE_POSITIONS,
   type AxleConfiguration,
@@ -33,10 +36,11 @@ import {
   type RotationPlan,
   addTyre,
   isNewTyre,
+  planPositions,
   planRemovals,
 } from "@/lib/tyres/rotation-plan";
 import { useTyreRemovals } from "@/lib/tyres/use-tyre-api";
-import { useTyreMasters } from "@/lib/tyres/use-tyres";
+import { useAxleApi, useTyreMasters, useTyreRunningKm } from "@/lib/tyres/use-tyres";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
 import { useVmLookups, useVmMutations, VM_KEY } from "@/lib/vehicle-management/use-vm";
 import { cn } from "@/lib/utils";
@@ -910,13 +914,36 @@ export function AxleConfigSheet({
   const sizeName = (id: string | null | undefined) => sizes.find((s) => s.id === id)?.name ?? t("plan.noSize");
   const slots = [...rows.map((r) => r.axleNo), ...(spares.length ? [SPARE_AXLE] : [])];
 
-  const setAxleSize = async (axleNo: number, tyreSizeId: string) => {
+  const axleApi = useAxleApi();
+  // Products to pick for a tyre: the company's active ones of its size.
+  const products = useMemo(
+    () =>
+      (masters.data?.tyreProducts?.data ?? [])
+        .filter((p) => lookups.inScope(p.companyId) && p.status === "active")
+        .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { numeric: true })),
+    [masters.data, lookups],
+  );
+  /** Saves one tyre's product and price straight away (they move with the tyre), then reloads. */
+  const saveProduct = async (code: string, tyreProductId: string | null, purchasePrice: number | null) => {
     setBusy(true);
     try {
-      await run(SET_VEHICLE_AXLE_TYRE_SIZES, {
+      await run(SET_VEHICLE_TYRE_POSITION_PRODUCTS, {
         vehicleId,
-        sizes: slots.map((a) => ({ axleNo: a, tyreSizeId: (a === axleNo ? tyreSizeId : axleSizes[a]) || null })),
+        tyres: [{ positionCode: code, tyreProductId, purchasePrice }],
       });
+      await refresh();
+      toast.success(t("saved.product"));
+    } catch (err) {
+      fail(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+  /** Saves one size change straight away, then reloads the positions. */
+  const saveSize = async (document: string, variables: Record<string, unknown>) => {
+    setBusy(true);
+    try {
+      await run(document, variables);
       await refresh();
       toast.success(t("saved.size"));
     } catch (err) {
@@ -925,6 +952,29 @@ export function AxleConfigSheet({
       setBusy(false);
     }
   };
+  const setAxleSize = (axleNo: number, tyreSizeId: string) =>
+    saveSize(SET_VEHICLE_AXLE_TYRE_SIZES, {
+      vehicleId,
+      sizes: slots.map((a) => ({ axleNo: a, tyreSizeId: (a === axleNo ? tyreSizeId : axleSizes[a]) || null })),
+    });
+  /** One tyre's own size (once the backend has per-tyre sizes); before that, its whole axle's. */
+  const setTyreSize = (code: string, tyreSizeId: string) =>
+    axleApi.perTyreSizes
+      ? saveSize(SET_VEHICLE_TYRE_POSITION_SIZES, {
+          vehicleId,
+          sizes: [{ positionCode: code, tyreSizeId: tyreSizeId || null }],
+        })
+      : setAxleSize(byCode.get(code)?.axleNo ?? 0, tyreSizeId);
+  const sizeOptions = (
+    <>
+      <option value="">{t("plan.noSize")}</option>
+      {sizes.map((s) => (
+        <option key={s.id} value={s.id}>
+          {s.name}
+        </option>
+      ))}
+    </>
+  );
 
   // The plan: the tyre on each position now, known by the position it started on.
   const order = useMemo(() => positions.map((p) => p.code), [positions]);
@@ -938,6 +988,14 @@ export function AxleConfigSheet({
   const [fates, setFates] = useState<Record<string, { fate: TyreDisposition; note: string }>>({});
   const removed = removedTyres(plan, start, order);
   /** A tyre's name: its serial number when it has one, else the position it started on. */
+  // Each tyre's km now (by the position it started on); it follows the tyre round the plan.
+  const savedKm = useTyreRunningKm(vehicleId, axleApi.runningKm).byCode;
+  /** The km of the tyre on a position in the plan: a moved tyre keeps its own, a new tyre starts from 0. */
+  const kmHere = (code: string): number | null => {
+    const tyre = plan[code];
+    if (!tyre) return null;
+    return isNewTyre(tyre) ? 0 : (savedKm[tyre] ?? null);
+  };
   const tyreName = (tyre: string) => (isNewTyre(tyre) ? t("plan.newTyre") : (byCode.get(tyre)?.tyre?.serialNo ?? tyre));
   /** Puts a new tyre on an empty position; the axle needs a tyre size first. */
   const addHere = (position: string) => {
@@ -964,14 +1022,17 @@ export function AxleConfigSheet({
     setEdited(null);
     setFates({});
   };
-  /** Saves the plan: the positions with a tyre now, and what happened to the tyres taken off. */
+  /**
+   * Saves the plan: the positions with a tyre now (a moved tyre says where from and keeps its km; a
+   * new tyre starts from 0 km), and what happened to the tyres taken off.
+   */
   const savePlan = async () => {
     setBusy(true);
     try {
       await run(SAVE_VEHICLE_TYRE_PLAN, {
         vehicleId,
-        positions: order.map((code) => ({ code, fitted: Boolean(plan[code]) })),
-        removals: planRemovals(plan, start, order, fates, (to) => t("plan.movedNote", { code: to })),
+        positions: planPositions(plan, order),
+        removals: planRemovals(plan, start, order, fates),
       });
       await refresh();
       resetPlan();
@@ -997,7 +1058,7 @@ export function AxleConfigSheet({
     <Sheet
       open
       onOpenChange={(open) => !open && guard.requestClose()}
-      size="xl"
+      size="full"
       title={t("title", { plate })}
       description={vehicleName ? `${vehicleName} · ${labels.axle(config)}` : labels.axle(config)}
       footer={
@@ -1105,31 +1166,11 @@ export function AxleConfigSheet({
               </ul>
             </FormSection>
           ) : null}
-          <FormSection title={t("plan.sizes")} description={t("plan.sizesHint")} columns={1}>
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {slots.map((axleNo) => (
-                <li key={axleNo} className="grid gap-1">
-                  <label htmlFor={`axle-size-${axleNo}`} className="text-xs font-semibold">
-                    {axleName(axleNo)}
-                  </label>
-                  <Select
-                    id={`axle-size-${axleNo}`}
-                    value={axleSizes[axleNo] ?? ""}
-                    disabled={!canEdit || busy}
-                    onChange={(e) => void setAxleSize(axleNo, e.target.value)}
-                  >
-                    <option value="">{t("plan.noSize")}</option>
-                    {sizes.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Select>
-                </li>
-              ))}
-            </ul>
-          </FormSection>
-          <FormSection title={t("positions")} description={t("positionsHint")} columns={1}>
+          <FormSection
+            title={t("positions")}
+            description={axleApi.perTyreSizes ? t("positionsHint") : t("positionsHintAxle")}
+            columns={1}
+          >
             <div className="overflow-x-auto rounded-xl border border-border/70">
               <table className="w-full text-sm">
                 <thead className="bg-surface-2 text-xs text-muted-foreground">
@@ -1139,11 +1180,20 @@ export function AxleConfigSheet({
                     <th className="px-3 py-2 text-start font-semibold">{t("cols.side")}</th>
                     <th className="px-3 py-2 text-start font-semibold">{t("cols.size")}</th>
                     <th className="px-3 py-2 text-start font-semibold">{t("cols.tyre")}</th>
+                    {axleApi.positionProducts ? (
+                      <>
+                        <th className="px-3 py-2 text-start font-semibold">{t("cols.product")}</th>
+                        <th className="px-3 py-2 text-start font-semibold">{t("cols.price")}</th>
+                      </>
+                    ) : null}
+                    {axleApi.runningKm ? <th className="px-3 py-2 text-end font-semibold">{t("cols.km")}</th> : null}
                   </tr>
                 </thead>
                 <tbody>
                   {positions.map((p) => {
                     const here = plan[p.code];
+                    // A product and price belong to the tyre there now: set them once the plan is saved.
+                    const productEditable = canEdit && !edited && p.fitted && Boolean(p.tyreSizeId);
                     return (
                       <tr
                         key={p.code}
@@ -1156,8 +1206,21 @@ export function AxleConfigSheet({
                         </td>
                         <td className="px-3 py-1.5">{axleName(p.axleNo)}</td>
                         <td className="px-3 py-1.5">{p.side ? t(`sides.${p.side}`) : "—"}</td>
-                        <td className="px-3 py-1.5" dir="ltr">
-                          {p.tyreSize?.name ?? <span className="text-muted-foreground">—</span>}
+                        <td className="min-w-36 px-3 py-1" dir="ltr">
+                          {canEdit ? (
+                            // This tyre's own size; before per-tyre sizes, its whole axle's.
+                            <Select
+                              aria-label={t("sizeOf", { code: p.code })}
+                              className="h-8"
+                              value={(axleApi.perTyreSizes ? p.tyreSizeId : axleSizes[p.axleNo]) ?? ""}
+                              disabled={busy}
+                              onChange={(e) => void setTyreSize(p.code, e.target.value)}
+                            >
+                              {sizeOptions}
+                            </Select>
+                          ) : (
+                            (p.tyreSize?.name ?? <span className="text-muted-foreground">—</span>)
+                          )}
                         </td>
                         <td className="px-3 py-1.5">
                           {!here ? (
@@ -1190,6 +1253,69 @@ export function AxleConfigSheet({
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
+                        {axleApi.positionProducts ? (
+                          <>
+                            <td className="min-w-52 px-3 py-1" dir="ltr">
+                              {productEditable ? (
+                                <Select
+                                  aria-label={t("productOf", { code: p.code })}
+                                  className="h-8"
+                                  value={p.tyreProductId ?? ""}
+                                  disabled={busy}
+                                  onChange={(e) => void saveProduct(p.code, e.target.value || null, p.purchasePrice)}
+                                >
+                                  <option value="">{t("plan.noProduct")}</option>
+                                  {products
+                                    .filter((x) => x.tyreSizeId === p.tyreSizeId)
+                                    .map((x) => (
+                                      <option key={x.id} value={x.id}>
+                                        {x.displayName}
+                                      </option>
+                                    ))}
+                                </Select>
+                              ) : (
+                                (p.tyreProduct?.displayName ?? <span className="text-muted-foreground">—</span>)
+                              )}
+                            </td>
+                            <td className="w-32 px-3 py-1">
+                              {productEditable ? (
+                                <Input
+                                  // Starts again from the saved price after each save.
+                                  key={`${p.code}-${p.purchasePrice ?? ""}`}
+                                  aria-label={t("priceOf", { code: p.code })}
+                                  className="h-8"
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={0}
+                                  step="any"
+                                  defaultValue={p.purchasePrice ?? ""}
+                                  disabled={busy}
+                                  onBlur={(e) => {
+                                    const text = e.target.value.trim();
+                                    const price = text ? Number(text) : null;
+                                    if (price !== null && (!Number.isFinite(price) || price < 0)) {
+                                      toast.error(t("priceInvalid"));
+                                      return;
+                                    }
+                                    if (price !== (p.purchasePrice ?? null))
+                                      void saveProduct(p.code, p.tyreProductId, price);
+                                  }}
+                                />
+                              ) : (
+                                <span className="tabular-nums">{p.purchasePrice ?? "—"}</span>
+                              )}
+                            </td>
+                          </>
+                        ) : null}
+                        {axleApi.runningKm ? (
+                          <td className="whitespace-nowrap px-3 py-1.5 text-end tabular-nums">
+                            {kmHere(p.code) === null ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              t("kmValue", { n: kmHere(p.code)! })
+                            )}
+                          </td>
+                        ) : null}
                       </tr>
                     );
                   })}

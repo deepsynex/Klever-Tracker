@@ -23,12 +23,13 @@ export function Sheet({
   onOpenChange: (open: boolean) => void;
   title: ReactNode;
   description?: ReactNode;
-  size?: "md" | "lg" | "xl";
+  /** "full" covers the whole window (for wide content like the axle drawing beside its tables). */
+  size?: "md" | "lg" | "xl" | "full";
   footer?: ReactNode;
   children: ReactNode;
 }) {
   const t = useTranslations("masters.common");
-  const width = { md: "sm:max-w-lg", lg: "sm:max-w-2xl", xl: "sm:max-w-4xl" }[size];
+  const width = { md: "sm:max-w-lg", lg: "sm:max-w-2xl", xl: "sm:max-w-4xl", full: "border-s-0" }[size];
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -58,7 +59,9 @@ export function Sheet({
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
           {footer ? (
-            <div className="flex items-center justify-end gap-2 border-t border-border bg-surface px-5 py-3">{footer}</div>
+            <div className="flex items-center justify-end gap-2 border-t border-border bg-surface px-5 py-3">
+              {footer}
+            </div>
           ) : null}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
