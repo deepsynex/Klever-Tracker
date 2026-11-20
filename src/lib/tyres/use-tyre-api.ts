@@ -6,11 +6,13 @@ import {
   INSPECTION_VEHICLE,
   TYRE_FITMENTS,
   TYRE_INSPECTIONS,
+  TYRE_PLAN_MOVES,
   TYRE_PLAN_REMOVALS,
   TYRE_SETTINGS,
   type InspectionVehicleResult,
   type TyreFitmentsResult,
   type TyreInspectionsResult,
+  type TyrePlanMovesResult,
   type TyrePlanRemovalsResult,
   type TyreSettingsResult,
 } from "@/lib/graphql/tyre-inspections";
@@ -55,6 +57,17 @@ export function useTyreRemovals(vehicleId: string) {
     queryFn: async () =>
       (await gqlRequest<TyrePlanRemovalsResult>(TYRE_PLAN_REMOVALS, { vehicleId, first: LIST_PAGE_SIZE }))
         .tyrePlanRemovals.data,
+    enabled: Boolean(vehicleId),
+  });
+}
+
+/** Tyres moved or swapped on a vehicle (only asked for once the backend has the move log). */
+export function useTyreMoves(vehicleId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [VM_KEY, "tyrePlanMoves", vehicleId],
+    queryFn: async () =>
+      (await gqlRequest<TyrePlanMovesResult>(TYRE_PLAN_MOVES, { vehicleId, first: LIST_PAGE_SIZE })).tyrePlanMoves.data,
+    enabled: Boolean(vehicleId) && enabled,
   });
 }
 

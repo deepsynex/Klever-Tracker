@@ -9,10 +9,25 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
+import { positionProduct } from "@/lib/graphql/tyre-inspections";
 import { readReportVehicle, writeReportVehicle } from "@/lib/tyres/report-selection";
 import { tyreMetrics } from "@/lib/tyres/metrics";
-import { useInspectionVehicle, useTyreFitments, useTyreInspections, useTyreSettings } from "@/lib/tyres/use-tyre-api";
-import { useAxleConfigurations, useCustomers, useCustomerVehicles } from "@/lib/tyres/use-tyres";
+import { sinceInspection, whereNow, type SinceInspection } from "@/lib/tyres/report-changes";
+import {
+  useInspectionVehicle,
+  useTyreFitments,
+  useTyreInspections,
+  useTyreMoves,
+  useTyreRemovals,
+  useTyreSettings,
+} from "@/lib/tyres/use-tyre-api";
+import {
+  useAxleApi,
+  useAxleConfigurations,
+  useCustomers,
+  useCustomerVehicles,
+  useTyreRunningKm,
+} from "@/lib/tyres/use-tyres";
 import { useVmLookups } from "@/lib/vehicle-management/use-vm";
 import { conditionTone, useConditionLabel } from "./conditions";
 import { useTyreLabels } from "./tyre-labels";
@@ -39,6 +54,7 @@ const CPK = new Intl.NumberFormat("en", { minimumFractionDigits: 3, maximumFract
 export function TyreReportScreen() {
   const t = useTranslations("masters.tyres.report");
   const tc = useTranslations("masters.common");
+  const tv = useTranslations("masters.tyres.axleView");
   const zone = useCompanyTimeZone();
   const lookups = useVmLookups();
   const labels = useTyreLabels();
@@ -64,7 +80,23 @@ export function TyreReportScreen() {
     .filter((x) => lookups.inScope(x.companyId))
     .sort((a, b) => a.plateNo.localeCompare(b.plateNo));
 
-  // Every position with a tyre (serial-numbered or just a size) with its latest reading and metrics.
+  // Tyre changes made on the axle drawing after the inspection: removals now; moves once the API logs them.
+  const axleApi = useAxleApi();
+  const removalsQuery = useTyreRemovals(vehicleId);
+  const movesQuery = useTyreMoves(vehicleId, axleApi.planMoves);
+  // Each tyre's km now (entered on the vehicle form, grown with the odometer; a new tyre starts from 0).
+  const kmNow = useTyreRunningKm(vehicleId, axleApi.runningKm).data;
+  const removals = useMemo(() => removalsQuery.data ?? [], [removalsQuery.data]);
+  const moves = useMemo(
+    () => (axleApi.planMoves ? (movesQuery.data ?? []) : null),
+    [axleApi.planMoves, movesQuery.data],
+  );
+  const changedAfter = latest ? removals.filter((r) => r.removedAt > latest.inspectedAt) : [];
+  const movedAfter = latest && moves ? moves.filter((m) => m.movedAt > latest.inspectedAt) : [];
+  const readingAt = (code: string) => latest?.items.find((i) => i.positionCode === code) ?? null;
+
+  // Every position with a tyre (serial-numbered or just a size) with the latest reading of the tyre
+  // on it now (it follows a moved tyre; a tyre fitted since has none) and its metrics.
   const rows = useMemo(() => {
     if (!v) return [];
     const odometer = latest?.odometerKm ?? v.odometerKm ?? null;
@@ -72,24 +104,54 @@ export function TyreReportScreen() {
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .filter((p) => p.fitted || p.tyre)
       .map((p) => {
-        const item = latest?.items.find((i) => i.positionCode === p.code) ?? null;
+        const since: SinceInspection = latest
+          ? sinceInspection(p.code, latest.inspectedAt, removals, moves)
+          : { kind: "same", source: p.code };
+        const item =
+          since.kind === "same" || since.kind === "moved"
+            ? (latest?.items.find((i) => i.positionCode === since.source) ?? null)
+            : null;
         const m = tyreMetrics(
           {
             outer: item?.outerTreadMm ?? null,
             center: item?.centerTreadMm ?? null,
             inner: item?.innerTreadMm ?? null,
             actualPressure: item?.actualPressurePsi ?? null,
-            recommendedPressure: item?.recommendedPressurePsi ?? p.tyre?.product?.recommendedPressurePsi ?? null,
-            originalTread: p.tyre?.product?.originalTreadDepthMm ?? null,
-            price: p.tyre?.purchasePrice ?? null,
+            recommendedPressure:
+              item?.recommendedPressurePsi ?? positionProduct(p).product?.recommendedPressurePsi ?? null,
+            originalTread: positionProduct(p).product?.originalTreadDepthMm ?? null,
+            price: positionProduct(p).price,
             fitments: p.tyre ? (fitments.data ?? []).filter((f) => f.tyreId === p.tyre!.id) : [],
             currentOdometerKm: odometer,
+            // The km at the inspection (it matches the tread read then); else the tyre's km now.
+            knownRunningKm:
+              item?.runningKm ?? kmNow?.vehicle?.tyrePositions.find((x) => x.code === p.code)?.runningKm ?? null,
           },
           thresholds,
         );
-        return { p, item, m };
+        return { p, item, m, since };
       });
-  }, [v, latest, fitments.data, thresholds]);
+  }, [v, latest, fitments.data, thresholds, removals, moves, kmNow]);
+  const anyChange = rows.some((r) => r.since.kind !== "same");
+  /** Where each inspected tyre is now (null: taken off since), for the recommendation cards. */
+  const now =
+    latest && v
+      ? whereNow(
+          latest.items.map((i) => i.positionCode),
+          rows.map((r) => r.p.code),
+          latest.inspectedAt,
+          removals,
+          moves,
+        )
+      : {};
+  const sinceText = (s: SinceInspection) =>
+    s.kind === "moved"
+      ? t("changes.movedFrom", { code: s.source })
+      : s.kind === "new"
+        ? t("changes.newTyre")
+        : s.kind === "changed"
+          ? t("changes.changed")
+          : "";
 
   const count = (kind: "tread" | "pressure" | "wear", value: string) =>
     rows.filter((r) => (r.item?.[`${kind}Condition` as const] ?? r.m[kind]) === value).length;
@@ -255,10 +317,11 @@ export function TyreReportScreen() {
                         {t(`latest.${c}`)}
                       </th>
                     ))}
+                    {anyChange ? <th className="px-2 py-2 text-start font-semibold">{t("changes.column")}</th> : null}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ p, item, m }) => (
+                  {rows.map(({ p, item, m, since }) => (
                     <tr key={p.code} className="border-t border-border/50">
                       <td className="px-2 py-1.5 font-mono text-xs font-semibold" dir="ltr">
                         {p.code}
@@ -267,7 +330,7 @@ export function TyreReportScreen() {
                         {p.tyre?.serialNo ?? "—"}
                       </td>
                       <td className="px-2 py-1.5 text-xs" dir="ltr">
-                        {p.tyre?.product?.displayName ?? p.tyreSize?.name ?? "—"}
+                        {positionProduct(p).product?.displayName ?? p.tyreSize?.name ?? "—"}
                       </td>
                       <td className="px-2 py-1.5" dir="ltr">
                         {item?.actualPressurePsi != null
@@ -294,12 +357,87 @@ export function TyreReportScreen() {
                       <td className="px-2 py-1.5 text-xs">
                         {item?.tyreCondition ? t(`tyreCondition.${item.tyreCondition}`) : "—"}
                       </td>
+                      {anyChange ? (
+                        <td className="px-2 py-1.5 text-xs font-semibold text-primary">{sinceText(since) || "—"}</td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </FormSection>
+
+          {/* Tyre changes made after the inspection, so an old reading isn't taken for the tyre there now. */}
+          {latest && (changedAfter.length || movedAfter.length) ? (
+            <section className="grid gap-3 break-inside-avoid">
+              <div>
+                <h3 className="text-sm font-semibold">{t("changes.title")}</h3>
+                <p className="text-xs text-subtle">{moves ? t("changes.hint") : t("changes.hintNoMoves")}</p>
+              </div>
+              <ul className="grid gap-2 sm:grid-cols-2 print:grid-cols-2">
+                {[
+                  ...changedAfter.map((r) => ({ at: r.removedAt, kind: "removed" as const, r })),
+                  ...movedAfter.map((m) => ({ at: m.movedAt, kind: "moved" as const, m })),
+                ]
+                  .sort((a, b) => b.at.localeCompare(a.at))
+                  .map((c) => {
+                    if (c.kind === "moved") {
+                      return (
+                        <li key={`m${c.m.id}`} className="rounded-xl border border-border/70 bg-surface px-3 py-2">
+                          <p className="text-sm font-semibold">
+                            <span className="font-mono" dir="ltr">
+                              {c.m.fromPosition} → {c.m.toPosition}
+                            </span>
+                            {" · "}
+                            {t("changes.moved")}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatInCompanyTz(c.m.movedAt, zone, "dd-MM-yyyy HH:mm")}
+                            {c.m.user ? ` · ${t("changes.by", { name: c.m.user.name })}` : ""}
+                          </p>
+                        </li>
+                      );
+                    }
+                    // The reading the removed tyre had at the inspection (it may have moved there since).
+                    const was = sinceInspection(c.r.position, latest.inspectedAt, removals, moves, c.r.removedAt);
+                    const then = was.kind === "same" || was.kind === "moved" ? readingAt(was.source) : null;
+                    return (
+                      <li
+                        key={`r${c.r.id}`}
+                        className="grid gap-1 rounded-xl border border-border/70 bg-surface px-3 py-2"
+                      >
+                        <p className="text-sm font-semibold">
+                          <span className="font-mono" dir="ltr">
+                            {c.r.position}
+                          </span>
+                          {" · "}
+                          {t("changes.takenOff", { what: tv(`fate.options.${c.r.disposition}`) })}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatInCompanyTz(c.r.removedAt, zone, "dd-MM-yyyy HH:mm")}
+                          {c.r.user ? ` · ${t("changes.by", { name: c.r.user.name })}` : ""}
+                          {c.r.note ? ` · ${c.r.note}` : ""}
+                        </p>
+                        {then ? (
+                          <p className="flex flex-wrap items-center gap-2 text-xs">
+                            <span dir="ltr">
+                              {t("changes.readingThen", {
+                                treads: `${then.outerTreadMm ?? "—"} · ${then.centerTreadMm ?? "—"} · ${then.innerTreadMm ?? "—"}`,
+                              })}
+                            </span>
+                            {then.treadCondition ? (
+                              <StatusBadge tone={conditionTone(then.treadCondition)}>
+                                {condition(then.treadCondition)}
+                              </StatusBadge>
+                            ) : null}
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+              </ul>
+            </section>
+          ) : null}
 
           {latest ? (
             <section className="grid gap-3">
@@ -308,16 +446,19 @@ export function TyreReportScreen() {
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6 print:grid-cols-6">
                 {rows
                   .filter((r) => r.item)
-                  .map(({ p, item }) => (
+                  .map(({ p, item, since }) => (
                     <li key={p.code} className="rounded-xl border border-border/70 bg-surface p-2 break-inside-avoid">
                       <p className="font-mono text-xs font-semibold" dir="ltr">
                         {p.code}
+                        {since.kind === "moved" ? (
+                          <span className="font-sans font-normal text-muted-foreground"> · {sinceText(since)}</span>
+                        ) : null}
                       </p>
                       <TreadProfile
                         outer={item!.outerTreadMm}
                         center={item!.centerTreadMm}
                         inner={item!.innerTreadMm}
-                        original={p.tyre?.product?.originalTreadDepthMm ?? null}
+                        original={positionProduct(p).product?.originalTreadDepthMm ?? null}
                         labels={[t("profiles.outer"), t("profiles.center"), t("profiles.inner")]}
                       />
                     </li>
@@ -337,8 +478,17 @@ export function TyreReportScreen() {
                       key={i.id}
                       className="grid gap-2 rounded-xl border border-border/70 bg-surface p-3 break-inside-avoid"
                     >
-                      <p className="font-mono text-xs font-semibold" dir="ltr">
-                        {i.positionCode} · {i.tyre?.serialNo ?? ""}
+                      <p className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs font-semibold" dir="ltr">
+                          {i.positionCode}
+                          {i.tyre?.serialNo ? ` · ${i.tyre.serialNo}` : ""}
+                        </span>
+                        {/* What's been done with this tyre since: taken off, or moved. */}
+                        {now[i.positionCode] === null ? (
+                          <StatusBadge tone="muted">{t("changes.cardTakenOff")}</StatusBadge>
+                        ) : now[i.positionCode] && now[i.positionCode] !== i.positionCode ? (
+                          <StatusBadge tone="muted">{t("changes.nowOn", { code: now[i.positionCode]! })}</StatusBadge>
+                        ) : null}
                       </p>
                       {i.photoPath ? (
                         // eslint-disable-next-line @next/next/no-img-element -- uploaded photo on the API's host

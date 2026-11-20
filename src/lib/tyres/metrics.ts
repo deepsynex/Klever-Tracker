@@ -109,6 +109,25 @@ export function runningKm(fitments: Fitment[], currentOdometerKm: number | null 
   return any ? total : null;
 }
 
+/**
+ * Km a position's tyre has run by an odometer reading (an inspection's, or the vehicle's own when
+ * none is given yet). `recordedKm` is what the vehicle form recorded as already run, as of the
+ * vehicle's current odometer; without it, the km since the tyre's fitting. Null when neither is known.
+ */
+export function runningKmAt(
+  tyre: { recordedKm: number | null | undefined; fittedOdometerKm: number | null | undefined },
+  vehicleOdometerKm: number | null | undefined,
+  readingOdometerKm: number | null | undefined,
+): number | null {
+  const at = valid(readingOdometerKm) ? readingOdometerKm : valid(vehicleOdometerKm) ? vehicleOdometerKm : null;
+  if (valid(tyre.recordedKm)) {
+    const since = at !== null && valid(vehicleOdometerKm) ? Math.max(0, at - vehicleOdometerKm) : 0;
+    return tyre.recordedKm + since;
+  }
+  if (valid(tyre.fittedOdometerKm) && at !== null) return Math.max(0, at - tyre.fittedOdometerKm);
+  return null;
+}
+
 /** Km per mm of tread worn; null when there's no wear (or no km) yet. */
 export function wearRate(km: number | null, original: number | null | undefined, avg: number | null): number | null {
   if (!valid(km) || !valid(original) || !valid(avg)) return null;
@@ -149,11 +168,16 @@ export function tyreMetrics(
     price: number | null;
     fitments: Fitment[];
     currentOdometerKm: number | null;
+    /**
+     * The running km the API already knows (the inspection's, or the km entered for the tyre); else
+     * it's worked out from the fitments.
+     */
+    knownRunningKm?: number | null;
   },
   th: TyreThresholds = DEFAULT_THRESHOLDS,
 ) {
   const avg = averageTread(input.outer, input.center, input.inner);
-  const km = runningKm(input.fitments, input.currentOdometerKm);
+  const km = valid(input.knownRunningKm) ? input.knownRunningKm : runningKm(input.fitments, input.currentOdometerKm);
   const rate = wearRate(km, input.originalTread, avg);
   const life = expectedLifeKm(rate, input.originalTread, th);
   return {

@@ -3,11 +3,13 @@ import {
   addTyre,
   initialPlan,
   isNewTyre,
+  planPositions,
   planRemovals,
   putBack,
   removedTyres,
   removeTyre,
   swapTyres,
+  type RotationPlan,
 } from "./rotation-plan";
 
 const order = ["FR", "FL", "D1LO", "SP1"];
@@ -17,6 +19,8 @@ const start = initialPlan([
   { code: "D1LO", hasTyre: true },
   { code: "SP1", hasTyre: false },
 ]);
+const order4 = ["FL", "D1LO", "D1LI"];
+const start4 = initialPlan(order4.map((code) => ({ code, hasTyre: true })));
 
 describe("rotation plan", () => {
   it("starts with each tyre on its own position, empty where there's none", () => {
@@ -56,24 +60,44 @@ describe("rotation plan", () => {
     expect(removedTyres(two, start, order)).toEqual(["FR"]);
   });
 
-  it("explains every position that lost its tyre, and nothing for swaps", () => {
-    const moved = (to: string) => `Moved to ${to}`;
+  it("removes only tyres taken off: moves and swaps need nothing", () => {
     const fates = { FL: { fate: "scrapped", note: "" } };
     // Swap: both keep a tyre.
-    expect(planRemovals(swapTyres(start, "FR", "FL"), start, order, {}, moved)).toEqual([]);
+    expect(planRemovals(swapTyres(start, "FR", "FL"), start, order, {})).toEqual([]);
     // Taken off: its disposition.
-    expect(planRemovals(removeTyre(start, "FL"), start, order, fates, moved)).toEqual([
+    expect(planRemovals(removeTyre(start, "FL"), start, order, fates)).toEqual([
       { position: "FL", disposition: "scrapped", note: null },
     ]);
-    // Moved to the empty spare: where it went.
-    expect(planRemovals(swapTyres(start, "D1LO", "SP1"), start, order, {}, moved)).toEqual([
-      { position: "D1LO", disposition: "other", note: "Moved to SP1" },
-    ]);
+    // Moved to the empty spare: its old position just goes empty.
+    expect(planRemovals(swapTyres(start, "D1LO", "SP1"), start, order, {})).toEqual([]);
     // Taken off and a new tyre in its place: a replacement (the position stays fitted).
-    expect(planRemovals(addTyre(removeTyre(start, "FL"), "FL"), start, order, fates, moved)).toEqual([
+    expect(planRemovals(addTyre(removeTyre(start, "FL"), "FL"), start, order, fates)).toEqual([
       { position: "FL", disposition: "scrapped", note: null },
     ]);
     // A new tyre added and removed again never existed for the API.
-    expect(planRemovals(removeTyre(addTyre(start, "SP1"), "SP1"), start, order, {}, moved)).toEqual([]);
+    expect(planRemovals(removeTyre(addTyre(start, "SP1"), "SP1"), start, order, {})).toEqual([]);
+  });
+
+  it("says where each moved tyre came from; a new tyre comes from nowhere (0 km)", () => {
+    const at = (plan: RotationPlan) => Object.fromEntries(planPositions(plan, order).map((p) => [p.code, p]));
+    // Swap: both sides.
+    const swapped = at(swapTyres(start, "FR", "FL"));
+    expect(swapped.FR).toEqual({ code: "FR", fitted: true, movedFrom: "FL" });
+    expect(swapped.FL).toEqual({ code: "FL", fitted: true, movedFrom: "FR" });
+    expect(swapped.D1LO).toEqual({ code: "D1LO", fitted: true });
+    // Moved to the empty spare: the spare says where from; the old position is empty.
+    const moved = at(swapTyres(start, "D1LO", "SP1"));
+    expect(moved.SP1).toEqual({ code: "SP1", fitted: true, movedFrom: "D1LO" });
+    expect(moved.D1LO).toEqual({ code: "D1LO", fitted: false });
+    // The screenshot's plan: FL taken off, D1LI → FL, D1LO → D1LI, a new tyre on D1LO.
+    let plan = removeTyre(start4, "FL");
+    plan = swapTyres(plan, "D1LI", "FL");
+    plan = swapTyres(plan, "D1LO", "D1LI");
+    plan = addTyre(plan, "D1LO");
+    const chain = Object.fromEntries(planPositions(plan, order4).map((p) => [p.code, p]));
+    expect(chain.FL).toEqual({ code: "FL", fitted: true, movedFrom: "D1LI" });
+    expect(chain.D1LI).toEqual({ code: "D1LI", fitted: true, movedFrom: "D1LO" });
+    expect(chain.D1LO).toEqual({ code: "D1LO", fitted: true });
+    expect(planRemovals(plan, start4, order4, {})).toEqual([{ position: "FL", disposition: "other", note: null }]);
   });
 });

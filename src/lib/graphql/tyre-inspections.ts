@@ -33,7 +33,7 @@ export const CREATE_TYRE_INSPECTION = /* GraphQL */ `
   }
 `;
 
-const ITEM_FIELDS = `id tyreId positionCode actualPressurePsi recommendedPressurePsi outerTreadMm centerTreadMm innerTreadMm
+const ITEM_FIELDS = `id tyreId positionCode runningKm actualPressurePsi recommendedPressurePsi outerTreadMm centerTreadMm innerTreadMm
   treadCondition pressureCondition wearCondition tyreCondition photoPath remarks
   tyre { id serialNo }
   recommendations { id code title description }`;
@@ -55,6 +55,8 @@ export type TyreInspectionItem = {
   id: string;
   tyreId: string | null;
   positionCode: string;
+  /** Km the tyre had run at this inspection (worked out from the inspection's odometer), if known. */
+  runningKm: number | null;
   actualPressurePsi: number | null;
   recommendedPressurePsi: number | null;
   outerTreadMm: number | null;
@@ -145,6 +147,17 @@ export const INSPECTION_VEHICLE = /* GraphQL */ `
           id
           name
         }
+        tyreProductId
+        purchasePrice
+        tyreProduct {
+          id
+          displayName
+          recommendedPressurePsi
+          originalTreadDepthMm
+          brand {
+            name
+          }
+        }
         tyre {
           id
           serialNo
@@ -170,6 +183,22 @@ export const INSPECTION_VEHICLE = /* GraphQL */ `
     }
   }
 `;
+export type TyreProductInfo = {
+  id: string;
+  displayName: string;
+  recommendedPressurePsi: number | null;
+  originalTreadDepthMm: number | null;
+  brand: { name: string } | null;
+};
+
+/** The product and price of the tyre on a position: set for the position, else the registered tyre's own. */
+export const positionProduct = (
+  p: Pick<InspectionPosition, "tyreProduct" | "purchasePrice" | "tyre">,
+): { product: TyreProductInfo | null; price: number | null } => ({
+  product: p.tyreProduct ?? (p.tyre?.product ? { ...p.tyre.product } : null),
+  price: p.purchasePrice ?? p.tyre?.purchasePrice ?? null,
+});
+
 export type InspectionPosition = {
   code: string;
   axleNo: number;
@@ -181,6 +210,13 @@ export type InspectionPosition = {
   fitted: boolean;
   tyreSizeId: string | null;
   tyreSize: { id: string; name: string } | null;
+  /**
+   * The product and purchase price of the tyre on the position (set per tyre; for a registered tyre
+   * with nothing set, the API gives that tyre's own). Use `positionProduct()` to read them.
+   */
+  tyreProductId: string | null;
+  purchasePrice: number | null;
+  tyreProduct: TyreProductInfo | null;
   tyre: {
     id: string;
     serialNo: string;
@@ -282,3 +318,32 @@ export type TyrePlanRemoval = {
   user: { name: string } | null;
 };
 export type TyrePlanRemovalsResult = { tyrePlanRemovals: { data: TyrePlanRemoval[] } };
+
+/**
+ * Tyres moved or swapped on a vehicle with the axle drawing's plan (`movedFrom`), newest first; a
+ * swap logs two moves. Requested from the backend, not live yet: the report asks for it only once the
+ * schema has it (useAxleApi().planMoves).
+ */
+export const TYRE_PLAN_MOVES = /* GraphQL */ `
+  query TyrePlanMoves($vehicleId: ID, $first: Int!, $page: Int) {
+    tyrePlanMoves(vehicleId: $vehicleId, first: $first, page: $page) {
+      data {
+        id
+        fromPosition
+        toPosition
+        movedAt
+        user {
+          name
+        }
+      }
+    }
+  }
+`;
+export type TyrePlanMove = {
+  id: string;
+  fromPosition: string;
+  toPosition: string;
+  movedAt: string;
+  user: { name: string } | null;
+};
+export type TyrePlanMovesResult = { tyrePlanMoves: { data: TyrePlanMove[] } };

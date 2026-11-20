@@ -1746,9 +1746,22 @@
           "add": "Add tyre size",
           "useForAll": "Use the first tyre's size for all",
           "descriptionAxle": "Every tyre and spare. Choosing a size for one tyre sets every tyre on its axle (each tyre gets its own size once the server supports it). Tyres can only be fitted where the size matches.",
-          "descriptionTyre": "Each tyre's own size, and the spares'. Tyres can only be fitted where the size matches."
+          "descriptionTyre": "Each tyre's size, product, purchase price and km already run. Tyres can only be fitted where the size matches. The product gives the original tread and pressure for inspections; the price gives the cost per km.",
+          "runningKm": "Km already run",
+          "runningKmSoon": "Km already run per tyre can be entered once the server supports it. Inspections then show each tyre’s running km.",
+          "cols": {
+            "tyre": "Tyre",
+            "size": "Size",
+            "product": "Product",
+            "price": "Price"
+          },
+          "noProduct": "No product",
+          "sizeFirst": "Choose a size first",
+          "copyAxle": "Same as the first tyre on this axle"
         },
-        "axleConfigs": "Axle configurations"
+        "axleConfigs": "Axle configurations",
+        "saveInspect": "Save & inspect",
+        "saveInspectHint": "Choose an axle configuration to inspect the tyres."
       },
       "masters": {
         "title": "Tyre masters",
@@ -1854,7 +1867,10 @@
           "side": "Side",
           "placement": "Placement",
           "size": "Size",
-          "tyre": "Tyre"
+          "tyre": "Tyre",
+          "km": "Km run",
+          "product": "Product",
+          "price": "Price"
         },
         "plan": {
           "title": "Tyres on this vehicle",
@@ -1875,7 +1891,7 @@
           "save": "Save",
           "saving": "Saving…",
           "saved": "Tyre layout saved.",
-          "movedNote": "Moved to {code}"
+          "noProduct": "No product"
         },
         "fate": {
           "title": "What did you do with this tyre?",
@@ -1897,7 +1913,8 @@
         },
         "tread": "{mm} mm tread",
         "saved": {
-          "size": "Tyre size saved."
+          "size": "Tyre size saved.",
+          "product": "Tyre product saved."
         },
         "history": {
           "title": "Removal history",
@@ -1907,7 +1924,11 @@
           "by": "By"
         },
         "sizeOf": "Tyre size for {code}",
-        "positionsHintAxle": "Hover a row or a tyre to find it on the drawing. Change a tyre size in the Size column: every tyre on that axle changes with it (each tyre gets its own size once the server supports it). Saved straight away."
+        "positionsHintAxle": "Hover a row or a tyre to find it on the drawing. Change a tyre size in the Size column: every tyre on that axle changes with it (each tyre gets its own size once the server supports it). Saved straight away.",
+        "kmValue": "{n, number} km",
+        "productOf": "Product for {code}",
+        "priceOf": "Price for {code}",
+        "priceInvalid": "Enter a price that's 0 or more."
       },
       "conditions": {
         "good": "Good",
@@ -1996,7 +2017,8 @@
           "tread": "Tread",
           "pressureCond": "Pressure",
           "wear": "Wear",
-          "recs": "Recommendations"
+          "recs": "Recommendations",
+          "running": "Km run"
         },
         "f": {
           "customer": "Customer",
@@ -2015,7 +2037,8 @@
           "photo": "Photo",
           "tyreRemarks": "Remarks",
           "recommendedPsi": "Recommended (psi)"
-        }
+        },
+        "running": "Km run:"
       },
       "report": {
         "title": "Tyre report",
@@ -2088,6 +2111,21 @@
           "rotated": "Rotated",
           "retread": "Retread",
           "removed": "Removed"
+        },
+        "changes": {
+          "column": "Since inspection",
+          "movedFrom": "Moved from {code}",
+          "newTyre": "New tyre, not inspected yet",
+          "changed": "Tyre changed, not inspected yet",
+          "title": "Changed since this inspection",
+          "hint": "Tyre changes made on the axle drawing after this inspection. Readings follow moved tyres; inspect new tyres again.",
+          "hintNoMoves": "Tyres taken off after this inspection. Their old readings no longer count for the tyre there now: inspect it again. Moves and swaps will show here once the server logs them.",
+          "moved": "Moved",
+          "takenOff": "Taken off: {what}",
+          "by": "by {name}",
+          "readingThen": "Reading at the inspection: {treads} mm",
+          "cardTakenOff": "Taken off since",
+          "nowOn": "Now on {code}"
         }
       },
       "axleConfigs": {

@@ -47,6 +47,24 @@ export function validateCustomerVehicle(values: Record<string, string>, otherPla
   return errors;
 }
 
+/** Km each tyre has already run (by position code): blank, or a whole number of 0 or more. Keys are `km-<code>`. */
+export function validateRunningKm(values: Record<string, string>): Errors {
+  const errors: Errors = {};
+  for (const [code, v] of Object.entries(values)) {
+    if (isBlank(v)) continue;
+    const n = numberOrNull(v);
+    if (n === null || n < 0 || !Number.isInteger(n)) errors[`km-${code}`] = "wholeNumber";
+  }
+  return errors;
+}
+
+/** Each tyre's purchase price (by position code): blank, or 0 or more. Keys are `price-<code>`. */
+export function validatePrices(values: Record<string, string>): Errors {
+  const errors: Errors = {};
+  for (const [code, v] of Object.entries(values)) if (notNonNegative(v)) errors[`price-${code}`] = "nonNegative";
+  return errors;
+}
+
 /** Tyre product: size and brand required; ply rating a whole number; pressure and tread depth 0 or more. */
 export function validateTyreProduct(values: Record<string, string>): Errors {
   const errors: Errors = {};

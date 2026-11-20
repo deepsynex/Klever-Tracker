@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleCheck, Plus, RotateCcw, Route, Settings2, Truck, Users } from "lucide-react";
+import { ArrowRight, CircleCheck, Plus, RotateCcw, Route, Settings2, Truck, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -10,17 +10,21 @@ import { isDirty, useDiscardGuard } from "@/components/masters/discard-guard";
 import { FileUpload } from "@/components/masters/file-upload";
 import { FilterSelect, FormSection, KpiCards, PageHeader, StatusBadge } from "@/components/masters/page-header";
 import { SelectWithAdd } from "@/components/masters/pickers";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Sheet } from "@/components/ui/sheet";
+import { useRouter } from "@/i18n/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { gqlRequest } from "@/lib/graphql/client";
 import {
   CREATE_CUSTOMER_VEHICLE,
   SET_VEHICLE_AXLE_TYRE_SIZES,
+  SET_VEHICLE_TYRE_POSITION_PRODUCTS,
   SET_VEHICLE_TYRE_POSITION_SIZES,
+  SET_VEHICLE_TYRE_RUNNING_KM,
   TYRE_NAMED_OPS,
   UPDATE_CUSTOMER_VEHICLE,
   VEHICLE_APPLICATIONS,
@@ -36,8 +40,10 @@ import {
   useCustomers,
   useCustomerVehicles,
   useTyreMasters,
+  useTyreRunningKm,
 } from "@/lib/tyres/use-tyres";
-import { validateCustomerVehicle } from "@/lib/tyres/validation";
+import { writeInspectVehicle } from "@/lib/tyres/inspect-selection";
+import { validateCustomerVehicle, validatePrices, validateRunningKm } from "@/lib/tyres/validation";
 import { intOrNull, numberOrNull, numText, textOrNull } from "@/lib/vehicle-management/helpers";
 import { useErrorText, useVmLookups, useVmMutations, VM_KEY } from "@/lib/vehicle-management/use-vm";
 import { validateLookupName } from "@/lib/vehicle-management/validation";
@@ -380,8 +386,10 @@ function CustomerVehicleSheet({
 }) {
   const t = useTranslations("masters.tyres.customerVehicles");
   const tc = useTranslations("masters.common");
+  const router = useRouter();
   const tvm = useTranslations("masters.vm.vehicles");
   const tv = useTranslations("masters.tyres.axleView");
+  const tval = useTranslations("validation");
   const axleApi = useAxleApi();
   const lookups = useVmLookups();
   const axles = useAxleConfigurations();
@@ -399,13 +407,31 @@ function CustomerVehicleSheet({
   const savedPositions = useQuery({
     queryKey: [VM_KEY, "vehicleTyres", vehicle?.id],
     queryFn: () => gqlRequest<VehicleTyrePositionsResult>(VEHICLE_TYRE_POSITIONS, { id: vehicle!.id }),
-    enabled: Boolean(vehicle) && axleApi.perTyreSizes,
+    enabled: Boolean(vehicle) && (axleApi.perTyreSizes || axleApi.positionProducts),
   });
   const savedTyreSizes: Record<string, string> = Object.fromEntries(
     (savedPositions.data?.vehicle?.tyrePositions ?? []).map((p) => [p.code, p.tyreSizeId ?? ""]),
   );
+  // Km each tyre has already run: the figures typed here, by position code, over the saved ones.
+  const [kmEdits, setKmEdits] = useState<Record<string, string>>({});
+  const savedKm = useTyreRunningKm(vehicle?.id, axleApi.runningKm).byCode;
+  const kmOf = (code: string) => kmEdits[code] ?? (savedKm[code] == null ? "" : String(savedKm[code]));
+  // Each tyre's product and purchase price: typed here, by position code, over the saved ones.
+  const [productEdits, setProductEdits] = useState<Record<string, string>>({});
+  const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
+  const savedPosition = new Map((savedPositions.data?.vehicle?.tyrePositions ?? []).map((p) => [p.code, p]));
+  const savedPrice = (code: string) => {
+    const price = savedPosition.get(code)?.purchasePrice;
+    return price == null ? "" : String(price);
+  };
+  const priceOf = (code: string) => priceEdits[code] ?? savedPrice(code);
   const guard = useDiscardGuard(
-    isDirty(form, saved) || isDirty(axleSizes, savedSizes) || Object.keys(tyreEdits).length > 0,
+    isDirty(form, saved) ||
+      isDirty(axleSizes, savedSizes) ||
+      Object.keys(tyreEdits).length > 0 ||
+      Object.keys(kmEdits).length > 0 ||
+      Object.keys(productEdits).length > 0 ||
+      Object.keys(priceEdits).length > 0,
     onClose,
   );
   const masters = useTyreMasters();
@@ -416,6 +442,15 @@ function CustomerVehicleSheet({
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
     [masters.data, lookups],
   );
+  // Products to pick for a tyre: the company's active ones of that tyre's size.
+  const products = useMemo(
+    () =>
+      (masters.data?.tyreProducts?.data ?? [])
+        .filter((p) => lookups.inScope(p.companyId) && p.status === "active")
+        .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { numeric: true })),
+    [masters.data, lookups],
+  );
+  const productsOfSize = (sizeId: string) => products.filter((p) => p.tyreSizeId === sizeId);
   const selectedAxle = (axles.data ?? []).find((a) => a.id === form.axleConfigurationId);
   const sizeSlots = selectedAxle ? axleSizeSlots(selectedAxle.positions, Number(form.spareTyreCount) || 0) : [];
   const slotName = (slot: (typeof sizeSlots)[number]) =>
@@ -446,6 +481,22 @@ function CustomerVehicleSheet({
       ? setTyreEdits((e) => ({ ...e, [code]: sizeId }))
       : setAxleSizes((s) => ({ ...s, [axleNo]: sizeId }));
   const firstSize = allTyres[0] ? sizeOf(allTyres[0].code, allTyres[0].axleNo) : "";
+  /** A tyre's product: only one of its size counts (a size change clears it, as the API does). */
+  const productOf = (code: string, axleNo: number) => {
+    const id = productEdits[code] ?? savedPosition.get(code)?.tyreProductId ?? "";
+    return productsOfSize(sizeOf(code, axleNo)).some((p) => p.id === id) ? id : "";
+  };
+  /** Gives every tyre on an axle the first tyre's size, product and price. */
+  const copyFirstOnAxle = (axleNo: number) => {
+    const [first, ...rest] = tyresOf(axleNo);
+    if (!first || !rest.length) return;
+    const pick = (value: string) => Object.fromEntries(rest.map((x) => [x.code, value]));
+    if (axleApi.perTyreSizes) setTyreEdits((e) => ({ ...e, ...pick(sizeOf(first.code, axleNo)) }));
+    setProductEdits((e) => ({ ...e, ...pick(productOf(first.code, axleNo)) }));
+    setPriceEdits((e) => ({ ...e, ...pick(priceOf(first.code)) }));
+  };
+  const clearError = (key: string) =>
+    setErrors((all) => Object.fromEntries(Object.entries(all).filter(([k]) => k !== key)));
   const applyFirstToAll = () =>
     axleApi.perTyreSizes
       ? setTyreEdits(Object.fromEntries(allTyres.map((x) => [x.code, firstSize])))
@@ -453,8 +504,16 @@ function CustomerVehicleSheet({
 
   const set = (key: keyof VehicleForm, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
-  const save = async () => {
-    const found = validateCustomerVehicle(form, otherPlates);
+  /** A new vehicle with an axle layout can go straight to its first inspection. */
+  const canInspect = !vehicle && Boolean(form.axleConfigurationId) && lookups.allow("tyres", "add");
+
+  /** Saves the vehicle; with `inspect`, then opens New inspection with it picked. */
+  const save = async ({ inspect = false }: { inspect?: boolean } = {}) => {
+    const found = {
+      ...validateCustomerVehicle(form, otherPlates),
+      ...validateRunningKm(Object.fromEntries(allTyres.map((x) => [x.code, kmOf(x.code)]))),
+      ...validatePrices(Object.fromEntries(allTyres.map((x) => [x.code, priceOf(x.code)]))),
+    };
     setErrors(found);
     if (Object.keys(found).length) {
       toast.error(tc("fixErrors"));
@@ -492,11 +551,45 @@ function CustomerVehicleSheet({
             sizes: sizeSlots.map((s) => ({ axleNo: s.axleNo, tyreSizeId: axleSizes[s.axleNo] || null })),
           });
         }
+        // Km already run, once the backend keeps it: only the tyres changed here.
+        const kmChanged = allTyres.filter(
+          (x) =>
+            x.code in kmEdits && kmEdits[x.code].trim() !== (savedKm[x.code] == null ? "" : String(savedKm[x.code])),
+        );
+        if (axleApi.runningKm && kmChanged.length) {
+          await run(SET_VEHICLE_TYRE_RUNNING_KM, {
+            vehicleId: id,
+            tyres: kmChanged.map((x) => ({ positionCode: x.code, runningKm: intOrNull(kmEdits[x.code]) })),
+          });
+        }
+        // Each tyre's product and price (after its size, since the product must match it): only the
+        // tyres changed here, and only where there's a tyre (a size).
+        const productChanged = allTyres.filter(
+          (x) =>
+            sizeOf(x.code, x.axleNo) &&
+            (x.code in productEdits || x.code in priceEdits) &&
+            (productOf(x.code, x.axleNo) !== (savedPosition.get(x.code)?.tyreProductId ?? "") ||
+              priceOf(x.code).trim() !== savedPrice(x.code)),
+        );
+        if (axleApi.positionProducts && productChanged.length) {
+          await run(SET_VEHICLE_TYRE_POSITION_PRODUCTS, {
+            vehicleId: id,
+            tyres: productChanged.map((x) => ({
+              positionCode: x.code,
+              tyreProductId: productOf(x.code, x.axleNo) || null,
+              purchasePrice: numberOrNull(priceOf(x.code)),
+            })),
+          });
+        }
       }
       setSaved(form);
       await refresh();
       toast.success(tc("saved"));
       onClose();
+      if (inspect && id) {
+        writeInspectVehicle(id);
+        router.push("/tyre-inspections");
+      }
     } catch (err) {
       failInto(err, setErrors);
     } finally {
@@ -528,7 +621,7 @@ function CustomerVehicleSheet({
     <Sheet
       open
       onOpenChange={(open) => !open && guard.requestClose()}
-      size="lg"
+      size="xl"
       title={vehicle ? t("editTitle", { plate: vehicle.plateNo }) : t("add")}
       description={t("formDescription")}
       footer={
@@ -536,9 +629,19 @@ function CustomerVehicleSheet({
           <Button variant="secondary" onClick={guard.requestClose}>
             {tc("cancel")}
           </Button>
-          <Button onClick={save} disabled={pending}>
+          <Button variant={vehicle ? "primary" : "secondary"} onClick={() => void save()} disabled={pending}>
             {pending ? tc("saving") : tc("save")}
           </Button>
+          {!vehicle ? (
+            <Button
+              onClick={() => void save({ inspect: true })}
+              disabled={pending || !canInspect}
+              title={form.axleConfigurationId ? undefined : t("saveInspectHint")}
+            >
+              {t("saveInspect")}
+              <ArrowRight className="rtl:rotate-180" />
+            </Button>
+          ) : null}
         </>
       }
     >
@@ -661,35 +764,120 @@ function CustomerVehicleSheet({
             description={axleApi.perTyreSizes ? t("sizes.descriptionTyre") : t("sizes.descriptionAxle")}
             columns={1}
           >
+            {!axleApi.isPending && !axleApi.runningKm ? <Alert tone="info">{t("sizes.runningKmSoon")}</Alert> : null}
             {sizeSlots.map((slot) => (
               <fieldset key={slot.axleNo} className="grid gap-3 rounded-xl border border-border/70 p-3">
                 <legend className="px-1 text-xs font-semibold">
                   {slotName(slot)} · {t("tyreCount", { n: slot.tyres })}
                 </legend>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {tyresOf(slot.axleNo).map((tyre) => (
-                    <Field key={tyre.code} id={`cv-size-${tyre.code}`} label={tyre.label}>
-                      <SelectWithAdd
-                        id={`cv-size-${tyre.code}`}
-                        value={sizeOf(tyre.code, slot.axleNo)}
-                        onChange={(v) => setSize(tyre.code, slot.axleNo, v)}
-                        placeholder={t("sizes.choose")}
-                        options={tyreSizes.map((x) => ({ id: x.id, label: x.name }))}
-                        addLabel={t("sizes.add")}
-                        canAdd={lookups.allow("tyres", "add")}
-                        validate={({ name }) => validateLookupName(name, tyreSizes)}
-                        onCreate={async ({ name }) => {
-                          const res = await run<{ createTyreSize: { id: string } }>(TYRE_NAMED_OPS.size.create, {
-                            companyId: lookups.companyId,
-                            name,
-                          });
-                          await refresh();
-                          return res.createTyreSize.id;
-                        }}
-                      />
-                    </Field>
-                  ))}
+                <div className="grid gap-2">
+                  <div
+                    className="hidden gap-2 px-1 text-[11px] font-medium text-muted-foreground sm:grid sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1.4fr)_6.5rem_6.5rem]"
+                    aria-hidden
+                  >
+                    <span>{t("sizes.cols.tyre")}</span>
+                    <span>{t("sizes.cols.size")}</span>
+                    <span>{t("sizes.cols.product")}</span>
+                    <span>{t("sizes.cols.price")}</span>
+                    <span>{t("sizes.runningKm")}</span>
+                  </div>
+                  {tyresOf(slot.axleNo).map((tyre) => {
+                    const size = sizeOf(tyre.code, slot.axleNo);
+                    const error = errors[`price-${tyre.code}`] || errors[`km-${tyre.code}`];
+                    return (
+                      <div
+                        key={tyre.code}
+                        className="grid grid-cols-2 items-center gap-2 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1.4fr)_6.5rem_6.5rem]"
+                      >
+                        <span className="col-span-2 text-xs font-semibold sm:col-span-1" dir="ltr">
+                          {tyre.label}
+                        </span>
+                        <div>
+                          <label htmlFor={`cv-size-${tyre.code}`} className="sr-only">
+                            {`${t("sizes.cols.size")} · ${tyre.code}`}
+                          </label>
+                          <SelectWithAdd
+                            id={`cv-size-${tyre.code}`}
+                            value={size}
+                            onChange={(v) => setSize(tyre.code, slot.axleNo, v)}
+                            placeholder={t("sizes.choose")}
+                            options={tyreSizes.map((x) => ({ id: x.id, label: x.name }))}
+                            addLabel={t("sizes.add")}
+                            canAdd={lookups.allow("tyres", "add")}
+                            validate={({ name }) => validateLookupName(name, tyreSizes)}
+                            onCreate={async ({ name }) => {
+                              const res = await run<{ createTyreSize: { id: string } }>(TYRE_NAMED_OPS.size.create, {
+                                companyId: lookups.companyId,
+                                name,
+                              });
+                              await refresh();
+                              return res.createTyreSize.id;
+                            }}
+                          />
+                        </div>
+                        <div className="col-span-2 sm:col-span-1">
+                          <label htmlFor={`cv-product-${tyre.code}`} className="sr-only">
+                            {`${t("sizes.cols.product")} · ${tyre.code}`}
+                          </label>
+                          <Select
+                            id={`cv-product-${tyre.code}`}
+                            value={productOf(tyre.code, slot.axleNo)}
+                            // Only a tyre with a size can have a product (of that size).
+                            disabled={!axleApi.positionProducts || !size}
+                            onChange={(e) => setProductEdits((p) => ({ ...p, [tyre.code]: e.target.value }))}
+                          >
+                            <option value="">{size ? t("sizes.noProduct") : t("sizes.sizeFirst")}</option>
+                            {productsOfSize(size).map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.displayName}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <Input
+                          id={`cv-price-${tyre.code}`}
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step="any"
+                          placeholder={t("sizes.cols.price")}
+                          disabled={!axleApi.positionProducts || !size}
+                          value={priceOf(tyre.code)}
+                          onChange={(e) => {
+                            setPriceEdits((p) => ({ ...p, [tyre.code]: e.target.value }));
+                            clearError(`price-${tyre.code}`);
+                          }}
+                          aria-invalid={errors[`price-${tyre.code}`] ? true : undefined}
+                          aria-label={`${t("sizes.cols.price")} · ${tyre.code}`}
+                        />
+                        <Input
+                          id={`cv-km-${tyre.code}`}
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          step={1}
+                          placeholder={t("sizes.runningKm")}
+                          disabled={!axleApi.runningKm}
+                          value={kmOf(tyre.code)}
+                          onChange={(e) => {
+                            setKmEdits((k) => ({ ...k, [tyre.code]: e.target.value }));
+                            clearError(`km-${tyre.code}`);
+                          }}
+                          aria-invalid={errors[`km-${tyre.code}`] ? true : undefined}
+                          aria-label={`${t("sizes.runningKm")} · ${tyre.code}`}
+                        />
+                        {error ? <p className="col-span-full text-xs text-destructive">{tval(error)}</p> : null}
+                      </div>
+                    );
+                  })}
                 </div>
+                {tyresOf(slot.axleNo).length > 1 ? (
+                  <div>
+                    <Button variant="ghost" size="sm" onClick={() => copyFirstOnAxle(slot.axleNo)}>
+                      {t("sizes.copyAxle")}
+                    </Button>
+                  </div>
+                ) : null}
               </fieldset>
             ))}
             {allTyres.length > 1 ? (

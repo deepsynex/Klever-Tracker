@@ -10,12 +10,14 @@ import {
   CUSTOMER_VEHICLES,
   CUSTOMERS,
   TYRE_MASTERS,
+  VEHICLE_TYRE_RUNNING_KM,
   type AxleConfigurationsResult,
   type CustomersResult,
   type CustomerVehiclesResult,
   type TyreMastersResult,
+  type VehicleTyreRunningKmResult,
 } from "@/lib/graphql/tyres";
-import { useVmLookups, useVmQuery } from "@/lib/vehicle-management/use-vm";
+import { useVmLookups, useVmQuery, VM_KEY } from "@/lib/vehicle-management/use-vm";
 
 /** Tyres lists share the Vehicle Management query prefix, so any save refreshes them all (customer vehicles are vehicles). */
 export const useCustomers = () => useVmQuery<CustomersResult>("customers", CUSTOMERS);
@@ -34,6 +36,7 @@ export function useAxleApi() {
   });
   const mutations = new Set((probe.data?.m?.fields ?? []).map((f) => f.name));
   const fields = new Set((probe.data?.a?.fields ?? []).map((f) => f.name));
+  const positionFields = new Set((probe.data?.p?.fields ?? []).map((f) => f.name));
   return {
     isPending: probe.isPending,
     own:
@@ -43,7 +46,26 @@ export function useAxleApi() {
       fields.has("companyId") &&
       fields.has("vehicleCount"),
     perTyreSizes: mutations.has("setVehicleTyrePositionSizes"),
+    /** The km each tyre had already run can be entered with the vehicle, and is kept counting. */
+    runningKm: mutations.has("setVehicleTyreRunningKm") && positionFields.has("runningKm"),
+    /** Each tyre's product and purchase price (for expected life, worn % and cost per km). */
+    positionProducts: mutations.has("setVehicleTyrePositionProducts") && positionFields.has("tyreProductId"),
+    /** The log of tyres moved or swapped with the plan (the report follows each reading to its tyre). */
+    planMoves: (probe.data?.q?.fields ?? []).some((f) => f.name === "tyrePlanMoves"),
   };
+}
+
+/** Each position's running km now, by position code (only asked for once the backend has it). */
+export function useTyreRunningKm(vehicleId: string | null | undefined, enabled: boolean) {
+  const query = useQuery({
+    queryKey: [VM_KEY, "tyreRunningKm", vehicleId],
+    queryFn: () => gqlRequest<VehicleTyreRunningKmResult>(VEHICLE_TYRE_RUNNING_KM, { id: vehicleId }),
+    enabled: Boolean(vehicleId) && enabled,
+  });
+  const byCode: Record<string, number | null> = Object.fromEntries(
+    (query.data?.vehicle?.tyrePositions ?? []).map((p) => [p.code, p.runningKm]),
+  );
+  return { ...query, byCode };
 }
 
 /**

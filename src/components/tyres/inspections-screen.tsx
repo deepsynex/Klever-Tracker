@@ -11,7 +11,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/masters/data-table";
 import { FileUpload } from "@/components/masters/file-upload";
@@ -24,7 +24,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useRouter } from "@/i18n/navigation";
 import { formatInCompanyTz, useCompanyTimeZone } from "@/lib/company-time";
-import { CREATE_TYRE_INSPECTION, type InspectionPosition } from "@/lib/graphql/tyre-inspections";
+import { CREATE_TYRE_INSPECTION, positionProduct, type InspectionPosition } from "@/lib/graphql/tyre-inspections";
 import { axleRows, SPARE_AXLE } from "@/lib/tyres/axle-layout";
 import {
   emptyReading,
@@ -37,14 +37,23 @@ import {
 import {
   averageTread,
   pressureCondition,
+  runningKmAt,
   treadCondition,
   TYRE_CONDITIONS,
   wearCondition,
   wearPercent,
 } from "@/lib/tyres/metrics";
+import { takeInspectVehicle } from "@/lib/tyres/inspect-selection";
 import { writeReportVehicle } from "@/lib/tyres/report-selection";
 import { useInspectionVehicle, useTyreInspections, useTyreSettings } from "@/lib/tyres/use-tyre-api";
-import { useAxleConfigurations, useCustomers, useCustomerVehicles, useTyreMasters } from "@/lib/tyres/use-tyres";
+import {
+  useAxleApi,
+  useAxleConfigurations,
+  useCustomers,
+  useCustomerVehicles,
+  useTyreMasters,
+  useTyreRunningKm,
+} from "@/lib/tyres/use-tyres";
 import { companyNowTime, companyPartsToUtc, companyToday } from "@/lib/vehicle-management/helpers";
 import { useErrorText, useVmLookups, useVmMutations } from "@/lib/vehicle-management/use-vm";
 import { cn } from "@/lib/utils";
@@ -59,7 +68,16 @@ export function TyreInspectionsScreen() {
   const lookups = useVmLookups();
   const list = useTyreInspections(null);
   const errorText = useErrorText();
+  // A New inspection for one vehicle, started from Customer vehicles' "Save & inspect" (taken once).
   const [creating, setCreating] = useState(false);
+  const [startVehicleId, setStartVehicleId] = useState("");
+  useEffect(() => {
+    const id = takeInspectVehicle();
+    if (!id) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hand-off from browser storage
+    setStartVehicleId(id);
+    setCreating(true);
+  }, []);
 
   const rows = useMemo(
     () =>
@@ -69,7 +87,16 @@ export function TyreInspectionsScreen() {
     [list.data, lookups],
   );
 
-  if (creating) return <NewInspection onDone={() => setCreating(false)} />;
+  if (creating)
+    return (
+      <NewInspection
+        initialVehicleId={startVehicleId}
+        onDone={() => {
+          setCreating(false);
+          setStartVehicleId("");
+        }}
+      />
+    );
 
   return (
     <div className="grid gap-6">
@@ -189,7 +216,7 @@ type Step = "vehicle" | "tyres" | "review";
  * axle drawing and enter its pressure, three groove depths, condition, photo, remarks and
  * recommendations (conditions are shown live); then review and save the whole visit at once.
  */
-function NewInspection({ onDone }: { onDone: () => void }) {
+function NewInspection({ initialVehicleId = "", onDone }: { initialVehicleId?: string; onDone: () => void }) {
   const t = useTranslations("masters.tyres.inspections");
   const tc = useTranslations("masters.common");
   const lookups = useVmLookups();
@@ -204,7 +231,7 @@ function NewInspection({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<Step>("vehicle");
   const [customerId, setCustomerId] = useState("");
   const [header, setHeader] = useState({
-    vehicleId: "",
+    vehicleId: initialVehicleId,
     date: companyToday(),
     time: companyNowTime(),
     odometerKm: "",
@@ -226,8 +253,21 @@ function NewInspection({ onDone }: { onDone: () => void }) {
   const fitted = positions.filter((p) => p.fitted || p.tyre);
   const byCode = new Map(positions.map((p) => [p.code, p]));
   /** The product's recommended pressure, where the position has a tyre with a product. */
-  const productPsi = (code: string) => byCode.get(code)?.tyre?.product?.recommendedPressurePsi ?? null;
+  const productPsi = (code: string) => {
+    const p = byCode.get(code);
+    return p ? (positionProduct(p).product?.recommendedPressurePsi ?? null) : null;
+  };
   const readingOf = (code: string) => readings[code] ?? emptyReading(productPsi(code));
+  // Km each tyre has run by this visit's odometer (or the vehicle's, until it's read).
+  const axleApi = useAxleApi();
+  const recordedKm = useTyreRunningKm(header.vehicleId || null, axleApi.runningKm).byCode;
+  const readOdometer = header.odometerKm.trim() ? Number(header.odometerKm) : null;
+  const runningOf = (p: InspectionPosition) =>
+    runningKmAt(
+      { recordedKm: recordedKm[p.code], fittedOdometerKm: p.fitment?.fittedOdometerKm },
+      v?.odometerKm,
+      Number.isFinite(readOdometer) ? readOdometer : null,
+    );
   const recommendations = (masters.data?.tyreRecommendations?.data ?? [])
     .filter((r) => lookups.inScope(r.companyId))
     .sort((a, b) => a.title.localeCompare(b.title));
@@ -249,13 +289,13 @@ function NewInspection({ onDone }: { onDone: () => void }) {
     const center = n(r?.center);
     const inner = n(r?.inner);
     const avg = averageTread(outer, center, inner);
-    const recommended = n(r?.recommendedPsi) ?? p.tyre?.product?.recommendedPressurePsi ?? null;
+    const recommended = n(r?.recommendedPsi) ?? positionProduct(p).product?.recommendedPressurePsi ?? null;
     return {
       avg,
       tread: treadCondition([outer, center, inner], thresholds),
       pressure: pressureCondition(n(r?.actualPressurePsi), recommended, thresholds),
       wear: wearCondition(outer, center, inner),
-      wearPct: wearPercent(avg, p.tyre?.product?.originalTreadDepthMm ?? null),
+      wearPct: wearPercent(avg, positionProduct(p).product?.originalTreadDepthMm ?? null),
     };
   };
   const recsFor = (code: string): string[] => {
@@ -376,7 +416,8 @@ function NewInspection({ onDone }: { onDone: () => void }) {
             <Field id="in-customer" label={t("f.customer")}>
               <Select
                 id="in-customer"
-                value={customerId}
+                // A vehicle handed over from Customer vehicles shows its customer.
+                value={customerId || v?.customerId || ""}
                 onChange={(e) => {
                   setCustomerId(e.target.value);
                   setHeader((h) => ({ ...h, vehicleId: "" }));
@@ -522,11 +563,17 @@ function NewInspection({ onDone }: { onDone: () => void }) {
                     {activePos.tyre ? ` · ${activePos.tyre.serialNo}` : ""}
                   </h2>
                   <p className="text-sm text-muted-foreground" dir="ltr">
-                    {activePos.tyre?.product?.displayName ?? activePos.tyreSize?.name ?? ""}
+                    {positionProduct(activePos).product?.displayName ?? activePos.tyreSize?.name ?? ""}
                   </p>
                 </div>
-                <div className="text-end text-xs text-muted-foreground">
-                  <p>{t("original", { n: activePos.tyre?.product?.originalTreadDepthMm ?? "—" })}</p>
+                <div className="grid gap-0.5 text-end text-xs text-muted-foreground">
+                  <p>{t("original", { n: positionProduct(activePos).product?.originalTreadDepthMm ?? "—" })}</p>
+                  <p>
+                    {t("running")}{" "}
+                    <span className="font-semibold text-foreground">
+                      {runningOf(activePos) === null ? "—" : t("km", { n: runningOf(activePos)! })}
+                    </span>
+                  </p>
                 </div>
               </div>
 
@@ -692,13 +739,22 @@ function NewInspection({ onDone }: { onDone: () => void }) {
             <table className="w-full min-w-max text-sm">
               <thead className="bg-surface-2 text-xs text-muted-foreground">
                 <tr>
-                  {["position", "tyre", "pressure", "treads", "avg", "tread", "pressureCond", "wear", "recs"].map(
-                    (c) => (
-                      <th key={c} className="px-3 py-2 text-start font-semibold">
-                        {t(`review.${c}`)}
-                      </th>
-                    ),
-                  )}
+                  {[
+                    "position",
+                    "tyre",
+                    "running",
+                    "pressure",
+                    "treads",
+                    "avg",
+                    "tread",
+                    "pressureCond",
+                    "wear",
+                    "recs",
+                  ].map((c) => (
+                    <th key={c} className="px-3 py-2 text-start font-semibold">
+                      {t(`review.${c}`)}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -721,6 +777,7 @@ function NewInspection({ onDone }: { onDone: () => void }) {
                       <td className="px-3 py-2 font-mono text-xs" dir="ltr">
                         {p.tyre?.serialNo ?? p.tyreSize?.name ?? "—"}
                       </td>
+                      <td className="px-3 py-2">{runningOf(p) === null ? "—" : t("km", { n: runningOf(p)! })}</td>
                       <td className="px-3 py-2" dir="ltr">
                         {r?.actualPressurePsi ? `${r.actualPressurePsi} / ${r.recommendedPsi || "—"}` : "—"}
                       </td>

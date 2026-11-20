@@ -245,11 +245,23 @@ export const AXLE_API_PROBE = /* GraphQL */ `
         name
       }
     }
+    p: __type(name: "VehicleTyrePosition") {
+      fields {
+        name
+      }
+    }
+    q: __type(name: "Query") {
+      fields {
+        name
+      }
+    }
   }
 `;
 export type AxleApiProbeResult = {
   m: { fields: Array<{ name: string }> } | null;
   a: { fields: Array<{ name: string }> } | null;
+  p: { fields: Array<{ name: string }> } | null;
+  q: { fields: Array<{ name: string }> } | null;
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -394,6 +406,46 @@ export const SET_VEHICLE_TYRE_POSITION_SIZES = /* GraphQL */ `
   }
 `;
 
+/**
+ * Km each tyre had already run, entered with the vehicle (requested from the backend, not live yet):
+ * sets only the listed positions, as of the vehicle's current odometer (null clears one). Switched
+ * on from the schema (useAxleApi().runningKm).
+ */
+export const SET_VEHICLE_TYRE_RUNNING_KM = /* GraphQL */ `
+  mutation SetVehicleTyreRunningKm($vehicleId: ID!, $tyres: [TyreRunningKmInput!]!) {
+    setVehicleTyreRunningKm(vehicleId: $vehicleId, tyres: $tyres) {
+      id
+    }
+  }
+`;
+/** Each position's running km now: what was entered, plus the km driven since. */
+export const VEHICLE_TYRE_RUNNING_KM = /* GraphQL */ `
+  query VehicleTyreRunningKm($id: ID!) {
+    vehicle(id: $id) {
+      id
+      tyrePositions {
+        code
+        runningKm
+      }
+    }
+  }
+`;
+export type VehicleTyreRunningKmResult = {
+  vehicle: { id: string; tyrePositions: Array<{ code: string; runningKm: number | null }> } | null;
+};
+
+/**
+ * The product and purchase price of the tyre on each listed position (null clears one). The product
+ * must be the position's size, and the position must have a tyre. Moves carry them with the tyre.
+ */
+export const SET_VEHICLE_TYRE_POSITION_PRODUCTS = /* GraphQL */ `
+  mutation SetVehicleTyrePositionProducts($vehicleId: ID!, $tyres: [TyrePositionProductInput!]!) {
+    setVehicleTyrePositionProducts(vehicleId: $vehicleId, tyres: $tyres) {
+      id
+    }
+  }
+`;
+
 export const SET_VEHICLE_AXLE_TYRE_SIZES = /* GraphQL */ `
   mutation SetVehicleAxleTyreSizes($vehicleId: ID!, $sizes: [AxleTyreSizeInput!]!) {
     setVehicleAxleTyreSizes(vehicleId: $vehicleId, sizes: $sizes) {
@@ -406,7 +458,7 @@ export const SET_VEHICLE_AXLE_TYRE_SIZES = /* GraphQL */ `
 export const TYRE_DISPOSITIONS = ["retreaded", "repaired", "scrapped", "store", "sold", "other"] as const;
 export type TyreDisposition = (typeof TYRE_DISPOSITIONS)[number];
 
-/** Every tyre position of a vehicle (spares included) with its axle's size and the tyre on it now. */
+/** Every tyre position of a vehicle (spares included) with its size, product, price and the tyre on it now. */
 export const VEHICLE_TYRE_POSITIONS = /* GraphQL */ `
   query VehicleTyrePositions($id: ID!) {
     vehicle(id: $id) {
@@ -425,6 +477,12 @@ export const VEHICLE_TYRE_POSITIONS = /* GraphQL */ `
           id
           name
         }
+        tyreProductId
+        tyreProduct {
+          id
+          displayName
+        }
+        purchasePrice
         tyre {
           id
           serialNo
@@ -453,6 +511,10 @@ export type VehicleTyrePosition = {
   fitted: boolean;
   tyreSizeId: string | null;
   tyreSize: { id: string; name: string } | null;
+  /** The product of the tyre on the position (it moves with the tyre; a new tyre has none), and its price. */
+  tyreProductId: string | null;
+  tyreProduct: { id: string; displayName: string } | null;
+  purchasePrice: number | null;
   tyre: {
     id: string;
     serialNo: string;
@@ -467,9 +529,10 @@ export type VehicleTyrePositionsResult = {
 };
 
 /**
- * Saves the tyre plan from the axle drawing in one go (API Doc §6.23): every position (spares included)
- * and whether it has a tyre, plus what happened to each tyre that came off. A position that goes from
- * fitted to empty needs a removal; a removal on a position that stays fitted counts as a replacement.
+ * Saves the tyre plan from the axle drawing in one go (API Doc §6.23): every position (spares included),
+ * whether it has a tyre and, for a tyre moved or swapped there, `movedFrom` (it keeps its running km),
+ * plus what happened to each tyre taken off. A position left empty by a move needs no removal. A new
+ * tyre (no `movedFrom`) starts from 0 km; a removal on a position that stays fitted is a replacement.
  */
 export const SAVE_VEHICLE_TYRE_PLAN = /* GraphQL */ `
   mutation SaveVehicleTyrePlan(
